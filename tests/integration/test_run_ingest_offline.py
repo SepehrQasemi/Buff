@@ -11,6 +11,9 @@ from buff.data.store import save_parquet, symbol_to_filename, load_parquet
 from buff.data.validate import compute_quality
 
 
+pytestmark = pytest.mark.integration
+
+
 @pytest.fixture
 def fake_fetch_ohlcv():
     """Fixture: fake fetch_ohlcv that returns deterministic data."""

@@ -6,6 +6,9 @@ import pytest
 from buff.data.validate import compute_quality, expected_step_seconds
 
 
+pytestmark = pytest.mark.unit
+
+
 class TestExpectedStepSeconds:
     """Tests for expected_step_seconds."""
 
@@ -29,6 +32,7 @@ class TestExpectedStepSeconds:
         """Unknown timeframe should raise ValueError."""
         with pytest.raises(ValueError):
             expected_step_seconds("xyz")
+
 
 
 class TestComputeQuality:

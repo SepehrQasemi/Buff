@@ -12,6 +12,9 @@ from buff.data.store import save_parquet, symbol_to_filename, load_parquet
 from buff.data.validate import compute_quality
 
 
+pytestmark = pytest.mark.integration
+
+
 def create_test_parquet_and_report(tmp_path, symbol="BTC/USDT", rows=100):
     """Helper: create a parquet and report for testing."""
     # Create DataFrame
@@ -195,6 +198,7 @@ def test_verify_outputs_fail_missing_example_in_data(tmp_path, monkeypatch):
         f"Expected error in output, got: {outputs}"
 
 
+@pytest.mark.integration
 def test_verify_outputs_report_missing(tmp_path, monkeypatch):
     """verify_outputs handles missing report gracefully."""
     monkeypatch.chdir(tmp_path)

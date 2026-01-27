@@ -6,6 +6,10 @@ import pytest
 from buff.data.ingest import IngestConfig, fetch_ohlcv_all
 
 
+pytestmark = pytest.mark.unit
+pytestmark = pytest.mark.unit
+
+
 class FakeExchange:
     """Minimal fake ccxt exchange for testing pagination and retry logic."""
 
@@ -49,6 +53,7 @@ class FakeExchange:
         return batch
 
 
+@pytest.mark.unit
 class TestIngestPagination:
     """Test pagination logic."""
 
