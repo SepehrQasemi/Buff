@@ -24,6 +24,7 @@ def main() -> None:
     }
 
     session_path = Path("workspaces") / args.workspace / "session.json"
+    # All file writes MUST go through path_guard to preserve mode separation.
     target = guard_manual_write(session_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(session, indent=2) + "\n", encoding="utf-8")

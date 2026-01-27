@@ -44,3 +44,9 @@ def test_system_guard_blocks_workspaces(tmp_path, monkeypatch):
     monkeypatch.setenv("BUFF_REPO_ROOT", str(tmp_path))
     with pytest.raises(PermissionError):
         guard_system_write(tmp_path / "workspaces" / "session.json")
+
+
+def test_system_cannot_write_to_workspaces(tmp_path, monkeypatch):
+    monkeypatch.setenv("BUFF_REPO_ROOT", str(tmp_path))
+    with pytest.raises(PermissionError, match="System mode write forbidden"):
+        guard_system_write(tmp_path / "workspaces" / "notes.txt")
