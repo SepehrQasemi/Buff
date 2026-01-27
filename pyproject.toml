@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "ta>=0.11.0"]
+dev = ["pytest>=7.0", "ta>=0.11.0,<0.12.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
