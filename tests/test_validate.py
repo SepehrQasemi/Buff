@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from src.data.validate import DataQuality, compute_quality, expected_step_seconds
+from src.data.validate import compute_quality, expected_step_seconds
 
 
 class TestExpectedStepSeconds:
