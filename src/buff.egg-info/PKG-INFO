@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: buff
-Version: 0.1.0
-Summary: Buff: Modular AI-assisted crypto trading system (Binance Futures)
-Requires-Python: >=3.10
-Requires-Dist: ccxt>=1.91.0
-Requires-Dist: pandas>=1.5.0
-Requires-Dist: pyarrow>=10.0.0
