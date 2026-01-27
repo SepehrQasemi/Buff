@@ -13,6 +13,9 @@ venv/
 *.log
 .env
 
+# Manual workspaces
+/workspaces/
+
 # Allow test fixtures
 !tests/fixtures/
 !tests/fixtures/**/*.csv

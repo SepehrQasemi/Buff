@@ -13,6 +13,16 @@ The focus is **risk-controlled, explainable, and auditable** decision-making —
 - Full traceability/explainability via logs and reports
 - Reproducible research: fixed datasets, versioned configs, tests
 
+## Modes: Manual vs System
+
+Manual mode is a sandbox with no effect on the system. It writes only to `workspaces/`.
+
+Example:
+
+```bash
+python -m src.manual.run_manual --workspace demo --symbol BTCUSDT --timeframe 1h
+```
+
 ## Architecture
 
 The system is composed of:
