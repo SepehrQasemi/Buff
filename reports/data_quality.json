@@ -1,152 +1,336 @@
 {
-  "BTC/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
+  "global": {
+    "duplicates_count": 0,
+    "expected_bars_count": 357000,
+    "first_ts": "2022-01-01T00:00:00+00:00",
+    "gap_ranges": [
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "ADA/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "AVAX/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "BNB/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "BTC/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "DOGE/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "ETH/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "LINK/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "SOL/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "TRX/USDT"
+      },
+      {
+        "end": "2023-03-24T13:00:00+00:00",
+        "missing_bars": 1,
+        "start": "2023-03-24T13:00:00+00:00",
+        "symbol": "XRP/USDT"
+      }
     ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "BTC_USDT_1h.parquet"
+    "gaps_count": 10,
+    "high_lt_low_count": 0,
+    "last_ts": "2026-01-27T11:00:00+00:00",
+    "missing_bars_count": 10,
+    "missing_ratio": 2.801e-05,
+    "nan_count": 0,
+    "negative_price_count": 0,
+    "rows_total": 356990,
+    "sha256": "cb7e8c83dd9139f64d7205e08f72b7c74cd8a0bb42da0e51d96e50c6fd2ff993",
+    "symbol": "ALL",
+    "timeframe": "1h",
+    "zero_volume_bars_count": 10
   },
-  "ETH/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "ETH_USDT_1h.parquet"
-  },
-  "BNB/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "BNB_USDT_1h.parquet"
-  },
-  "SOL/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "SOL_USDT_1h.parquet"
-  },
-  "XRP/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "XRP_USDT_1h.parquet"
-  },
-  "ADA/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "ADA_USDT_1h.parquet"
-  },
-  "DOGE/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "DOGE_USDT_1h.parquet"
-  },
-  "TRX/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "TRX_USDT_1h.parquet"
-  },
-  "AVAX/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "AVAX_USDT_1h.parquet"
-  },
-  "LINK/USDT": {
-    "rows": 35699,
-    "start_ts": "2022-01-01 00:00:00+00:00",
-    "end_ts": "2026-01-27 11:00:00+00:00",
-    "duplicates": 0,
-    "missing_candles": 1,
-    "missing_examples": [
-      "2023-03-24 13:00:00+00:00"
-    ],
-    "zero_volume": 1,
-    "zero_volume_examples": [
-      "2023-03-24 12:00:00+00:00"
-    ],
-    "file": "LINK_USDT_1h.parquet"
-  }
+  "per_symbol": [
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "114523d2dc4a6514d643f2aa6ec44d6894e85ded88919692fd100b36ba802260",
+      "symbol": "ADA/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "7aea7a92703ac7295005f6c853361c4febcf2f22a35a8d6809b9a5de47fde443",
+      "symbol": "AVAX/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "441617806396dad3b3c1da049862cacb7aafbb430d7d4b7a4fb78b78e2957994",
+      "symbol": "BNB/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "97e8624e80483439d3ac013030bb5ed169de339cc26d72b63d9eccf0eb030db8",
+      "symbol": "BTC/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "f899dc6cd181fd1c608becd156d0699ed2ce4a16d189c5cc70a2aad53b38b4cf",
+      "symbol": "DOGE/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "b60e1548562cdd54665770d4ed3b5cdf0e315513ab116ee50a62462bc6c29830",
+      "symbol": "ETH/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "cae00733d6f08736475e440199b34fddd82b3aa4317417522df123716728f413",
+      "symbol": "LINK/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "60287bf3d3ef4eb236f1933e55616625c8d3e93c4666a964158b72e66b7d62a0",
+      "symbol": "SOL/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "6a6dcb19f1315f2a7223df0363002721d4bfaf3dbbe1620b7d2f269e1d19da96",
+      "symbol": "TRX/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    },
+    {
+      "duplicates_count": 0,
+      "expected_bars_count": 35700,
+      "first_ts": "2022-01-01T00:00:00+00:00",
+      "gap_ranges": [
+        {
+          "end": "2023-03-24T13:00:00+00:00",
+          "missing_bars": 1,
+          "start": "2023-03-24T13:00:00+00:00"
+        }
+      ],
+      "gaps_count": 1,
+      "high_lt_low_count": 0,
+      "last_ts": "2026-01-27T11:00:00+00:00",
+      "missing_bars_count": 1,
+      "missing_ratio": 2.801e-05,
+      "nan_count": 0,
+      "negative_price_count": 0,
+      "rows_total": 35699,
+      "sha256": "6426232c44201045139334a23694a4e6688655997a538777e4198d369515cf2d",
+      "symbol": "XRP/USDT",
+      "timeframe": "1h",
+      "zero_volume_bars_count": 1
+    }
+  ],
+  "symbols": [
+    "ADA/USDT",
+    "AVAX/USDT",
+    "BNB/USDT",
+    "BTC/USDT",
+    "DOGE/USDT",
+    "ETH/USDT",
+    "LINK/USDT",
+    "SOL/USDT",
+    "TRX/USDT",
+    "XRP/USDT"
+  ],
+  "timeframe": "1h"
 }

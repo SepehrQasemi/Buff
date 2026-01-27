@@ -28,4 +28,7 @@ jobs:
           python -m buff.data.run_ingest --help
       - name: Test
         run: |
-          python -m pytest -q -m "unit"
+          python -m pytest -q
+      - name: Verify M1 workflow
+        run: |
+          python scripts/verify_m1.py
