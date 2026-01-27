@@ -1,1 +1,99 @@
-[]
+[
+  {
+    "id": "rsi_wilder_14",
+    "name": "RSI",
+    "category": "momentum",
+    "description": "Relative Strength Index with Wilder smoothing.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 14,
+        "constraints": "period > 0"
+      }
+    },
+    "formula": "RSI uses Wilder smoothing of gains and losses over period=14.",
+    "output": "rsi",
+    "warmup": {
+      "candles": 14
+    },
+    "nan_policy": {
+      "before_warmup": "NaN",
+      "division_by_zero": "avg_loss==0 => 100"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:relative_strength_index_rsi"
+    ]
+  },
+  {
+    "id": "ema_20",
+    "name": "EMA",
+    "category": "trend",
+    "description": "Exponential Moving Average.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 20,
+        "constraints": "period > 0"
+      }
+    },
+    "formula": "alpha=2/(period+1); ema_t=alpha*close_t+(1-alpha)*ema_{t-1}; initial ema at first valid = SMA of first period candles",
+    "output": "ema",
+    "warmup": {
+      "candles": 20,
+      "output_valid_from": 20
+    },
+    "nan_policy": {
+      "before_warmup": "NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:exponential_moving_average"
+    ]
+  },
+  {
+    "id": "atr_wilder_14",
+    "name": "ATR",
+    "category": "volatility",
+    "description": "Average True Range with Wilder smoothing.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 14,
+        "constraints": "period > 0"
+      }
+    },
+    "formula": "TR_t=max(high_t-low_t, abs(high_t-close_{t-1}), abs(low_t-close_{t-1})); ATR initial=SMA(TR, period); atr_t=(atr_{t-1}*(period-1)+tr_t)/period",
+    "output": "atr",
+    "warmup": {
+      "candles": 14
+    },
+    "nan_policy": {
+      "before_warmup": "NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling; TR must be computed on resampled data"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:average_true_range_atr"
+    ]
+  }
+]

@@ -1,4 +1,18 @@
 {
   "version": 1,
-  "required_keys": ["id", "name", "inputs", "formula", "parameters", "references"]
+  "required_keys": [
+    "id",
+    "name",
+    "category",
+    "description",
+    "inputs",
+    "parameters",
+    "formula",
+    "output",
+    "warmup",
+    "nan_policy",
+    "resample_policy",
+    "lookahead_policy",
+    "references"
+  ]
 }
