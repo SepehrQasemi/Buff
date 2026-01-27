@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from buff.data.report import build_report
-from buff.data.store import save_parquet, symbol_to_filename
+from buff.data.store import ohlcv_parquet_path, save_parquet
 from buff.data.validate import DataQuality, compute_quality
 
 
@@ -18,7 +18,6 @@ class TestDataQualityJSONSerializable:
     """Test that DataQuality output is JSON-serializable (no numpy types)."""
 
     def test_dataclass_to_json(self) -> None:
-        """DataQuality instance can be serialized to JSON."""
         dq = DataQuality(
             rows=100,
             start_ts="2023-01-01 00:00:00+00:00",
@@ -36,9 +35,8 @@ class TestDataQualityJSONSerializable:
         assert '"duplicates": 0' in json_str
 
     def test_compute_quality_output_no_numpy_types(self) -> None:
-        """compute_quality output has no numpy.int64 or other numpy types."""
         df = pd.DataFrame({
-            "ts": pd.date_range("2023-01-01", periods=100, freq="h", tz="UTC"),
+            "ts": pd.date_range("2023-01-01", periods=100, freq="1min", tz="UTC"),
             "open": [100.0] * 100,
             "high": [101.0] * 100,
             "low": [99.0] * 100,
@@ -46,7 +44,7 @@ class TestDataQualityJSONSerializable:
             "volume": [1000.0] * 100,
         })
 
-        quality = compute_quality(df, "1h")
+        quality = compute_quality(df, "1m")
 
         assert isinstance(quality.rows, int)
         assert isinstance(quality.duplicates, int)
@@ -57,9 +55,8 @@ class TestDataQualityJSONSerializable:
         assert json_str is not None
 
     def test_full_report_dict_serializable(self, tmp_path: Path) -> None:
-        """Full report dict is JSON-serializable."""
         df = pd.DataFrame({
-            "ts": pd.date_range("2023-01-01", periods=50, freq="h", tz="UTC"),
+            "ts": pd.date_range("2023-01-01", periods=50, freq="1min", tz="UTC"),
             "open": [100.0] * 50,
             "high": [101.0] * 50,
             "low": [99.0] * 50,
@@ -67,12 +64,10 @@ class TestDataQualityJSONSerializable:
             "volume": [1000.0] * 50,
         })
 
-        data_dir = tmp_path / "data" / "clean"
-        data_dir.mkdir(parents=True, exist_ok=True)
-        filename = symbol_to_filename("BTC/USDT", "1h")
-        save_parquet(df, str(data_dir / filename))
+        data_dir = tmp_path / "data" / "ohlcv"
+        save_parquet(df, str(ohlcv_parquet_path(data_dir, "BTC/USDT", "1m")))
 
-        report = build_report(data_dir, ["BTC/USDT"], "1h", strict=False)
+        report = build_report(data_dir, ["BTC/USDT"], ["1m"], strict=False)
 
         json_str = json.dumps(report)
         assert json_str is not None
@@ -82,7 +77,6 @@ class TestDataQualityJSONSerializable:
         assert loaded["per_symbol"][0]["missing_bars_count"] == 0
 
     def test_empty_examples_list_serializable(self) -> None:
-        """Empty missing_examples and zero_volume_examples lists are OK."""
         dq = DataQuality(
             rows=10,
             start_ts="2023-01-01 00:00:00+00:00",

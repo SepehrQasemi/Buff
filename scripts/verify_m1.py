@@ -41,11 +41,12 @@ def main() -> None:
     if tmp_dir.exists():
         shutil.rmtree(tmp_dir)
 
-    data_dir = tmp_dir / "data" / "clean"
+    data_dir = tmp_dir / "data" / "ohlcv"
     reports_dir = tmp_dir / "reports"
 
     symbols = "BTCUSDT,ETHUSDT"
-    timeframe = "1h"
+    base_timeframe = "1m"
+    derived_timeframes = "5m,15m,30m,1h,2h,4h,1d,1w,2w,1M,3M,6M,1Y"
 
     success = False
     try:
@@ -59,8 +60,10 @@ def main() -> None:
                 str(repo_root / "tests" / "fixtures" / "ohlcv"),
                 "--symbols",
                 symbols,
-                "--timeframe",
-                timeframe,
+                "--base_timeframe",
+                base_timeframe,
+                "--derived_timeframes",
+                derived_timeframes,
                 "--data_dir",
                 str(data_dir),
                 "--reports_dir",
@@ -76,8 +79,8 @@ def main() -> None:
                 "src.data.validate",
                 "--symbols",
                 symbols,
-                "--timeframe",
-                timeframe,
+                "--timeframes",
+                ",".join([base_timeframe, *derived_timeframes.split(",")]),
                 "--data_dir",
                 str(data_dir),
             ],
@@ -94,8 +97,8 @@ def main() -> None:
                 "src.data.report",
                 "--symbols",
                 symbols,
-                "--timeframe",
-                timeframe,
+                "--timeframes",
+                ",".join([base_timeframe, *derived_timeframes.split(",")]),
                 "--data_dir",
                 str(data_dir),
                 "--out",
@@ -111,8 +114,8 @@ def main() -> None:
                 "src.data.report",
                 "--symbols",
                 symbols,
-                "--timeframe",
-                timeframe,
+                "--timeframes",
+                ",".join([base_timeframe, *derived_timeframes.split(",")]),
                 "--data_dir",
                 str(data_dir),
                 "--out",

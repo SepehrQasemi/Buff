@@ -42,31 +42,31 @@ See `docs/artifacts.md` for the full artifact contract.
 
 ## Usage
 
-### Download and ingest OHLCV data
+### Download and ingest OHLCV data (1m base)
 
 ```bash
-python -m src.data.run_ingest
+python -m src.data.run_ingest --base_timeframe 1m --derived_timeframes 5m,15m,30m,1h,2h,4h,1d,1w,2w,1M,3M,6M,1Y
 ```
 
 This will:
 
-- Download OHLCV data for all 10 symbols (BTC, ETH, BNB, SOL, XRP, ADA, DOGE, TRX, AVAX, LINK) from 2022-01-01 to present
-- Save parquet files to `data/clean/`
+- Download 1m OHLCV data for configured symbols from 2022-01-01 to present
+- Save parquet files to `data/ohlcv/` partitioned by timeframe and symbol
 - Generate quality report to `reports/data_quality.json`
 
 ### Validate stored OHLCV data
 
 ```bash
-python -m src.data.validate --data_dir data/clean --timeframe 1h
+python -m src.data.validate --data_dir data/ohlcv --timeframes 1m,5m,15m,30m,1h,2h,4h,1d,1w,2w,1M,3M,6M,1Y
 ```
 
 ### Generate deterministic data_quality.json
 
 ```bash
-python -m src.data.report --symbols BTCUSDT,ETHUSDT --timeframe 1h --data_dir data/clean --out reports/data_quality.json
+python -m src.data.report --symbols BTCUSDT,ETHUSDT --timeframes 1m,5m,15m,30m,1h,2h,4h,1d,1w,2w,1M,3M,6M,1Y --data_dir data/ohlcv --out reports/data_quality.json
 ```
 
-If `--symbols` is omitted, symbols are auto-detected from `data_dir`.
+If `--symbols` or `--timeframes` are omitted, they are auto-detected from `data_dir`.
 
 ## Verification (M1)
 

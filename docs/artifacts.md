@@ -13,27 +13,31 @@ Each parquet file contains raw OHLCV candles with these columns:
 
 ## Partitioning Strategy
 
-- Partitioned by symbol and timeframe at the file level.
+- Partitioned by timeframe and symbol directories.
 - One file per (symbol, timeframe).
 
 ## Naming Conventions
 
-Parquet filename format:
+Directory layout:
 
 ```
-{SYMBOL}_{QUOTE}_{TIMEFRAME}.parquet
+data/ohlcv/timeframe=1m/symbol=BTCUSDT/ohlcv.parquet
+data/ohlcv/timeframe=1h/symbol=BTCUSDT/ohlcv.parquet
 ```
 
-Examples:
+Symbols are stored in CCXT format (`BTC/USDT`) and converted to partition names by removing `/`.
 
-- `BTC_USDT_1h.parquet`
-- `ETH_USDT_1h.parquet`
+## Timeframes
 
-Symbols are stored in CCXT format (`BTC/USDT`) and converted to filenames by replacing `/` with `_`.
+- Base timeframe: `1m` (single source of truth)
+- Derived timeframes are deterministic resamples of `1m`:
+  - Fixed-duration: `5m, 15m, 30m, 1h, 2h, 4h, 1d, 1w, 2w`
+  - Calendar-based: `1M, 3M, 6M, 1Y`
 
 ## Guarantees (M1)
 
-- Raw OHLCV data is stored deterministically as parquet.
+- Raw 1m OHLCV data is stored deterministically as parquet.
+- All derived timeframes are deterministic resamples of 1m.
 - Deterministic, reproducible `reports/data_quality.json` is generated from raw OHLCV only.
 - Data quality report includes:
   - row counts, time range, expected vs missing bars

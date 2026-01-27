@@ -10,15 +10,14 @@ from typing import Iterable
 
 import pandas as pd
 
-from buff.data.store import load_parquet, symbol_to_filename
-from buff.data.validate import expected_step_seconds
+from buff.data.store import load_parquet, ohlcv_parquet_path
+from buff.data.validate import calendar_freq
 
 
 REQUIRED_COLUMNS = ("ts", "open", "high", "low", "close", "volume")
 
 
 def _sha256_file(path: Path) -> str:
-    """Return SHA256 checksum for a file."""
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
@@ -26,17 +25,7 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _filename_to_symbol(filename: str, timeframe: str) -> str:
-    """Convert parquet filename to symbol."""
-    suffix = f"_{timeframe}.parquet"
-    if not filename.endswith(suffix):
-        raise ValueError(f"Unexpected filename format: {filename}")
-    symbol_part = filename[: -len(suffix)]
-    return symbol_part.replace("_", "/")
-
-
 def _normalize_symbol(symbol: str) -> str:
-    """Normalize symbols to CCXT-style (e.g., BTC/USDT)."""
     if "/" in symbol:
         return symbol
     if symbol.endswith("USDT") and len(symbol) > 4:
@@ -44,76 +33,92 @@ def _normalize_symbol(symbol: str) -> str:
     return symbol
 
 
-def _iter_symbol_files(data_dir: Path, symbols: Iterable[str], timeframe: str) -> list[Path]:
-    """Resolve parquet file paths for given symbols."""
-    paths = []
-    for symbol in symbols:
-        normalized = _normalize_symbol(symbol)
-        filename = symbol_to_filename(normalized, timeframe)
-        path = data_dir / filename
-        if not path.exists():
-            raise FileNotFoundError(f"Missing parquet for {normalized}: {path}")
-        paths.append(path)
-    return paths
+def _discover_timeframes(data_dir: Path) -> list[str]:
+    return sorted(
+        path.name.split("=", 1)[1]
+        for path in data_dir.glob("timeframe=*")
+        if path.is_dir() and "=" in path.name
+    )
 
 
 def _discover_symbols(data_dir: Path, timeframe: str) -> list[str]:
-    """Discover symbols from parquet filenames in data_dir."""
-    files = sorted(data_dir.glob(f"*_{timeframe}.parquet"))
+    symbol_dirs = sorted((data_dir / f"timeframe={timeframe}").glob("symbol=*"))
     symbols = []
-    for path in files:
-        symbols.append(_filename_to_symbol(path.name, timeframe))
+    for path in symbol_dirs:
+        symbols.append(path.name.split("=", 1)[1])
     return symbols
 
 
 def _normalize_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Ensure dataframe is sorted by timestamp and ts is UTC."""
     if "ts" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["ts"]):
         df = df.copy()
         df["ts"] = pd.to_datetime(df["ts"], utc=True)
     return df.sort_values("ts").reset_index(drop=True)
 
 
-def _gap_ranges(ts_series: pd.Series, step_seconds: int) -> tuple[list[dict], int]:
-    """Compute gap ranges and total missing bars."""
+def _fixed_freq(timeframe: str) -> str:
+    if timeframe.endswith("m"):
+        minutes = int(timeframe[:-1])
+        return f"{minutes}T"
+    if timeframe.endswith("h"):
+        hours = int(timeframe[:-1])
+        return f"{hours}H"
+    if timeframe.endswith("d"):
+        days = int(timeframe[:-1])
+        return f"{days}D"
+    if timeframe == "1w":
+        return "W-MON"
+    if timeframe == "2w":
+        return "2W-MON"
+    raise ValueError(f"Unknown fixed timeframe: {timeframe}")
+
+
+def _expected_index(first_ts: pd.Timestamp, last_ts: pd.Timestamp, timeframe: str) -> pd.DatetimeIndex:
+    freq = calendar_freq(timeframe)
+    if freq:
+        return pd.date_range(first_ts, last_ts, freq=freq, tz="UTC")
+    return pd.date_range(first_ts, last_ts, freq=_fixed_freq(timeframe), tz="UTC")
+
+
+def _gap_ranges_from_expected(
+    expected: pd.DatetimeIndex, actual_set: set[pd.Timestamp]
+) -> tuple[list[dict], int]:
     gaps = []
     missing_total = 0
-    if ts_series.empty:
-        return gaps, missing_total
+    current = []
 
-    diffs = ts_series.diff().dt.total_seconds()
-    for idx, diff in enumerate(diffs.iloc[1:], start=1):
-        if pd.isna(diff):
-            continue
-        if diff > step_seconds:
-            missing = int((diff / step_seconds) - 1)
-            prev_ts = ts_series.iloc[idx - 1]
-            next_ts = ts_series.iloc[idx]
-            start = prev_ts + pd.Timedelta(seconds=step_seconds)
-            end = next_ts - pd.Timedelta(seconds=step_seconds)
-            gaps.append(
-                {
-                    "start": start.isoformat(),
-                    "end": end.isoformat(),
-                    "missing_bars": missing,
-                }
-            )
-            missing_total += missing
+    for ts in expected:
+        if ts not in actual_set:
+            current.append(ts)
+        else:
+            if current:
+                gaps.append(
+                    {
+                        "start": current[0].isoformat(),
+                        "end": current[-1].isoformat(),
+                        "missing_bars": len(current),
+                    }
+                )
+                missing_total += len(current)
+                current = []
+
+    if current:
+        gaps.append(
+            {
+                "start": current[0].isoformat(),
+                "end": current[-1].isoformat(),
+                "missing_bars": len(current),
+            }
+        )
+        missing_total += len(current)
+
     return gaps, missing_total
 
 
-def _expected_bars_count(first_ts: pd.Timestamp, last_ts: pd.Timestamp, step_seconds: int) -> int:
-    """Compute expected bar count between two timestamps (inclusive)."""
-    total_seconds = (last_ts - first_ts).total_seconds()
-    if total_seconds < 0:
-        return 0
-    return int(total_seconds // step_seconds) + 1
-
-
-def _validate_required_columns(df: pd.DataFrame, symbol: str) -> None:
+def _validate_required_columns(df: pd.DataFrame, symbol: str, timeframe: str) -> None:
     missing = [col for col in REQUIRED_COLUMNS if col not in df.columns]
     if missing:
-        raise ValueError(f"{symbol} missing required columns: {missing}")
+        raise ValueError(f"{symbol} {timeframe} missing required columns: {missing}")
 
 
 def _build_symbol_report(
@@ -124,7 +129,7 @@ def _build_symbol_report(
     strict: bool,
 ) -> dict:
     df = _normalize_df(df)
-    _validate_required_columns(df, symbol)
+    _validate_required_columns(df, symbol, timeframe)
 
     rows_total = int(len(df))
     if rows_total == 0:
@@ -135,9 +140,10 @@ def _build_symbol_report(
     else:
         first_ts = df["ts"].iloc[0].isoformat()
         last_ts = df["ts"].iloc[-1].isoformat()
-        step_seconds = expected_step_seconds(timeframe)
-        expected_bars_count = _expected_bars_count(df["ts"].iloc[0], df["ts"].iloc[-1], step_seconds)
-        gaps, missing_bars_count = _gap_ranges(df["ts"], step_seconds)
+        expected = _expected_index(df["ts"].iloc[0], df["ts"].iloc[-1], timeframe)
+        actual_set = set(df["ts"])
+        expected_bars_count = len(expected)
+        gaps, missing_bars_count = _gap_ranges_from_expected(expected, actual_set)
 
     duplicates_count = int(df["ts"].duplicated().sum())
     zero_volume_bars_count = int((df["volume"] <= 0).sum())
@@ -149,7 +155,8 @@ def _build_symbol_report(
 
     if strict and (nan_count > 0 or negative_price_count > 0):
         raise ValueError(
-            f"{symbol} invalid OHLCV: nan_count={nan_count}, negative_price_count={negative_price_count}"
+            f"{symbol} {timeframe} invalid OHLCV: nan_count={nan_count}, "
+            f"negative_price_count={negative_price_count}"
         )
 
     missing_ratio = (
@@ -179,34 +186,49 @@ def _build_symbol_report(
 def build_report(
     data_dir: Path,
     symbols: Iterable[str] | None,
-    timeframe: str,
+    timeframes: Iterable[str] | None,
     strict: bool = True,
 ) -> dict:
-    """Build a deterministic data quality report for OHLCV parquet files."""
+    if timeframes is None:
+        timeframes_list = _discover_timeframes(data_dir)
+    else:
+        timeframes_list = list(timeframes)
+
     if symbols is None:
-        symbols_list = _discover_symbols(data_dir, timeframe)
+        symbols_list = []
     else:
         symbols_list = [_normalize_symbol(sym) for sym in symbols]
 
-    symbols_list = sorted(set(symbols_list))
-    files = _iter_symbol_files(data_dir, symbols_list, timeframe)
-
     per_symbol = []
     global_gap_ranges = []
-    for symbol, path in zip(symbols_list, files):
-        df = load_parquet(str(path))
-        checksum = _sha256_file(path)
-        report = _build_symbol_report(df, symbol, timeframe, checksum, strict=strict)
-        per_symbol.append(report)
-        for gap in report["gap_ranges"]:
-            global_gap_ranges.append(
-                {
-                    "symbol": symbol,
-                    "start": gap["start"],
-                    "end": gap["end"],
-                    "missing_bars": gap["missing_bars"],
-                }
-            )
+
+    for timeframe in sorted(set(timeframes_list)):
+        if symbols_list:
+            tf_symbols = sorted(set(symbols_list))
+        else:
+            tf_symbols = sorted(set(_discover_symbols(data_dir, timeframe)))
+            tf_symbols = [_normalize_symbol(sym) for sym in tf_symbols]
+
+        for symbol in tf_symbols:
+            path = ohlcv_parquet_path(data_dir, symbol, timeframe)
+            if not path.exists():
+                raise FileNotFoundError(f"Missing parquet for {symbol} {timeframe}: {path}")
+            df = load_parquet(str(path))
+            checksum = _sha256_file(path)
+            report = _build_symbol_report(df, symbol, timeframe, checksum, strict=strict)
+            per_symbol.append(report)
+            for gap in report["gap_ranges"]:
+                global_gap_ranges.append(
+                    {
+                        "symbol": symbol,
+                        "timeframe": timeframe,
+                        "start": gap["start"],
+                        "end": gap["end"],
+                        "missing_bars": gap["missing_bars"],
+                    }
+                )
+
+    per_symbol = sorted(per_symbol, key=lambda item: (item["symbol"], item["timeframe"]))
 
     rows_total = sum(item["rows_total"] for item in per_symbol)
     expected_bars_total = sum(item["expected_bars_count"] for item in per_symbol)
@@ -228,7 +250,7 @@ def build_report(
 
     global_report = {
         "symbol": "ALL",
-        "timeframe": timeframe,
+        "timeframe": "ALL",
         "rows_total": rows_total,
         "first_ts": first_ts,
         "last_ts": last_ts,
@@ -248,15 +270,16 @@ def build_report(
     }
 
     return {
-        "timeframe": timeframe,
-        "symbols": symbols_list,
+        "timeframes": sorted(set(timeframes_list)),
+        "symbols": sorted(set(symbols_list)) if symbols_list else sorted(
+            {item["symbol"] for item in per_symbol}
+        ),
         "global": global_report,
         "per_symbol": per_symbol,
     }
 
 
 def write_report(report: dict, out_path: Path) -> None:
-    """Write report deterministically to JSON."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, sort_keys=True)
@@ -271,12 +294,17 @@ def main() -> None:
         default="",
         help="Comma-separated symbols (e.g., BTCUSDT,ETHUSDT). If omitted, auto-detect.",
     )
-    parser.add_argument("--timeframe", type=str, default="1h", help="Timeframe (e.g., 1h)")
+    parser.add_argument(
+        "--timeframes",
+        type=str,
+        default="",
+        help="Comma-separated timeframes. If omitted, auto-detect.",
+    )
     parser.add_argument(
         "--data_dir",
         type=str,
         required=True,
-        help="Directory containing parquet files.",
+        help="Base directory containing parquet files.",
     )
     parser.add_argument(
         "--out",
@@ -292,12 +320,15 @@ def main() -> None:
 
     args = parser.parse_args()
     symbols = None
+    timeframes = None
     if args.symbols:
         symbols = [sym.strip() for sym in args.symbols.split(",") if sym.strip()]
+    if args.timeframes:
+        timeframes = [tf.strip() for tf in args.timeframes.split(",") if tf.strip()]
 
     data_dir = Path(args.data_dir)
     out_path = Path(args.out)
-    report = build_report(data_dir, symbols, args.timeframe, strict=not args.no_strict)
+    report = build_report(data_dir, symbols, timeframes, strict=not args.no_strict)
     write_report(report, out_path)
 
 

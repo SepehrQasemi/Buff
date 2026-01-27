@@ -7,23 +7,21 @@ import pandas as pd
 import pytest
 
 from buff.data.report import build_report, write_report
-from buff.data.store import save_parquet, symbol_to_filename
+from buff.data.store import ohlcv_parquet_path, save_parquet
 
 
 pytestmark = pytest.mark.integration
 
 
 def _write_symbol(data_dir: Path, symbol: str, timeframe: str, df: pd.DataFrame) -> None:
-    filename = symbol_to_filename(symbol, timeframe)
-    save_parquet(df, str(data_dir / filename))
+    path = ohlcv_parquet_path(data_dir, symbol, timeframe)
+    save_parquet(df, str(path))
 
 
 def test_report_determinism(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-
-    timeframe = "1h"
-    dates = pd.date_range("2022-01-01", periods=3, freq="1h", tz="UTC")
+    data_dir = tmp_path / "data" / "ohlcv"
+    timeframe = "1m"
+    dates = pd.date_range("2022-01-01", periods=3, freq="1min", tz="UTC")
     df = pd.DataFrame(
         {
             "ts": dates,
@@ -38,8 +36,8 @@ def test_report_determinism(tmp_path: Path) -> None:
     _write_symbol(data_dir, "BTC/USDT", timeframe, df)
     _write_symbol(data_dir, "ETH/USDT", timeframe, df)
 
-    report1 = build_report(data_dir, ["BTC/USDT", "ETH/USDT"], timeframe)
-    report2 = build_report(data_dir, ["BTC/USDT", "ETH/USDT"], timeframe)
+    report1 = build_report(data_dir, ["BTC/USDT", "ETH/USDT"], [timeframe])
+    report2 = build_report(data_dir, ["BTC/USDT", "ETH/USDT"], [timeframe])
 
     out1 = tmp_path / "report1.json"
     out2 = tmp_path / "report2.json"
@@ -53,11 +51,10 @@ def test_report_determinism(tmp_path: Path) -> None:
 
 
 def test_report_detects_duplicates(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    timeframe = "1h"
+    data_dir = tmp_path / "data" / "ohlcv"
+    timeframe = "1m"
 
-    dates = pd.date_range("2022-01-01", periods=3, freq="1h", tz="UTC")
+    dates = pd.date_range("2022-01-01", periods=3, freq="1min", tz="UTC")
     dates_with_dup = pd.DatetimeIndex(list(dates) + [dates[1]])
     df = pd.DataFrame(
         {
@@ -71,20 +68,19 @@ def test_report_detects_duplicates(tmp_path: Path) -> None:
     )
 
     _write_symbol(data_dir, "BTC/USDT", timeframe, df)
-    report = build_report(data_dir, ["BTC/USDT"], timeframe, strict=False)
+    report = build_report(data_dir, ["BTC/USDT"], [timeframe], strict=False)
     assert report["per_symbol"][0]["duplicates_count"] == 1
 
 
 def test_report_detects_gaps(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    timeframe = "1h"
+    data_dir = tmp_path / "data" / "ohlcv"
+    timeframe = "1m"
 
     dates = pd.DatetimeIndex(
         [
             pd.Timestamp("2022-01-01 00:00", tz="UTC"),
-            pd.Timestamp("2022-01-01 01:00", tz="UTC"),
-            pd.Timestamp("2022-01-01 03:00", tz="UTC"),
+            pd.Timestamp("2022-01-01 00:01", tz="UTC"),
+            pd.Timestamp("2022-01-01 00:03", tz="UTC"),
         ]
     )
     df = pd.DataFrame(
@@ -99,7 +95,7 @@ def test_report_detects_gaps(tmp_path: Path) -> None:
     )
 
     _write_symbol(data_dir, "BTC/USDT", timeframe, df)
-    report = build_report(data_dir, ["BTC/USDT"], timeframe, strict=False)
+    report = build_report(data_dir, ["BTC/USDT"], [timeframe], strict=False)
     symbol_report = report["per_symbol"][0]
 
     assert symbol_report["missing_bars_count"] == 1
@@ -108,11 +104,10 @@ def test_report_detects_gaps(tmp_path: Path) -> None:
 
 
 def test_report_fails_on_invalid_prices(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    timeframe = "1h"
+    data_dir = tmp_path / "data" / "ohlcv"
+    timeframe = "1m"
 
-    dates = pd.date_range("2022-01-01", periods=2, freq="1h", tz="UTC")
+    dates = pd.date_range("2022-01-01", periods=2, freq="1min", tz="UTC")
     df = pd.DataFrame(
         {
             "ts": dates,
@@ -126,15 +121,14 @@ def test_report_fails_on_invalid_prices(tmp_path: Path) -> None:
 
     _write_symbol(data_dir, "BTC/USDT", timeframe, df)
     with pytest.raises(ValueError):
-        build_report(data_dir, ["BTC/USDT"], timeframe, strict=True)
+        build_report(data_dir, ["BTC/USDT"], [timeframe], strict=True)
 
 
 def test_report_fails_on_nans(tmp_path: Path) -> None:
-    data_dir = tmp_path / "data"
-    data_dir.mkdir()
-    timeframe = "1h"
+    data_dir = tmp_path / "data" / "ohlcv"
+    timeframe = "1m"
 
-    dates = pd.date_range("2022-01-01", periods=2, freq="1h", tz="UTC")
+    dates = pd.date_range("2022-01-01", periods=2, freq="1min", tz="UTC")
     df = pd.DataFrame(
         {
             "ts": dates,
@@ -148,4 +142,4 @@ def test_report_fails_on_nans(tmp_path: Path) -> None:
 
     _write_symbol(data_dir, "BTC/USDT", timeframe, df)
     with pytest.raises(ValueError):
-        build_report(data_dir, ["BTC/USDT"], timeframe, strict=True)
+        build_report(data_dir, ["BTC/USDT"], [timeframe], strict=True)
