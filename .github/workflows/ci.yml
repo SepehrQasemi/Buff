@@ -19,6 +19,13 @@ jobs:
       - name: Sanity check imports
         run: |
           python -c "import buff; import buff.data; import buff.data.run_ingest"
+      - name: Check non-editable install
+        run: |
+          python -m pip install .
+          python -c "import buff; import buff.data; import buff.data.run_ingest"
+      - name: Check entrypoint
+        run: |
+          python -m buff.data.run_ingest --help
       - name: Test
         run: |
           python -m pytest -q -m "unit"
