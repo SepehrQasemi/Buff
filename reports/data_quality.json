@@ -1,0 +1,152 @@
+{
+  "BTC/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "BTC_USDT_1h.parquet"
+  },
+  "ETH/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "ETH_USDT_1h.parquet"
+  },
+  "BNB/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "BNB_USDT_1h.parquet"
+  },
+  "SOL/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "SOL_USDT_1h.parquet"
+  },
+  "XRP/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "XRP_USDT_1h.parquet"
+  },
+  "ADA/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "ADA_USDT_1h.parquet"
+  },
+  "DOGE/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "DOGE_USDT_1h.parquet"
+  },
+  "TRX/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "TRX_USDT_1h.parquet"
+  },
+  "AVAX/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "AVAX_USDT_1h.parquet"
+  },
+  "LINK/USDT": {
+    "rows": 35699,
+    "start_ts": "2022-01-01 00:00:00+00:00",
+    "end_ts": "2026-01-27 11:00:00+00:00",
+    "duplicates": 0,
+    "missing_candles": 1,
+    "missing_examples": [
+      "2023-03-24 13:00:00+00:00"
+    ],
+    "zero_volume": 1,
+    "zero_volume_examples": [
+      "2023-03-24 12:00:00+00:00"
+    ],
+    "file": "LINK_USDT_1h.parquet"
+  }
+}
