@@ -1,11 +1,13 @@
 """Unit tests for JSON serialization of validation output."""
 
 import json
-from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 import pytest
 
+from buff.data.report import build_report
+from buff.data.store import save_parquet, symbol_to_filename
 from buff.data.validate import DataQuality, compute_quality
 
 
@@ -28,7 +30,6 @@ class TestDataQualityJSONSerializable:
             zero_volume_examples=["2023-01-04 14:00:00+00:00"],
         )
 
-        # Should not raise
         json_str = json.dumps(dq.__dict__)
         assert json_str is not None
         assert '"rows": 100' in json_str
@@ -47,18 +48,16 @@ class TestDataQualityJSONSerializable:
 
         quality = compute_quality(df, "1h")
 
-        # Check that numeric fields are Python int, not numpy types
         assert isinstance(quality.rows, int)
         assert isinstance(quality.duplicates, int)
         assert isinstance(quality.missing_candles, int)
         assert isinstance(quality.zero_volume, int)
 
-        # json.dumps should not raise TypeError
         json_str = json.dumps(quality.__dict__)
         assert json_str is not None
 
-    def test_full_report_dict_serializable(self) -> None:
-        """Full report dict (as used in run_ingest) is JSON-serializable."""
+    def test_full_report_dict_serializable(self, tmp_path: Path) -> None:
+        """Full report dict is JSON-serializable."""
         df = pd.DataFrame({
             "ts": pd.date_range("2023-01-01", periods=50, freq="h", tz="UTC"),
             "open": [100.0] * 50,
@@ -68,31 +67,19 @@ class TestDataQualityJSONSerializable:
             "volume": [1000.0] * 50,
         })
 
-        quality = compute_quality(df, "1h")
+        data_dir = tmp_path / "data" / "clean"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        filename = symbol_to_filename("BTC/USDT", "1h")
+        save_parquet(df, str(data_dir / filename))
 
-        # Simulate run_ingest report structure
-        report = {
-            "BTC/USDT": {
-                "rows": quality.rows,
-                "start_ts": quality.start_ts,
-                "end_ts": quality.end_ts,
-                "duplicates": quality.duplicates,
-                "missing_candles": quality.missing_candles,
-                "missing_examples": quality.missing_examples,
-                "zero_volume": quality.zero_volume,
-                "zero_volume_examples": quality.zero_volume_examples,
-                "file": "BTC_USDT_1h.parquet",
-            }
-        }
+        report = build_report(data_dir, ["BTC/USDT"], "1h", strict=False)
 
-        # Should be JSON-serializable
         json_str = json.dumps(report)
         assert json_str is not None
 
-        # Deserialize and check
         loaded = json.loads(json_str)
-        assert loaded["BTC/USDT"]["rows"] == 50
-        assert loaded["BTC/USDT"]["missing_candles"] == 0
+        assert loaded["per_symbol"][0]["rows_total"] == 50
+        assert loaded["per_symbol"][0]["missing_bars_count"] == 0
 
     def test_empty_examples_list_serializable(self) -> None:
         """Empty missing_examples and zero_volume_examples lists are OK."""

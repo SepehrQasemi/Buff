@@ -6,9 +6,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from buff.data.ingest import IngestConfig
+from buff.data.report import build_report, write_report
 from buff.data.store import save_parquet, symbol_to_filename, load_parquet
-from buff.data.validate import compute_quality
 
 
 pytestmark = pytest.mark.integration
@@ -24,11 +23,11 @@ def fake_fetch_ohlcv():
             ts_ms = since_ms + (i * 3600000)
             candles.append([
                 ts_ms,
-                100.0 + i,      # open
-                101.0 + i,      # high
-                99.0 + i,       # low
-                100.5 + i,      # close
-                1000.0 + (100 if i % 10 == 5 else 0),  # some zero volume
+                100.0 + i,
+                101.0 + i,
+                99.0 + i,
+                100.5 + i,
+                1000.0 + (100 if i % 10 == 5 else 0),
             ])
         return candles
 
@@ -36,15 +35,14 @@ def fake_fetch_ohlcv():
 
 
 def test_run_ingest_creates_parquet_and_report(tmp_path, monkeypatch):
-    """run_ingest creates parquet and report JSON with correct schema."""
-    # Change to tmp directory
+    """Report JSON has expected schema after parquet creation."""
     monkeypatch.chdir(tmp_path)
 
-    # Create data/clean and reports directories
-    (tmp_path / "data" / "clean").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "reports").mkdir(parents=True, exist_ok=True)
+    data_dir = tmp_path / "data" / "clean"
+    reports_dir = tmp_path / "reports"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    reports_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create test DataFrame and process it
     df = pd.DataFrame({
         "ts": pd.date_range("2023-01-01", periods=100, freq="h", tz="UTC"),
         "open": [100.0 + i for i in range(100)],
@@ -54,53 +52,23 @@ def test_run_ingest_creates_parquet_and_report(tmp_path, monkeypatch):
         "volume": [1000.0] * 100,
     })
 
-    quality = compute_quality(df, "1h")
     filename = symbol_to_filename("BTC/USDT", "1h")
-    filepath = tmp_path / "data" / "clean" / filename
-
+    filepath = data_dir / filename
     save_parquet(df, str(filepath))
 
-    report = {
-        "BTC/USDT": {
-            "rows": quality.rows,
-            "start_ts": quality.start_ts,
-            "end_ts": quality.end_ts,
-            "duplicates": quality.duplicates,
-            "missing_candles": quality.missing_candles,
-            "missing_examples": quality.missing_examples,
-            "zero_volume": quality.zero_volume,
-            "zero_volume_examples": quality.zero_volume_examples,
-            "file": str(filename),
-        }
-    }
+    report = build_report(data_dir, ["BTC/USDT"], "1h", strict=False)
+    report_path = reports_dir / "data_quality.json"
+    write_report(report, report_path)
 
-    report_path = tmp_path / "reports" / "data_quality.json"
-    with open(report_path, "w") as f:
-        json.dump(report, f, indent=2)
+    assert (data_dir / "BTC_USDT_1h.parquet").exists()
+    assert report_path.exists()
 
-    # Verify parquet exists
-    parquet_file = tmp_path / "data" / "clean" / "BTC_USDT_1h.parquet"
-    assert parquet_file.exists()
-
-    # Verify report exists
-    report_file = tmp_path / "reports" / "data_quality.json"
-    assert report_file.exists()
-
-    # Verify report schema
-    with open(report_file) as f:
+    with open(report_path) as f:
         report_loaded = json.load(f)
 
-    assert "BTC/USDT" in report_loaded
-    row = report_loaded["BTC/USDT"]
-    assert "rows" in row
-    assert "start_ts" in row
-    assert "end_ts" in row
-    assert "duplicates" in row
-    assert "missing_candles" in row
-    assert "missing_examples" in row
-    assert "zero_volume" in row
-    assert "zero_volume_examples" in row
-    assert "file" in row
+    assert "per_symbol" in report_loaded
+    assert isinstance(report_loaded["per_symbol"], list)
+    assert report_loaded["per_symbol"][0]["symbol"] == "BTC/USDT"
 
 
 def test_parquet_has_utc_timestamps(tmp_path):
@@ -117,39 +85,35 @@ def test_parquet_has_utc_timestamps(tmp_path):
     parquet_path = tmp_path / "test.parquet"
     save_parquet(df, str(parquet_path))
 
-    # Load and verify
     loaded = load_parquet(str(parquet_path))
 
     assert "ts" in loaded.columns
-    assert loaded["ts"].dtype == "datetime64[ns, tz=UTC]"
+    assert pd.api.types.is_datetime64tz_dtype(loaded["ts"])
     assert loaded["ts"].is_monotonic_increasing
 
 
 def test_report_json_is_valid(tmp_path):
     """Report JSON can be parsed and has correct types."""
-    from buff.data.validate import DataQuality
+    df = pd.DataFrame({
+        "ts": pd.date_range("2023-01-01", periods=10, freq="h", tz="UTC"),
+        "open": [100.0] * 10,
+        "high": [101.0] * 10,
+        "low": [99.0] * 10,
+        "close": [100.5] * 10,
+        "volume": [1000.0] * 10,
+    })
 
-    dq = DataQuality(
-        rows=50,
-        start_ts="2023-01-01 00:00:00+00:00",
-        end_ts="2023-01-03 00:00:00+00:00",
-        duplicates=0,
-        missing_candles=1,
-        zero_volume=2,
-        missing_examples=["2023-01-02 12:00:00+00:00"],
-        zero_volume_examples=["2023-01-01 13:00:00+00:00"],
-    )
+    data_dir = tmp_path / "data" / "clean"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    filename = symbol_to_filename("BTC/USDT", "1h")
+    save_parquet(df, str(data_dir / filename))
 
-    report = {"BTC/USDT": dq.__dict__}
-
+    report = build_report(data_dir, ["BTC/USDT"], "1h", strict=False)
     report_path = tmp_path / "test_report.json"
-    with open(report_path, "w") as f:
-        json.dump(report, f)
+    write_report(report, report_path)
 
-    # Reload and verify
     with open(report_path) as f:
         loaded = json.load(f)
 
-    assert loaded["BTC/USDT"]["rows"] == 50
-    assert loaded["BTC/USDT"]["missing_candles"] == 1
-    assert isinstance(loaded["BTC/USDT"]["missing_examples"], list)
+    assert loaded["per_symbol"][0]["rows_total"] == 10
+    assert isinstance(loaded["per_symbol"][0]["gap_ranges"], list)

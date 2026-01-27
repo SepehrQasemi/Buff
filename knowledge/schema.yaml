@@ -1,0 +1,4 @@
+{
+  "version": 1,
+  "required_keys": ["id", "name", "inputs", "formula", "parameters", "references"]
+}

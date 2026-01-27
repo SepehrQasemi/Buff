@@ -28,30 +28,17 @@ See `ARCHITECTURE.md` for module boundaries and interfaces.
 
 ## Data Quality Reporting
 
-The data pipeline ingests OHLCV candles from Binance Futures and generates a detailed quality report (`reports/data_quality.json`).
+The data pipeline ingests OHLCV candles from Binance Futures and generates a deterministic quality report
+(`reports/data_quality.json`) based on raw OHLCV only.
 
-Beyond reporting error counts, the quality report includes **example timestamps** (up to 5 per issue type) for rapid debugging:
+The report includes per-symbol and global metrics:
 
-- **missing_candles**: Count of gaps in candle sequence
-  - **missing_examples**: Sample timestamps of candles that should exist but are absent
-- **zero_volume**: Count of candles with zero or negative volume
-  - **zero_volume_examples**: Sample timestamps of affected candles
+- row counts, first/last timestamps, expected vs missing bars
+- gap ranges, duplicates, zero-volume bars
+- OHLC sanity checks (high < low, negative prices, NaNs)
+- SHA256 checksums of parquet files used
 
-For example, if a data gap is detected:
-
-```json
-{
-  "missing_candles": 2,
-  "missing_examples": [
-    "2023-03-24 02:00:00+00:00",
-    "2023-03-24 13:00:00+00:00"
-  ],
-  "zero_volume": 1,
-  "zero_volume_examples": ["2023-03-24 12:00:00+00:00"]
-}
-```
-
-**Important:** These data quality issues are **reported but not removed**. All raw candles are preserved in the parquet files; quality metrics are informational only.
+See `docs/artifacts.md` for the full artifact contract.
 
 ## Usage
 
@@ -66,6 +53,28 @@ This will:
 - Download OHLCV data for all 10 symbols (BTC, ETH, BNB, SOL, XRP, ADA, DOGE, TRX, AVAX, LINK) from 2022-01-01 to present
 - Save parquet files to `data/clean/`
 - Generate quality report to `reports/data_quality.json`
+
+### Validate stored OHLCV data
+
+```bash
+python -m src.data.validate --data_dir data/clean --timeframe 1h
+```
+
+### Generate deterministic data_quality.json
+
+```bash
+python -m src.data.report --symbols BTCUSDT,ETHUSDT --timeframe 1h --data_dir data/clean --out reports/data_quality.json
+```
+
+If `--symbols` is omitted, symbols are auto-detected from `data_dir`.
+
+## Verification (M1)
+
+Run the full offline, deterministic verification workflow:
+
+```bash
+python scripts/verify_m1.py
+```
 
 ### Verify data and report integrity
 

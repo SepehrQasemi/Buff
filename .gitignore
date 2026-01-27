@@ -13,6 +13,10 @@ venv/
 *.log
 .env
 
+# Allow test fixtures
+!tests/fixtures/
+!tests/fixtures/**/*.csv
+
 # OS
 .DS_Store
 Thumbs.db
