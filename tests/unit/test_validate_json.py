@@ -10,7 +10,6 @@ from buff.data.validate import DataQuality, compute_quality
 
 
 pytestmark = pytest.mark.unit
-pytestmark = pytest.mark.unit
 
 
 class TestDataQualityJSONSerializable:
