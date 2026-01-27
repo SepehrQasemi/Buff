@@ -16,6 +16,10 @@ venv/
 # Manual workspaces
 /workspaces/
 
+# Allow golden fixtures
+!tests/goldens/
+!tests/goldens/*.csv
+
 # Allow test fixtures
 !tests/fixtures/
 !tests/fixtures/**/*.csv

@@ -51,6 +51,8 @@ def _load_required_keys(schema_path: Path) -> set[str]:
 
 
 def validate_rules(rules: Iterable[dict], required_keys: set[str]) -> None:
+    if not rules:
+        raise ValueError("technical_rules.yaml must not be empty.")
     for idx, rule in enumerate(rules, start=1):
         if not isinstance(rule, dict):
             raise ValueError(f"Rule #{idx} must be a mapping.")
