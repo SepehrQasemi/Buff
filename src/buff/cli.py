@@ -10,6 +10,9 @@ import pandas as pd
 from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
+from risk.evaluator import evaluate_risk
+from risk.report import write_risk_report
+from risk.types import RiskContext
 
 
 def _detect_input_format(path: Path) -> str:
@@ -31,6 +34,16 @@ def _read_input(path: Path, input_format: str) -> pd.DataFrame:
     raise ValueError("Input format must be csv or parquet")
 
 
+def _normalize_timestamp_column(df: pd.DataFrame) -> pd.DataFrame:
+    if "timestamp" in df.columns:
+        return df
+    if "ts" in df.columns:
+        out = df.copy()
+        out["timestamp"] = out["ts"]
+        return out
+    return df
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="buff")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -39,6 +52,9 @@ def main() -> None:
     features_parser.add_argument("input_path")
     features_parser.add_argument("output_path")
     features_parser.add_argument("--meta", dest="meta_path")
+    features_parser.add_argument("--symbol", type=str, default=None, help="Symbol label")
+    features_parser.add_argument("--timeframe", type=str, default=None, help="Timeframe label")
+    features_parser.add_argument("--run_id", type=str, default=None, help="Optional run id")
 
     args = parser.parse_args()
     if args.command != "features":
@@ -51,8 +67,9 @@ def main() -> None:
     input_format = _detect_input_format(input_path)
     input_sha256 = sha256_file(input_path)
     df = _read_input(input_path, input_format)
+    feature_input = _normalize_timestamp_column(df)
 
-    out = run_features(df)
+    out = run_features(feature_input)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     out.to_parquet(output_path, engine="pyarrow")
 
@@ -83,6 +100,18 @@ def main() -> None:
         feature_params=feature_params,
     )
     write_json(meta_path, metadata)
+
+    report = evaluate_risk(
+        out,
+        feature_input,
+        context=RiskContext(
+            run_id=args.run_id,
+            workspace=None,
+            symbol=args.symbol,
+            timeframe=args.timeframe,
+        ),
+    )
+    write_risk_report(report, mode="system")
 
 
 if __name__ == "__main__":
