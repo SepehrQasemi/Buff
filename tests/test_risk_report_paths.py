@@ -1,6 +1,7 @@
 """Path guard tests for risk report writing."""
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -37,7 +38,8 @@ def test_manual_path_traversal_blocked(tmp_path, monkeypatch) -> None:
 def test_system_absolute_path_blocked(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("BUFF_REPO_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
-    report = _base_report(run_id="C:\\evil")
+    absolute = str(Path("/tmp/evil")) if os.name != "nt" else "C:\\evil"
+    report = _base_report(run_id=absolute)
     with pytest.raises(ValueError, match="path_guard_violation"):
         report_path(report, mode="system")
 

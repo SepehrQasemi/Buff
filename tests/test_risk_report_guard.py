@@ -48,7 +48,7 @@ def test_system_report_path_traversal_blocked(tmp_path, monkeypatch):
     monkeypatch.setenv("BUFF_REPO_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
 
-    report = _base_report(workspace=None, run_id="..\\evil")
+    report = _base_report(workspace=None, run_id="../evil")
     with pytest.raises(ValueError, match="path_guard_violation"):
         report_path(report, mode="system")
 
