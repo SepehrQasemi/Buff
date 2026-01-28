@@ -62,3 +62,66 @@ def atr_wilder(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 
         out.iloc[i] = atr
 
     return out
+
+
+def sma(close: pd.Series, period: int = 20) -> pd.Series:
+    if period <= 0:
+        raise ValueError("period must be > 0")
+
+    close = close.astype(float)
+    return close.rolling(window=period, min_periods=period).mean()
+
+
+def rolling_std(close: pd.Series, period: int = 20, ddof: int = 0) -> pd.Series:
+    if period <= 0:
+        raise ValueError("period must be > 0")
+
+    close = close.astype(float)
+    return close.rolling(window=period, min_periods=period).std(ddof=ddof)
+
+
+def bollinger_bands(
+    close: pd.Series,
+    period: int = 20,
+    k: float = 2.0,
+    ddof: int = 0,
+) -> pd.DataFrame:
+    mid = sma(close, period=period)
+    sd = rolling_std(close, period=period, ddof=ddof)
+    upper = mid + (k * sd)
+    lower = mid - (k * sd)
+    return pd.DataFrame({"mid": mid, "upper": upper, "lower": lower})
+
+
+def macd(
+    close: pd.Series,
+    fast: int = 12,
+    slow: int = 26,
+    signal: int = 9,
+) -> pd.DataFrame:
+    if fast <= 0 or slow <= 0 or signal <= 0:
+        raise ValueError("fast, slow, and signal must be > 0")
+    if fast >= slow:
+        raise ValueError("fast must be < slow")
+
+    macd_line = ema(close, period=fast) - ema(close, period=slow)
+    signal_line = ema(macd_line, period=signal)
+    hist = macd_line - signal_line
+
+    warmup = slow + signal - 1
+    if len(macd_line) >= warmup:
+        macd_line.iloc[: warmup - 1] = float("nan")
+        signal_line.iloc[: warmup - 1] = float("nan")
+        hist.iloc[: warmup - 1] = float("nan")
+    else:
+        macd_line[:] = float("nan")
+        signal_line[:] = float("nan")
+        hist[:] = float("nan")
+
+    return pd.DataFrame(
+        {
+            "macd": macd_line,
+            "signal": signal_line,
+            "hist": hist,
+        }
+    )

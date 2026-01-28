@@ -2,20 +2,58 @@
 
 from __future__ import annotations
 
-from buff.features.indicators import atr_wilder, ema, rsi_wilder
+from buff.features.indicators import (
+    atr_wilder,
+    bollinger_bands,
+    ema,
+    macd,
+    rolling_std,
+    rsi_wilder,
+    sma,
+)
 
 
 FEATURES = {
     "ema_20": {
-        "callable": lambda df: ema(df["close"], period=20),
-        "required_columns": ["close"],
+        "requires": ["close"],
+        "func": lambda df, **params: ema(df["close"], **params),
+        "params": {"period": 20},
+        "outputs": ["ema_20"],
     },
     "rsi_14": {
-        "callable": lambda df: rsi_wilder(df["close"], period=14),
-        "required_columns": ["close"],
+        "requires": ["close"],
+        "func": lambda df, **params: rsi_wilder(df["close"], **params),
+        "params": {"period": 14},
+        "outputs": ["rsi_14"],
     },
     "atr_14": {
-        "callable": lambda df: atr_wilder(df["high"], df["low"], df["close"], period=14),
-        "required_columns": ["high", "low", "close"],
+        "requires": ["high", "low", "close"],
+        "func": lambda df, **params: atr_wilder(df["high"], df["low"], df["close"], **params),
+        "params": {"period": 14},
+        "outputs": ["atr_14"],
+    },
+    "sma_20": {
+        "requires": ["close"],
+        "func": lambda df, **params: sma(df["close"], **params),
+        "params": {"period": 20},
+        "outputs": ["sma_20"],
+    },
+    "std_20": {
+        "requires": ["close"],
+        "func": lambda df, **params: rolling_std(df["close"], **params),
+        "params": {"period": 20, "ddof": 0},
+        "outputs": ["std_20"],
+    },
+    "bbands_20_2": {
+        "requires": ["close"],
+        "func": lambda df, **params: bollinger_bands(df["close"], **params),
+        "params": {"period": 20, "k": 2.0, "ddof": 0},
+        "outputs": ["bb_mid_20_2", "bb_upper_20_2", "bb_lower_20_2"],
+    },
+    "macd_12_26_9": {
+        "requires": ["close"],
+        "func": lambda df, **params: macd(df["close"], **params),
+        "params": {"fast": 12, "slow": 26, "signal": 9},
+        "outputs": ["macd_12_26_9", "macd_signal_12_26_9", "macd_hist_12_26_9"],
     },
 }

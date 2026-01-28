@@ -66,7 +66,7 @@ def main() -> None:
         row_count=int(out.shape[0]),
         columns=list(out.columns),
         features=list(FEATURES.keys()),
-        feature_params={"ema": 20, "rsi": 14, "atr": 14},
+        feature_params={name: spec["params"] for name, spec in FEATURES.items()},
     )
     write_json(meta_path, metadata)
 
