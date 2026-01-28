@@ -57,6 +57,8 @@ class RiskInputs:
     missing_fraction: float
     timestamps_valid: bool
     latest_metrics_valid: bool
+    invalid_index: bool
+    invalid_close: bool
 
 
 @dataclass(frozen=True)

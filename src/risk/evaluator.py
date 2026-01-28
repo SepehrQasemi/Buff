@@ -64,9 +64,13 @@ def evaluate_risk(
         context = RiskContext()
 
     timestamps = _to_datetime_index(ohlcv)
+    invalid_index = timestamps is None
     timestamps_valid = _timestamps_valid(timestamps)
 
     close = ohlcv["close"].astype(float) if "close" in ohlcv.columns else None
+    invalid_close = close is None
+    if close is not None:
+        invalid_close = bool(close.isna().any() or (close <= 0).any())
     atr = features[config.atr_feature] if config.atr_feature in features.columns else None
 
     atr_pct_series = None
@@ -83,9 +87,7 @@ def evaluate_risk(
     if close is not None:
         realized_vol_series = _compute_realized_vol(close, config.realized_vol_window)
 
-    series_list = [
-        s for s in [atr_pct_series, realized_vol_series] if s is not None
-    ]
+    series_list = [s for s in [atr_pct_series, realized_vol_series] if s is not None]
     missing_fraction = _missing_fraction(series_list, config.missing_lookback)
 
     latest_atr_pct = float(atr_pct_series.iloc[-1]) if atr_pct_series is not None else None
@@ -106,6 +108,8 @@ def evaluate_risk(
             missing_fraction=missing_fraction,
             timestamps_valid=timestamps_valid,
             latest_metrics_valid=latest_metrics_valid,
+            invalid_index=invalid_index,
+            invalid_close=invalid_close,
         ),
         config,
     )
@@ -118,23 +122,27 @@ def evaluate_risk(
         end_ts = pd.Timestamp(timestamps.max()).isoformat()
         as_of = end_ts
 
+    thresholds = dict(threshold_snapshot(config))
     report: dict[str, Any] = {
+        "risk_report_version": 1,
         "run_id": context.run_id,
         "workspace": context.workspace,
         "symbol": context.symbol,
         "timeframe": context.timeframe,
         "start_ts": start_ts,
         "end_ts": end_ts,
+        "evaluated_at": as_of,
         "risk_state": decision.state.value,
         "permission": decision.permission.value,
         "recommended_scale": decision.recommended_scale,
         "reasons": list(decision.reasons),
+        "thresholds": thresholds,
         "metrics": {
             "atr_pct": latest_atr_pct,
             "realized_vol": latest_vol,
             "missing_fraction": missing_fraction,
             "as_of": as_of,
-            "thresholds": dict(threshold_snapshot(config)),
+            "thresholds": thresholds,
         },
         "config": asdict(config),
     }

@@ -33,12 +33,16 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
 
     reasons: list[str] = []
 
+    if inputs.invalid_index:
+        _append_reason(reasons, "invalid_index")
     if not inputs.timestamps_valid:
-        _append_reason(reasons, "timestamps_not_monotonic")
+        _append_reason(reasons, "invalid_timestamps")
+    if inputs.invalid_close:
+        _append_reason(reasons, "invalid_close")
     if inputs.missing_fraction > config.max_missing_fraction:
         _append_reason(reasons, "missing_fraction_exceeded")
     if not inputs.latest_metrics_valid:
-        _append_reason(reasons, "latest_metrics_missing")
+        _append_reason(reasons, "missing_metrics")
 
     if reasons:
         state = RiskState.RED
