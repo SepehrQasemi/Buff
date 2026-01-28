@@ -8,7 +8,7 @@ from buff.features.runner import run_features
 
 def test_feature_runner_e2e() -> None:
     df = pd.read_csv("tests/goldens/expected.csv")
-    out = run_features(df)
+    out = run_features(df, mode="train")
 
     assert out.shape[0] == len(df)
     assert list(out.columns) == [
@@ -52,3 +52,11 @@ def test_feature_runner_e2e() -> None:
         atol=1e-6,
         equal_nan=True,
     )
+
+    out_live = run_features(df, mode="live")
+    assert list(out_live.columns) == list(expected.columns)
+    assert out_live.shape[0] == len(df)
+    assert out_live["macd_12_26_9"].iloc[:33].isna().all()
+    assert out_live["macd_12_26_9"].iloc[33:].notna().any()
+    assert out_live["ema_20"].iloc[:19].isna().all()
+    assert out_live["ema_20"].iloc[19:].notna().any()
