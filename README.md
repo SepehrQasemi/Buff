@@ -99,6 +99,45 @@ This will:
 - Verify that `missing_examples` timestamps do NOT exist in data (correctly marked as missing)
 - Print verification results
 
+## Feature Engine (M4.1 / M4.2)
+
+The feature engine produces deterministic, preset-only indicators from validated OHLCV input.
+
+### Presets (Tier-1)
+
+| Preset | Inputs | Outputs | Params |
+| --- | --- | --- | --- |
+| ema_20 | close | ema_20 | period=20 |
+| rsi_14 | close | rsi_14 | period=14 |
+| atr_14 | high, low, close | atr_14 | period=14 |
+| sma_20 | close | sma_20 | period=20 |
+| std_20 | close | std_20 | period=20, ddof=0 |
+| bbands_20_2 | close | bb_mid_20_2, bb_upper_20_2, bb_lower_20_2 | period=20, k=2.0, ddof=0 |
+| macd_12_26_9 | close | macd_12_26_9, macd_signal_12_26_9, macd_hist_12_26_9 | fast=12, slow=26, signal=9 |
+
+### CLI
+
+Generate features from CSV or Parquet:
+
+```bash
+python -m src.buff.cli features <input_path> <output_path> [--meta <meta_path>]
+```
+
+### Train vs Live Modes
+
+The runner supports two modes:
+
+- train (default): identical to the legacy behavior, no trimming.
+- live: no trimming, output length equals input length, warmup NaNs preserved.
+
+Validity metadata is recorded per preset in feature_params using the reserved key
+`_valid_from` (first reliable index). See `docs/features.md`.
+
+### Goldens
+
+Golden outputs live at `tests/goldens/expected.csv` and are preset-only. Tests compare
+indicator outputs and runner output against these goldens. See `docs/goldens.md`.
+
 ## Project Status
 
 🚧 Phase 0–1: Repo bootstrap + data pipeline (in progress)
