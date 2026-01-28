@@ -95,5 +95,154 @@
     "references": [
       "https://school.stockcharts.com/doku.php?id=technical_indicators:average_true_range_atr"
     ]
+  },
+  {
+    "id": "sma_20",
+    "name": "SMA",
+    "category": "trend",
+    "description": "Simple Moving Average.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 20,
+        "constraints": "period > 0"
+      }
+    },
+    "formula": "SMA_t = mean(close_{t-period+1}..close_t) with min_periods=period",
+    "output": "sma",
+    "warmup": {
+      "candles": 20
+    },
+    "nan_policy": {
+      "before_warmup": "NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:moving_averages"
+    ]
+  },
+  {
+    "id": "std_20",
+    "name": "StdDev",
+    "category": "volatility",
+    "description": "Rolling standard deviation with population ddof=0.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 20,
+        "constraints": "period > 0"
+      },
+      "ddof": {
+        "type": "int",
+        "default": 0,
+        "constraints": "ddof >= 0"
+      }
+    },
+    "formula": "StdDev_t = std(close_{t-period+1}..close_t) with ddof=0 and min_periods=period",
+    "output": "std",
+    "warmup": {
+      "candles": 20
+    },
+    "nan_policy": {
+      "before_warmup": "NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:standard_deviation_volatility"
+    ]
+  },
+  {
+    "id": "bbands_20_2",
+    "name": "BollingerBands",
+    "category": "volatility",
+    "description": "Bollinger Bands with SMA midline and ddof=0.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 20,
+        "constraints": "period > 0"
+      },
+      "k": {
+        "type": "float",
+        "default": 2.0,
+        "constraints": "k > 0"
+      },
+      "ddof": {
+        "type": "int",
+        "default": 0,
+        "constraints": "ddof >= 0"
+      }
+    },
+    "formula": "mid=SMA(period); sd=StdDev(period, ddof=0); upper=mid+k*sd; lower=mid-k*sd",
+    "output": "bbands",
+    "warmup": {
+      "candles": 20
+    },
+    "nan_policy": {
+      "before_warmup": "NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:bollinger_bands"
+    ]
+  },
+  {
+    "id": "macd_12_26_9",
+    "name": "MACD",
+    "category": "trend",
+    "description": "Moving Average Convergence Divergence.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "fast": {
+        "type": "int",
+        "default": 12,
+        "constraints": "fast > 0"
+      },
+      "slow": {
+        "type": "int",
+        "default": 26,
+        "constraints": "slow > fast"
+      },
+      "signal": {
+        "type": "int",
+        "default": 9,
+        "constraints": "signal > 0"
+      }
+    },
+    "formula": "macd=EMA(fast)-EMA(slow); signal=EMA(macd, signal); hist=macd-signal",
+    "output": "macd",
+    "warmup": {
+      "candles": 34
+    },
+    "nan_policy": {
+      "before_warmup": "NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:moving_average_convergence_divergence_macd"
+    ]
   }
 ]
