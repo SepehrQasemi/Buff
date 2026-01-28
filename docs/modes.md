@@ -24,3 +24,19 @@ Only the following are shared across modes:
 Rule:
 
 "No shared state, no shared config, no shared outputs."
+
+## Runner Modes (Train vs Live)
+
+The feature runner supports a separate notion of mode:
+
+- train (default): identical to the legacy behavior, no trimming.
+- live: no trimming, output length equals input length, warmup NaNs preserved.
+
+These runner modes are independent of the Manual/System architecture modes above.
+
+Example (expected behavior):
+
+```text
+train: output length == input length, warmup NaNs preserved
+live:  output length == input length, warmup NaNs preserved
+```
