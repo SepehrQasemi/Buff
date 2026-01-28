@@ -71,12 +71,12 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
         )
 
     yellow_flags: Iterable[tuple[float | None, float, float, str]] = (
-        (atr_pct, config.yellow_atr_pct, config.red_atr_pct, "atr_pct_between_yellow_red"),
+        (atr_pct, config.yellow_atr_pct, config.red_atr_pct, "atr_pct_between_thresholds"),
         (
             realized_vol,
             config.yellow_vol,
             config.red_vol,
-            "realized_vol_between_yellow_red",
+            "realized_vol_between_thresholds",
         ),
     )
 

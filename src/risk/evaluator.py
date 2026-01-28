@@ -70,7 +70,7 @@ def evaluate_risk(
     close = ohlcv["close"].astype(float) if "close" in ohlcv.columns else None
     invalid_close = close is None
     if close is not None:
-        invalid_close = bool(close.isna().any() or (close <= 0).any())
+        invalid_close = bool((close <= 0).any())
     atr = features[config.atr_feature] if config.atr_feature in features.columns else None
 
     atr_pct_series = None

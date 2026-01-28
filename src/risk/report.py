@@ -49,13 +49,18 @@ def report_path(report: dict[str, Any], mode: Literal["manual", "system"]) -> Pa
             raise ValueError("workspace is required for manual risk reports")
         if not _is_safe_component(str(workspace)):
             raise ValueError("path_guard_violation")
-        base = Path("workspaces") / workspace / "reports"
+        workspace_dir = Path("workspaces") / workspace
+        if workspace_dir.exists() and workspace_dir.is_symlink():
+            raise ValueError("path_guard_violation")
+        base = workspace_dir / "reports"
         path = base / filename
         _ensure_under_base(path, base)
         return guard_manual_write(path)
 
     if mode == "system":
         base = Path("reports")
+        if base.exists() and base.is_symlink():
+            raise ValueError("path_guard_violation")
         path = base / filename
         _ensure_under_base(path, base)
         return guard_system_write(path)

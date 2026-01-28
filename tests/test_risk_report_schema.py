@@ -28,7 +28,7 @@ def _minimal_validate(schema: dict, payload: dict) -> None:
 
 
 def _make_payload() -> dict:
-    timestamps = pd.date_range("2023-01-01", periods=30, freq="H", tz="UTC")
+    timestamps = pd.date_range("2023-01-01", periods=30, freq="h", tz="UTC")
     ohlcv = pd.DataFrame(
         {
             "timestamp": timestamps,
