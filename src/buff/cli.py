@@ -57,6 +57,20 @@ def main() -> None:
     out.to_parquet(output_path, engine="pyarrow")
 
     output_sha256 = sha256_file(output_path)
+    feature_params = {}
+    for name, spec in FEATURES.items():
+        params = dict(spec["params"])
+        kind = spec["kind"]
+        if kind in {"ema", "sma", "std", "bbands"}:
+            params["_valid_from"] = params["period"] - 1
+        elif kind in {"rsi", "atr"}:
+            params["_valid_from"] = params["period"]
+        elif kind == "macd":
+            params["_valid_from"] = params["slow"] + params["signal"] - 2
+        else:
+            raise ValueError(f"Unknown feature kind: {kind}")
+        feature_params[name] = params
+
     metadata = build_metadata(
         input_path=str(input_path),
         input_format=input_format,
@@ -66,7 +80,7 @@ def main() -> None:
         row_count=int(out.shape[0]),
         columns=list(out.columns),
         features=list(FEATURES.keys()),
-        feature_params={name: spec["params"] for name, spec in FEATURES.items()},
+        feature_params=feature_params,
     )
     write_json(meta_path, metadata)
 

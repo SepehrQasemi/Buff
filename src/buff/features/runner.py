@@ -8,7 +8,10 @@ from buff.data.contracts import validate_ohlcv
 from buff.features.registry import FEATURES
 
 
-def run_features(df: pd.DataFrame) -> pd.DataFrame:
+def run_features(df: pd.DataFrame, mode: str = "train") -> pd.DataFrame:
+    if mode not in {"train", "live"}:
+        raise ValueError("mode must be 'train' or 'live'")
+
     input_df = validate_ohlcv(df)
 
     features: dict[str, pd.Series] = {}
