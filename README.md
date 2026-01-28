@@ -2,8 +2,8 @@
 
 ## Overview
 
-Buff is a modular AI-assisted trading system for crypto markets (Binance Futures, 1H timeframe).
-The focus is **risk-controlled, explainable, and auditable** decision-making â€” **not price prediction**.
+Buff is a modular AI-assisted trading research system for crypto markets (Binance Futures), built around a **1m source-of-truth OHLCV dataset** with derived timeframes (e.g., 5m–1H–1D).
+The focus is **risk-controlled, explainable, and auditable** decision-making — **not price prediction**.
 
 ## Core Principles
 
@@ -31,10 +31,10 @@ The system is composed of:
 - Feature & Regime Engine
 - Risk Permission Layer
 - Strategy Selector (menu-based; no strategy invention)
-- Execution Engine (paper â†’ live)
+- Execution Engine (paper ? live)
 - Chatbot (Reporting, Teaching, Auditing)
 
-See `ARCHITECTURE.md` for module boundaries and interfaces.
+See `ARCHITECTURE.md` for module boundaries and interfaces, and `docs/features.md` for the feature-engine contract.
 
 ## Data Quality Reporting
 
@@ -95,7 +95,7 @@ python -m src.data.verify_outputs
 This will:
 
 - Load `reports/data_quality.json`
-- Verify that `zero_volume_examples` timestamps exist in data with volume â‰¤ 0
+- Verify that `zero_volume_examples` timestamps exist in data with volume = 0
 - Verify that `missing_examples` timestamps do NOT exist in data (correctly marked as missing)
 - Print verification results
 
@@ -140,7 +140,10 @@ indicator outputs and runner output against these goldens. See `docs/goldens.md`
 
 ## Project Status
 
-ðŸš§ Phase 0â€“1: Repo bootstrap + data pipeline (in progress)
+- Data pipeline, data contracts, and deterministic reporting: implemented
+- Feature engine with Tier-1 presets: implemented
+- Dual-mode feature runner (train/live) with validity metadata: implemented
+- Dataset builder and model training: planned next
 
 ## Disclaimer
 
