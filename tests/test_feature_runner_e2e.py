@@ -26,6 +26,8 @@ def test_feature_runner_e2e() -> None:
     ]
 
     expected = df.set_index(pd.to_datetime(df["timestamp"], utc=True))
+    expected = expected[out.columns]
+    assert list(out.columns) == list(expected.columns)
 
     np.testing.assert_allclose(out["ema_20"].to_numpy(), expected["ema_20"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
     np.testing.assert_allclose(out["rsi_14"].to_numpy(), expected["rsi_14"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)

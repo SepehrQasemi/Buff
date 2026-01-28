@@ -11,14 +11,16 @@ def test_goldens_exist() -> None:
     df = pd.read_csv(path)
     assert len(df) >= 150
 
-    expected_cols = {
+    base_cols = {
         "timestamp",
         "open",
         "high",
         "low",
         "close",
-        "rsi_14",
+    }
+    feature_cols = {
         "ema_20",
+        "rsi_14",
         "atr_14",
         "sma_20",
         "std_20",
@@ -29,4 +31,6 @@ def test_goldens_exist() -> None:
         "macd_signal_12_26_9",
         "macd_hist_12_26_9",
     }
-    assert expected_cols.issubset(df.columns)
+    expected_cols = base_cols | feature_cols
+    assert expected_cols == set(df.columns)
+    assert {"sma_20", "std_20", "bb_mid_20_2", "macd_12_26_9"}.issubset(df.columns)
