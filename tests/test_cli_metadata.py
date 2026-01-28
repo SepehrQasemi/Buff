@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from buff import cli
+from buff.features.registry import FEATURES
 
 
 def _is_hex(value: str) -> bool:
@@ -41,7 +42,9 @@ def test_cli_metadata(tmp_path: Path) -> None:
 
     payload = json.loads(meta_path.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "1.0"
-    assert payload["features"] == ["ema_20", "rsi_14", "atr_14"]
+    expected_features = list(FEATURES.keys())
+    expected_columns = [col for spec in FEATURES.values() for col in spec["outputs"]]
+    assert payload["features"] == expected_features
 
     output_df = pd.read_parquet(output_path, engine="pyarrow")
     assert payload["row_count"] == int(output_df.shape[0])
@@ -50,7 +53,7 @@ def test_cli_metadata(tmp_path: Path) -> None:
     assert _is_hex(payload["input_sha256"])
     assert _is_hex(payload["output_sha256"])
 
-    assert payload["columns"] == ["ema_20", "rsi_14", "atr_14"]
+    assert payload["columns"] == expected_columns
 
     git_sha = payload.get("git_sha")
     assert git_sha is None or (len(git_sha) == 40 and all(ch in "0123456789abcdef" for ch in git_sha.lower()))
