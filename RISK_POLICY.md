@@ -1,15 +1,20 @@
 # RISK_POLICY
 
-## Core Risk Rules (default v0.1)
-- Risk per trade: 0.25%–0.5% of equity
-- Daily max loss: 1% (kill-switch)
-- Max trades/day: 3
-- Mandatory SL/TP for any live order
-- Leverage cap for early phases: 3x–5x (configurable; enforced)
-
-## Risk Permission (news/event)
+## Risk State
 - green: normal
-- yellow: reduce size / avoid new positions near major events
-- red: no-trade
+- yellow: reduce size or restrict new positions
+- red: no-trade (hard stop)
 
-This layer is permission-only; it must not generate directional signals.
+## Hard Limits (default v1.0)
+- Max exposure: configured per account (fail-closed if missing)
+- Max trades/day: configured per account (fail-closed if missing)
+- Leverage cap: configured per account (fail-closed if missing)
+
+## Evidence Requirements
+- Data and feature snapshots must be hashed
+- Risk decision must be recorded with reasons and thresholds
+
+## Hard Rule
+- risk_state = red -> NO TRADE
+
+This layer is permission-only and must not generate directional signals.

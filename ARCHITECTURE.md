@@ -1,24 +1,32 @@
-# ARCHITECTURE — Buff
+# ARCHITECTURE - Buff
 
-## Separation of Concerns
-The system is split into two layers:
-1) Core Trading System (money-sensitive; deterministic where possible)
-2) Chatbot Layer (read-only; reporting/teaching/auditing)
+## Planes
 
-## Core Modules
-- src/data: ingest/validate/store
-- src/features: indicators, feature set, regime detection
-- src/risk: permission layer (green/yellow/red)
-- src/selector: selects from predefined strategies
-- src/strategies: strategy interface + implementations
-- src/execution: order manager, position sizing, safety checks
+A) Core/Data Plane
+- data: ingest/validate/store
+- features: indicators, feature sets
+- risk: permission layer (green/yellow/red)
+- selector: selects from registered strategies
+- execution: order manager, state machine, safety checks
 
-## Chatbot Module
-- src/chatbot: prompts + tools for reporting/teaching/auditing
-- Must not have any execution privileges
+B) Control Plane
+- arming/disarming execution
+- approvals and limits
+- kill switch
 
-## Interfaces (v0.1)
-- Data → Features: cleaned OHLCV parquet
-- Features → Selector: market_state_vector
-- Risk → Selector: risk_state
-- Selector → Execution: strategy_id + signal (later), guarded by risk manager
+C) Interface Plane
+- UI + Chatbot
+- read-only for execution
+- can run sandbox authoring and paper/backtest via control plane
+
+## Rules
+- Risk can veto everything.
+- Execution runs independently from UI.
+- UI and chatbot cannot place orders directly.
+
+## Interfaces
+- Data -> Features: validated OHLCV
+- Features -> Risk: feature frame + metadata
+- Risk -> Selector: risk_state
+- Selector -> Execution: strategy_id + intent (LONG/SHORT/FLAT)
+- Control Plane -> Execution: arming, limits, kill switch
