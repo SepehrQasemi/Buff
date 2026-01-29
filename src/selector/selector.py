@@ -1,20 +1,43 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from strategies.registry import build_engines, get_profiles
 
+if TYPE_CHECKING:  # pragma: no cover
+    from audit.decision_records import DecisionRecordWriter
 
-def select_strategy(*, market_state: dict, risk_state: str, timeframe: str) -> dict:
+
+def select_strategy(
+    *,
+    market_state: dict,
+    risk_state: str,
+    timeframe: str,
+    record_writer: "DecisionRecordWriter | None" = None,
+) -> dict:
     risk_state_norm = risk_state.upper()
     reasons: list[str] = []
 
     if risk_state_norm == "RED":
-        return {
+        out = {
             "strategy_id": "NONE",
             "engine_id": None,
             "risk_state": risk_state_norm,
             "timeframe": timeframe,
             "reason": ["RISK_VETO:RED"],
         }
+        if record_writer is not None:
+            record_writer.append(
+                timeframe=timeframe,
+                risk_state=risk_state_norm,
+                market_state=market_state,
+                selection={
+                    "strategy_id": out["strategy_id"],
+                    "engine_id": out["engine_id"],
+                    "reason": out["reason"],
+                },
+            )
+        return out
 
     engines = build_engines()
     profiles = get_profiles()
@@ -49,12 +72,35 @@ def select_strategy(*, market_state: dict, risk_state: str, timeframe: str) -> d
         break
 
     if selected is None:
-        return {
+        out = {
             "strategy_id": "NONE",
             "engine_id": None,
             "risk_state": risk_state_norm,
             "timeframe": timeframe,
             "reason": reasons + ["NO_APPLICABLE_STRATEGY"],
         }
+        if record_writer is not None:
+            record_writer.append(
+                timeframe=timeframe,
+                risk_state=risk_state_norm,
+                market_state=market_state,
+                selection={
+                    "strategy_id": out["strategy_id"],
+                    "engine_id": out["engine_id"],
+                    "reason": out["reason"],
+                },
+            )
+        return out
 
+    if record_writer is not None:
+        record_writer.append(
+            timeframe=timeframe,
+            risk_state=risk_state_norm,
+            market_state=market_state,
+            selection={
+                "strategy_id": selected["strategy_id"],
+                "engine_id": selected.get("engine_id"),
+                "reason": selected["reason"],
+            },
+        )
     return selected
