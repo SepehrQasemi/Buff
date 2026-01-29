@@ -47,6 +47,12 @@ def ensure_run_dir(run_id: str) -> str:
     return str(path / "decision_records.jsonl")
 
 
+def make_records_path(run_id: str, *, shard_index: int) -> str:
+    path = Path("runs") / run_id
+    path.mkdir(parents=True, exist_ok=True)
+    return str(path / f"decision_records_{shard_index:04d}.jsonl")
+
+
 def infer_next_seq_from_jsonl(path: str) -> int:
     jsonl_path = Path(path)
     if not jsonl_path.exists():
@@ -65,6 +71,24 @@ def infer_next_seq_from_jsonl(path: str) -> int:
     if last_seq is None:
         return 0
     return last_seq + 1
+
+
+def infer_next_shard_and_seq(run_dir: str) -> tuple[int, int]:
+    run_path = Path(run_dir)
+    if not run_path.exists():
+        return 0, 0
+    shard_indices: list[int] = []
+    for path in run_path.glob("decision_records_*.jsonl"):
+        try:
+            shard_indices.append(int(path.stem.split("_")[-1]))
+        except ValueError:
+            continue
+    if not shard_indices:
+        return 0, 0
+    shard_index = max(shard_indices)
+    records_path = run_path / f"decision_records_{shard_index:04d}.jsonl"
+    next_seq = infer_next_seq_from_jsonl(str(records_path))
+    return shard_index, next_seq
 
 
 def _utc_timestamp() -> str:
