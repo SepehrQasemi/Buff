@@ -48,6 +48,10 @@ def load_decision_records(path: str) -> list[dict]:
     return records
 
 
+def last_load_errors() -> int:
+    return _LAST_LOAD_ERRORS
+
+
 def normalize_selection(sel: dict) -> dict:
     return {
         "strategy_id": sel.get("strategy_id"),
@@ -56,9 +60,10 @@ def normalize_selection(sel: dict) -> dict:
     }
 
 
-def replay_verify(*, records_path: str) -> ReplayResult:
+def replay_verify(*, records_path: str, strict: bool = False) -> ReplayResult:
+    _ = strict
     records = load_decision_records(records_path)
-    errors = _LAST_LOAD_ERRORS
+    errors = last_load_errors()
 
     total = len(records)
     matched = 0

@@ -47,6 +47,26 @@ def ensure_run_dir(run_id: str) -> str:
     return str(path / "decision_records.jsonl")
 
 
+def infer_next_seq_from_jsonl(path: str) -> int:
+    jsonl_path = Path(path)
+    if not jsonl_path.exists():
+        return 0
+    last_seq: int | None = None
+    for line in jsonl_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = parse_json_line(line)
+            seq = record.get("seq")
+            if isinstance(seq, int):
+                last_seq = seq
+        except Exception:
+            continue
+    if last_seq is None:
+        return 0
+    return last_seq + 1
+
+
 def _utc_timestamp() -> str:
     ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     if ts.endswith("+00:00"):
@@ -55,10 +75,11 @@ def _utc_timestamp() -> str:
 
 
 class DecisionRecordWriter:
-    def __init__(self, *, out_path: str, run_id: str) -> None:
+    def __init__(self, *, out_path: str, run_id: str, start_seq: int = 0) -> None:
         self._file = open(out_path, "a", encoding="utf-8")
+        self._ensure_newline(out_path)
         self._run_id = run_id
-        self._seq = 0
+        self._seq = start_seq
 
     def append(
         self,
@@ -88,3 +109,16 @@ class DecisionRecordWriter:
 
     def close(self) -> None:
         self._file.close()
+
+    def _ensure_newline(self, path: str) -> None:
+        file_path = Path(path)
+        if not file_path.exists():
+            return
+        if file_path.stat().st_size == 0:
+            return
+        with file_path.open("rb") as handle:
+            handle.seek(-1, os.SEEK_END)
+            last_byte = handle.read(1)
+        if last_byte != b"\n":
+            self._file.write("\n")
+            self._file.flush()
