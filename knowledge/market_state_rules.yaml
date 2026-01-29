@@ -1,1 +1,1570 @@
-[]
+[
+  {
+    "id": "state.1m.trend.ema30",
+    "name": "TrendState EMA30 (1m)",
+    "category": "market_state",
+    "timeframe": "1m",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.1m.momentum.rsi14",
+    "name": "MomentumState RSI14 (1m)",
+    "category": "market_state",
+    "timeframe": "1m",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.1m.volatility.atr14",
+    "name": "VolatilityState ATR14 (1m)",
+    "category": "market_state",
+    "timeframe": "1m",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.1m.regime.adx14",
+    "name": "RegimeState ADX14 (1m)",
+    "category": "market_state",
+    "timeframe": "1m",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.5m.trend.ema30",
+    "name": "TrendState EMA30 (5m)",
+    "category": "market_state",
+    "timeframe": "5m",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.5m.momentum.rsi14",
+    "name": "MomentumState RSI14 (5m)",
+    "category": "market_state",
+    "timeframe": "5m",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.5m.volatility.atr14",
+    "name": "VolatilityState ATR14 (5m)",
+    "category": "market_state",
+    "timeframe": "5m",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.5m.regime.adx14",
+    "name": "RegimeState ADX14 (5m)",
+    "category": "market_state",
+    "timeframe": "5m",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.15m.trend.ema30",
+    "name": "TrendState EMA30 (15m)",
+    "category": "market_state",
+    "timeframe": "15m",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.15m.momentum.rsi14",
+    "name": "MomentumState RSI14 (15m)",
+    "category": "market_state",
+    "timeframe": "15m",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.15m.volatility.atr14",
+    "name": "VolatilityState ATR14 (15m)",
+    "category": "market_state",
+    "timeframe": "15m",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.15m.regime.adx14",
+    "name": "RegimeState ADX14 (15m)",
+    "category": "market_state",
+    "timeframe": "15m",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.30m.trend.ema30",
+    "name": "TrendState EMA30 (30m)",
+    "category": "market_state",
+    "timeframe": "30m",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.30m.momentum.rsi14",
+    "name": "MomentumState RSI14 (30m)",
+    "category": "market_state",
+    "timeframe": "30m",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.30m.volatility.atr14",
+    "name": "VolatilityState ATR14 (30m)",
+    "category": "market_state",
+    "timeframe": "30m",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.30m.regime.adx14",
+    "name": "RegimeState ADX14 (30m)",
+    "category": "market_state",
+    "timeframe": "30m",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.1h.trend.ema30",
+    "name": "TrendState EMA30 (1h)",
+    "category": "market_state",
+    "timeframe": "1h",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.1h.momentum.rsi14",
+    "name": "MomentumState RSI14 (1h)",
+    "category": "market_state",
+    "timeframe": "1h",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.1h.volatility.atr14",
+    "name": "VolatilityState ATR14 (1h)",
+    "category": "market_state",
+    "timeframe": "1h",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.1h.regime.adx14",
+    "name": "RegimeState ADX14 (1h)",
+    "category": "market_state",
+    "timeframe": "1h",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.2h.trend.ema30",
+    "name": "TrendState EMA30 (2h)",
+    "category": "market_state",
+    "timeframe": "2h",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.2h.momentum.rsi14",
+    "name": "MomentumState RSI14 (2h)",
+    "category": "market_state",
+    "timeframe": "2h",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.2h.volatility.atr14",
+    "name": "VolatilityState ATR14 (2h)",
+    "category": "market_state",
+    "timeframe": "2h",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.2h.regime.adx14",
+    "name": "RegimeState ADX14 (2h)",
+    "category": "market_state",
+    "timeframe": "2h",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.4h.trend.ema30",
+    "name": "TrendState EMA30 (4h)",
+    "category": "market_state",
+    "timeframe": "4h",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.4h.momentum.rsi14",
+    "name": "MomentumState RSI14 (4h)",
+    "category": "market_state",
+    "timeframe": "4h",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.4h.volatility.atr14",
+    "name": "VolatilityState ATR14 (4h)",
+    "category": "market_state",
+    "timeframe": "4h",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.4h.regime.adx14",
+    "name": "RegimeState ADX14 (4h)",
+    "category": "market_state",
+    "timeframe": "4h",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.1d.trend.ema30",
+    "name": "TrendState EMA30 (1d)",
+    "category": "market_state",
+    "timeframe": "1d",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.1d.momentum.rsi14",
+    "name": "MomentumState RSI14 (1d)",
+    "category": "market_state",
+    "timeframe": "1d",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.1d.volatility.atr14",
+    "name": "VolatilityState ATR14 (1d)",
+    "category": "market_state",
+    "timeframe": "1d",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.1d.regime.adx14",
+    "name": "RegimeState ADX14 (1d)",
+    "category": "market_state",
+    "timeframe": "1d",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.1w.trend.ema30",
+    "name": "TrendState EMA30 (1w)",
+    "category": "market_state",
+    "timeframe": "1w",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.1w.momentum.rsi14",
+    "name": "MomentumState RSI14 (1w)",
+    "category": "market_state",
+    "timeframe": "1w",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.1w.volatility.atr14",
+    "name": "VolatilityState ATR14 (1w)",
+    "category": "market_state",
+    "timeframe": "1w",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.1w.regime.adx14",
+    "name": "RegimeState ADX14 (1w)",
+    "category": "market_state",
+    "timeframe": "1w",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.2w.trend.ema30",
+    "name": "TrendState EMA30 (2w)",
+    "category": "market_state",
+    "timeframe": "2w",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.2w.momentum.rsi14",
+    "name": "MomentumState RSI14 (2w)",
+    "category": "market_state",
+    "timeframe": "2w",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.2w.volatility.atr14",
+    "name": "VolatilityState ATR14 (2w)",
+    "category": "market_state",
+    "timeframe": "2w",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.2w.regime.adx14",
+    "name": "RegimeState ADX14 (2w)",
+    "category": "market_state",
+    "timeframe": "2w",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.1M.trend.ema30",
+    "name": "TrendState EMA30 (1M)",
+    "category": "market_state",
+    "timeframe": "1M",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.1M.momentum.rsi14",
+    "name": "MomentumState RSI14 (1M)",
+    "category": "market_state",
+    "timeframe": "1M",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.1M.volatility.atr14",
+    "name": "VolatilityState ATR14 (1M)",
+    "category": "market_state",
+    "timeframe": "1M",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.1M.regime.adx14",
+    "name": "RegimeState ADX14 (1M)",
+    "category": "market_state",
+    "timeframe": "1M",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.3M.trend.ema30",
+    "name": "TrendState EMA30 (3M)",
+    "category": "market_state",
+    "timeframe": "3M",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.3M.momentum.rsi14",
+    "name": "MomentumState RSI14 (3M)",
+    "category": "market_state",
+    "timeframe": "3M",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.3M.volatility.atr14",
+    "name": "VolatilityState ATR14 (3M)",
+    "category": "market_state",
+    "timeframe": "3M",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.3M.regime.adx14",
+    "name": "RegimeState ADX14 (3M)",
+    "category": "market_state",
+    "timeframe": "3M",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.6M.trend.ema30",
+    "name": "TrendState EMA30 (6M)",
+    "category": "market_state",
+    "timeframe": "6M",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.6M.momentum.rsi14",
+    "name": "MomentumState RSI14 (6M)",
+    "category": "market_state",
+    "timeframe": "6M",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.6M.volatility.atr14",
+    "name": "VolatilityState ATR14 (6M)",
+    "category": "market_state",
+    "timeframe": "6M",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.6M.regime.adx14",
+    "name": "RegimeState ADX14 (6M)",
+    "category": "market_state",
+    "timeframe": "6M",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  },
+  {
+    "id": "state.1Y.trend.ema30",
+    "name": "TrendState EMA30 (1Y)",
+    "category": "market_state",
+    "timeframe": "1Y",
+    "description": "Trend state using EMA(30) slope and close position.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "ema_period": 30
+    },
+    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "up",
+        "down",
+        "flat"
+      ],
+      "default": "flat"
+    },
+    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "references": [
+      "indicator.ema"
+    ]
+  },
+  {
+    "id": "state.1Y.momentum.rsi14",
+    "name": "MomentumState RSI14 (1Y)",
+    "category": "market_state",
+    "timeframe": "1Y",
+    "description": "Momentum state using RSI(14) thresholds.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "rsi_period": 14
+    },
+    "formula": "Compute rsi14 on the same timeframe. positive if rsi14>=55; negative if rsi14<=45; else neutral.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "positive",
+        "neutral",
+        "negative"
+      ],
+      "default": "neutral"
+    },
+    "constraints": "Requires rsi14 on the same timeframe.",
+    "references": [
+      "indicator.rsi"
+    ]
+  },
+  {
+    "id": "state.1Y.volatility.atr14",
+    "name": "VolatilityState ATR14 (1Y)",
+    "category": "market_state",
+    "timeframe": "1Y",
+    "description": "Volatility state using ATR(14) percent of close and rolling percentiles.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "atr_period": 14,
+      "window": 200
+    },
+    "formula": "Compute atr14 and atr_pct=atr14/close on the same timeframe. high if atr_pct>=p80(atr_pct, window=200). low if atr_pct<=p20(atr_pct, window=200). else normal. If insufficient data, close==0, or NaN, set undefined.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "low",
+        "normal",
+        "high",
+        "undefined"
+      ],
+      "default": "undefined"
+    },
+    "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
+    "references": [
+      "indicator.atr"
+    ]
+  },
+  {
+    "id": "state.1Y.regime.adx14",
+    "name": "RegimeState ADX14 (1Y)",
+    "category": "market_state",
+    "timeframe": "1Y",
+    "description": "Regime state using ADX(14) thresholds.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "adx_period": 14
+    },
+    "formula": "Compute adx14 on the same timeframe. trending if adx14>=25; ranging if adx14<=20; else transition.",
+    "output": {
+      "type": "enum",
+      "values": [
+        "trending",
+        "ranging",
+        "transition"
+      ],
+      "default": "transition"
+    },
+    "constraints": "Requires adx14 on the same timeframe.",
+    "references": [
+      "indicator.adx"
+    ]
+  }
+]
