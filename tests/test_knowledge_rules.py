@@ -1,4 +1,4 @@
-"""Tests for knowledge rule specs."""
+"""Contract tests for knowledge rule specs."""
 
 import json
 from pathlib import Path
@@ -11,15 +11,32 @@ from knowledge.parser import load_and_validate
 pytestmark = pytest.mark.unit
 
 REQUIRED_FIELDS = [
+    "id",
     "name",
     "category",
+    "description",
     "inputs",
     "parameters",
     "formula",
     "output",
     "warmup",
     "nan_policy",
+    "resample_policy",
+    "lookahead_policy",
     "references",
+]
+
+ALLOWED_INPUTS = {"open", "high", "low", "close", "volume"}
+FORBIDDEN_WORDS = [
+    "buy",
+    "sell",
+    "long",
+    "short",
+    "bullish",
+    "bearish",
+    "predict",
+    "prediction",
+    "forecast",
 ]
 
 
@@ -29,32 +46,37 @@ def _load_rules() -> list[dict]:
     return json.loads(text)
 
 
-def test_rules_include_rsi_ema_atr() -> None:
-    rules = _load_rules()
-    names = {rule.get("name") for rule in rules}
-    assert len(rules) == 10
-    assert names == {
-        "RSI",
-        "EMA",
-        "ATR",
-        "BollingerBands",
-        "MACD",
-        "ADX",
-        "StochasticOscillator",
-        "VWAP",
-        "ROC",
-        "CCI",
-    }
+def _has_forbidden_words(text: str) -> list[str]:
+    lower = text.lower()
+    return [word for word in FORBIDDEN_WORDS if word in lower]
+
+
+def test_rules_load_and_validate_schema() -> None:
+    rules = load_and_validate(Path("knowledge/technical_rules.yaml"), Path("knowledge/schema.yaml"))
+    assert isinstance(rules, list)
+    assert rules, "rules must not be empty"
+    for rule in rules:
+        assert isinstance(rule, dict), "each rule must be a dict"
 
 
 def test_rules_have_required_fields() -> None:
     rules = _load_rules()
+    ids = []
     for rule in rules:
         for key in REQUIRED_FIELDS:
             assert key in rule, f"Missing {key} in {rule.get('name')}"
+        ids.append(rule.get("id"))
         assert isinstance(rule["inputs"], list) and rule["inputs"], "inputs must be non-empty"
+        assert all(isinstance(item, str) for item in rule["inputs"]), "inputs must be strings"
+        assert set(rule["inputs"]).issubset(ALLOWED_INPUTS), "inputs contain invalid fields"
+        assert isinstance(rule["parameters"], dict), "parameters must be a dict"
         assert isinstance(rule["references"], list) and rule["references"], "references must be non-empty"
         assert isinstance(rule["formula"], str) and rule["formula"].strip(), "formula required"
+        description = rule.get("description", "")
+        assert isinstance(description, str) and description.strip(), "description required"
+        forbidden = _has_forbidden_words(description)
+        assert not forbidden, f"forbidden words in description: {forbidden}"
+    assert len(ids) == len(set(ids)), "rule ids must be unique"
 
 
 def test_rules_resample_policy() -> None:
