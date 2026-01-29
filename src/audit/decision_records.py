@@ -17,6 +17,14 @@ def sha256_hex(text: str) -> str:
     return f"sha256:{digest}"
 
 
+def parse_json_line(line: str) -> dict:
+    return json.loads(line)
+
+
+def compute_market_state_hash(market_state: dict) -> str:
+    return sha256_hex(canonical_json(market_state))
+
+
 @dataclass(frozen=True)
 class DecisionRecordV1:
     schema_version: str
@@ -60,7 +68,7 @@ class DecisionRecordWriter:
         market_state: dict,
         selection: dict,
     ) -> DecisionRecordV1:
-        market_state_hash = sha256_hex(canonical_json(market_state))
+        market_state_hash = compute_market_state_hash(market_state)
         record = DecisionRecordV1(
             schema_version="dr.v1",
             run_id=self._run_id,
