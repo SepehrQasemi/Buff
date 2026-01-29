@@ -32,8 +32,19 @@ def _load_rules() -> list[dict]:
 def test_rules_include_rsi_ema_atr() -> None:
     rules = _load_rules()
     names = {rule.get("name") for rule in rules}
-    assert len(rules) == 7
-    assert names == {"RSI", "EMA", "ATR", "SMA", "StdDev", "BollingerBands", "MACD"}
+    assert len(rules) == 10
+    assert names == {
+        "RSI",
+        "EMA",
+        "ATR",
+        "BollingerBands",
+        "MACD",
+        "ADX",
+        "StochasticOscillator",
+        "VWAP",
+        "ROC",
+        "CCI",
+    }
 
 
 def test_rules_have_required_fields() -> None:

@@ -1,9 +1,9 @@
 [
   {
-    "id": "rsi_wilder_14",
+    "id": "rsi_wilder",
     "name": "RSI",
     "category": "momentum",
-    "description": "Relative Strength Index with Wilder smoothing.",
+    "description": "Relative Strength Index (Wilder). Bounded oscillator in [0,100] computed from Wilder-smoothed average gains and losses.",
     "inputs": [
       "close"
     ],
@@ -11,31 +11,33 @@
       "period": {
         "type": "int",
         "default": 14,
-        "constraints": "period > 0"
+        "constraints": "period >= 2"
       }
     },
-    "formula": "RSI uses Wilder smoothing of gains and losses over period=14.",
+    "formula": "Let Δ_t = close_t - close_{t-1}. gain_t=max(Δ_t,0), loss_t=max(-Δ_t,0). Seed at t=period with avg_gain=mean(gain_1..gain_period), avg_loss=mean(loss_1..loss_period). For t>period: avg_gain_t=((avg_gain_{t-1}*(period-1))+gain_t)/period; avg_loss_t=((avg_loss_{t-1}*(period-1))+loss_t)/period. RS_t=avg_gain_t/avg_loss_t. RSI_t = 100 - 100/(1+RS_t). Edge cases: if avg_loss_t=0 then RSI_t=100; if avg_gain_t=0 then RSI_t=0.",
     "output": "rsi",
     "warmup": {
-      "candles": 14
+      "candles": 15,
+      "output_valid_from": 15
     },
     "nan_policy": {
       "before_warmup": "NaN",
-      "division_by_zero": "avg_loss==0 => 100"
+      "division_by_zero": "avg_loss==0 => 100; avg_gain==0 => 0"
     },
     "resample_policy": {
       "rule": "compute after resampling"
     },
     "lookahead_policy": false,
     "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:relative_strength_index_rsi"
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:relative_strength_index_rsi",
+      "https://ta-lib.org/function.html#rsi"
     ]
   },
   {
-    "id": "ema_20",
+    "id": "ema",
     "name": "EMA",
     "category": "trend",
-    "description": "Exponential Moving Average.",
+    "description": "Exponential Moving Average with alpha=2/(period+1) and SMA seed.",
     "inputs": [
       "close"
     ],
@@ -43,10 +45,10 @@
       "period": {
         "type": "int",
         "default": 20,
-        "constraints": "period > 0"
+        "constraints": "period >= 2"
       }
     },
-    "formula": "alpha=2/(period+1); ema_t=alpha*close_t+(1-alpha)*ema_{t-1}; initial ema at first valid = SMA of first period candles",
+    "formula": "alpha=2/(period+1). Seed: ema_{period-1}=SMA(close_0..close_{period-1}). For t>=period: ema_t=alpha*close_t+(1-alpha)*ema_{t-1}.",
     "output": "ema",
     "warmup": {
       "candles": 20,
@@ -60,14 +62,15 @@
     },
     "lookahead_policy": false,
     "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:exponential_moving_average"
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:exponential_moving_average",
+      "https://ta-lib.org/function.html#ema"
     ]
   },
   {
-    "id": "atr_wilder_14",
+    "id": "atr_wilder",
     "name": "ATR",
     "category": "volatility",
-    "description": "Average True Range with Wilder smoothing.",
+    "description": "Average True Range (Wilder). Non-directional volatility in price units.",
     "inputs": [
       "high",
       "low",
@@ -77,44 +80,14 @@
       "period": {
         "type": "int",
         "default": 14,
-        "constraints": "period > 0"
+        "constraints": "period >= 2"
       }
     },
-    "formula": "TR_t=max(high_t-low_t, abs(high_t-close_{t-1}), abs(low_t-close_{t-1})); ATR initial=SMA(TR, period); atr_t=(atr_{t-1}*(period-1)+tr_t)/period",
+    "formula": "TR_t = max(high_t-low_t, abs(high_t-close_{t-1}), abs(low_t-close_{t-1})) for t>=1. Seed: atr_period = mean(TR_1..TR_period). For t>period: atr_t=((atr_{t-1}*(period-1))+TR_t)/period.",
     "output": "atr",
     "warmup": {
-      "candles": 14
-    },
-    "nan_policy": {
-      "before_warmup": "NaN"
-    },
-    "resample_policy": {
-      "rule": "compute after resampling; TR must be computed on resampled data"
-    },
-    "lookahead_policy": false,
-    "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:average_true_range_atr"
-    ]
-  },
-  {
-    "id": "sma_20",
-    "name": "SMA",
-    "category": "trend",
-    "description": "Simple Moving Average.",
-    "inputs": [
-      "close"
-    ],
-    "parameters": {
-      "period": {
-        "type": "int",
-        "default": 20,
-        "constraints": "period > 0"
-      }
-    },
-    "formula": "SMA_t = mean(close_{t-period+1}..close_t) with min_periods=period",
-    "output": "sma",
-    "warmup": {
-      "candles": 20
+      "candles": 15,
+      "output_valid_from": 15
     },
     "nan_policy": {
       "before_warmup": "NaN"
@@ -124,50 +97,15 @@
     },
     "lookahead_policy": false,
     "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:moving_averages"
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:average_true_range_atr",
+      "https://ta-lib.org/function.html#atr"
     ]
   },
   {
-    "id": "std_20",
-    "name": "StdDev",
-    "category": "volatility",
-    "description": "Rolling standard deviation with population ddof=0.",
-    "inputs": [
-      "close"
-    ],
-    "parameters": {
-      "period": {
-        "type": "int",
-        "default": 20,
-        "constraints": "period > 0"
-      },
-      "ddof": {
-        "type": "int",
-        "default": 0,
-        "constraints": "ddof >= 0"
-      }
-    },
-    "formula": "StdDev_t = std(close_{t-period+1}..close_t) with ddof=0 and min_periods=period",
-    "output": "std",
-    "warmup": {
-      "candles": 20
-    },
-    "nan_policy": {
-      "before_warmup": "NaN"
-    },
-    "resample_policy": {
-      "rule": "compute after resampling"
-    },
-    "lookahead_policy": false,
-    "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:standard_deviation_volatility"
-    ]
-  },
-  {
-    "id": "bbands_20_2",
+    "id": "bollinger_bands",
     "name": "BollingerBands",
     "category": "volatility",
-    "description": "Bollinger Bands with SMA midline and ddof=0.",
+    "description": "Bollinger Bands: middle=SMA(period), upper/lower = middle ± k*stddev(period).",
     "inputs": [
       "close"
     ],
@@ -175,23 +113,23 @@
       "period": {
         "type": "int",
         "default": 20,
-        "constraints": "period > 0"
+        "constraints": "period >= 2"
       },
       "k": {
         "type": "float",
         "default": 2.0,
         "constraints": "k > 0"
-      },
-      "ddof": {
-        "type": "int",
-        "default": 0,
-        "constraints": "ddof >= 0"
       }
     },
-    "formula": "mid=SMA(period); sd=StdDev(period, ddof=0); upper=mid+k*sd; lower=mid-k*sd",
-    "output": "bbands",
+    "formula": "middle_t = SMA(close_{t-period+1}..close_t). std_t = population_stddev(close_{t-period+1}..close_t). upper_t = middle_t + k*std_t; lower_t = middle_t - k*std_t. Population stddev: sqrt(mean((x-mean(x))^2)).",
+    "output": {
+      "upper": "bb_upper",
+      "middle": "bb_middle",
+      "lower": "bb_lower"
+    },
     "warmup": {
-      "candles": 20
+      "candles": 20,
+      "output_valid_from": 20
     },
     "nan_policy": {
       "before_warmup": "NaN"
@@ -201,38 +139,44 @@
     },
     "lookahead_policy": false,
     "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:bollinger_bands"
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:bollinger_bands",
+      "https://ta-lib.org/function.html#bbands"
     ]
   },
   {
-    "id": "macd_12_26_9",
+    "id": "macd",
     "name": "MACD",
-    "category": "trend",
-    "description": "Moving Average Convergence Divergence.",
+    "category": "momentum",
+    "description": "MACD: difference of fast and slow EMAs; signal is EMA of MACD; histogram=MACD-signal.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "fast": {
+      "fast_period": {
         "type": "int",
         "default": 12,
-        "constraints": "fast > 0"
+        "constraints": "fast_period >= 2"
       },
-      "slow": {
+      "slow_period": {
         "type": "int",
         "default": 26,
-        "constraints": "slow > fast"
+        "constraints": "slow_period >= 2 and slow_period > fast_period"
       },
-      "signal": {
+      "signal_period": {
         "type": "int",
         "default": 9,
-        "constraints": "signal > 0"
+        "constraints": "signal_period >= 2"
       }
     },
-    "formula": "macd=EMA(fast)-EMA(slow); signal=EMA(macd, signal); hist=macd-signal",
-    "output": "macd",
+    "formula": "ema_fast = EMA(close, fast_period); ema_slow = EMA(close, slow_period). macd_t = ema_fast_t - ema_slow_t. signal_t = EMA(macd, signal_period). hist_t = macd_t - signal_t.",
+    "output": {
+      "macd": "macd",
+      "signal": "macd_signal",
+      "hist": "macd_hist"
+    },
     "warmup": {
-      "candles": 34
+      "candles": 35,
+      "output_valid_from": "slow_period + signal_period"
     },
     "nan_policy": {
       "before_warmup": "NaN"
@@ -242,7 +186,211 @@
     },
     "lookahead_policy": false,
     "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:moving_average_convergence_divergence_macd"
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:moving_average_convergence_divergence_macd",
+      "https://ta-lib.org/function.html#macd"
+    ]
+  },
+  {
+    "id": "adx_wilder",
+    "name": "ADX",
+    "category": "trend",
+    "description": "Average Directional Index (Wilder). Measures trend strength using +DI and -DI derived from directional movement.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 14,
+        "constraints": "period >= 2"
+      }
+    },
+    "formula": "Compute UpMove=high_t-high_{t-1}, DownMove=low_{t-1}-low_t. +DM_t = (UpMove>DownMove and UpMove>0) ? UpMove : 0. -DM_t = (DownMove>UpMove and DownMove>0) ? DownMove : 0. TR_t as in ATR. Wilder smooth TR, +DM, -DM over period: smoothed_x_t = smoothed_x_{t-1} - (smoothed_x_{t-1}/period) + x_t (equivalently ((prev*(period-1))+x_t)/period). +DI_t = 100*(smoothed_+DM_t / smoothed_TR_t); -DI_t = 100*(smoothed_-DM_t / smoothed_TR_t). DX_t = 100*abs(+DI_t - -DI_t)/(+DI_t + -DI_t). ADX is Wilder smoothing of DX (seed as mean of first period DX values).",
+    "output": {
+      "adx": "adx",
+      "plus_di": "plus_di",
+      "minus_di": "minus_di"
+    },
+    "warmup": {
+      "candles": "~2*period + 1",
+      "output_valid_from": "~2*period + 1"
+    },
+    "nan_policy": {
+      "before_warmup": "NaN",
+      "division_by_zero": "+DI + -DI == 0 => DX=0"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:average_directional_index_adx",
+      "https://ta-lib.org/function.html#adx"
+    ]
+  },
+  {
+    "id": "stoch",
+    "name": "StochasticOscillator",
+    "category": "momentum",
+    "description": "Stochastic Oscillator: %K compares close to the recent high-low range; %D is a moving average of %K.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "k_period": {
+        "type": "int",
+        "default": 14,
+        "constraints": "k_period >= 2"
+      },
+      "d_period": {
+        "type": "int",
+        "default": 3,
+        "constraints": "d_period >= 1"
+      },
+      "slowing": {
+        "type": "int",
+        "default": 3,
+        "constraints": "slowing >= 1"
+      }
+    },
+    "formula": "%K_raw_t = 100*(close_t - lowest(low_{t-k_period+1}..low_t)) / (highest(high_{t-k_period+1}..high_t) - lowest(low_{t-k_period+1}..low_t)). If denominator=0 then %K_raw_t = 0. %K_t = SMA(%K_raw, slowing). %D_t = SMA(%K, d_period).",
+    "output": {
+      "k": "stoch_k",
+      "d": "stoch_d"
+    },
+    "warmup": {
+      "candles": "k_period + slowing + d_period",
+      "output_valid_from": "k_period + slowing + d_period"
+    },
+    "nan_policy": {
+      "before_warmup": "NaN",
+      "division_by_zero": "range==0 => %K_raw=0"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:stochastic_oscillator_fast_slow_and_full",
+      "https://ta-lib.org/function.html#stoch"
+    ]
+  },
+  {
+    "id": "vwap",
+    "name": "VWAP",
+    "category": "volume",
+    "description": "Volume-Weighted Average Price for an intraday session: cumulative(sum(typical_price*volume))/cumulative(sum(volume)). Resets per session.",
+    "inputs": [
+      "high",
+      "low",
+      "close",
+      "volume"
+    ],
+    "parameters": {
+      "price_mode": {
+        "type": "str",
+        "default": "typical",
+        "constraints": "price_mode in {'typical','close'}"
+      },
+      "session_reset": {
+        "type": "str",
+        "default": "daily",
+        "constraints": "session_reset in {'daily','none'}"
+      }
+    },
+    "formula": "Define price_t = (high_t+low_t+close_t)/3 if price_mode='typical' else close_t. cum_pv_t = Σ_{i=session_start..t}(price_i*volume_i); cum_v_t = Σ_{i=session_start..t}(volume_i). vwap_t = cum_pv_t / cum_v_t; undefined if cum_v_t=0. Reset cumulators at each session boundary if session_reset='daily'.",
+    "output": "vwap",
+    "warmup": {
+      "candles": 1,
+      "output_valid_from": 1
+    },
+    "nan_policy": {
+      "no_volume": "cum_v==0 => NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:vwap_intraday"
+    ]
+  },
+  {
+    "id": "roc",
+    "name": "ROC",
+    "category": "momentum",
+    "description": "Rate of Change: percent change of close compared to n periods ago.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 12,
+        "constraints": "period >= 1"
+      }
+    },
+    "formula": "roc_t = ((close_t - close_{t-period}) / close_{t-period}) * 100 for t>=period; undefined otherwise.",
+    "output": "roc",
+    "warmup": {
+      "candles": 13,
+      "output_valid_from": 13
+    },
+    "nan_policy": {
+      "before_warmup": "NaN",
+      "division_by_zero": "close_{t-period}==0 => NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:rate_of_change_roc_and_momentum"
+    ]
+  },
+  {
+    "id": "cci",
+    "name": "CCI",
+    "category": "momentum",
+    "description": "Commodity Channel Index: normalized deviation of typical price from its SMA using mean absolute deviation and constant 0.015.",
+    "inputs": [
+      "high",
+      "low",
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 20,
+        "constraints": "period >= 2"
+      },
+      "constant": {
+        "type": "float",
+        "default": 0.015,
+        "constraints": "constant > 0"
+      }
+    },
+    "formula": "tp_t=(high_t+low_t+close_t)/3. sma_tp_t=SMA(tp_{t-period+1}..tp_t). mean_dev_t = mean(|tp_i - sma_tp_t| for i in t-period+1..t). cci_t = (tp_t - sma_tp_t) / (constant * mean_dev_t). If mean_dev_t=0 then cci_t=0.",
+    "output": "cci",
+    "warmup": {
+      "candles": 20,
+      "output_valid_from": 20
+    },
+    "nan_policy": {
+      "before_warmup": "NaN",
+      "division_by_zero": "mean_dev==0 => 0"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:commodity_channel_index_cci",
+      "https://ta-lib.org/function.html#cci"
     ]
   }
 ]
