@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from strategies.base import StrategyEngine, StrategyProfile
+from strategies.engines import BreakoutEngine, MeanRevertEngine, TrendEngine
+
 
 @dataclass(frozen=True)
 class StrategySpec:
@@ -31,3 +34,119 @@ class StrategyRegistry:
         if spec is None:
             return False
         return spec.tests_passed
+
+
+def build_engines() -> dict[str, StrategyEngine]:
+    engines = {
+        "trend": TrendEngine(),
+        "mean_revert": MeanRevertEngine(),
+        "breakout": BreakoutEngine(),
+    }
+    return engines
+
+
+def build_profiles() -> list[StrategyProfile]:
+    return [
+        StrategyProfile(
+            strategy_id="trend_follow_v1_conservative",
+            engine_id="trend",
+            description="Trend follow up, conservative",
+            conservative=True,
+            priority=10,
+            required_market_keys={"trend_state"},
+            required_conditions={"trend_state": "UP"},
+        ),
+        StrategyProfile(
+            strategy_id="trend_follow_v1_short",
+            engine_id="trend",
+            description="Trend follow down",
+            conservative=False,
+            priority=20,
+            required_market_keys={"trend_state"},
+            required_conditions={"trend_state": "DOWN"},
+        ),
+        StrategyProfile(
+            strategy_id="trend_follow_v1_high_vol",
+            engine_id="trend",
+            description="Trend follow high volatility",
+            conservative=False,
+            priority=30,
+            required_market_keys={"trend_state", "volatility_regime"},
+            required_conditions={"volatility_regime": "HIGH"},
+        ),
+        StrategyProfile(
+            strategy_id="trend_follow_v1_low_vol",
+            engine_id="trend",
+            description="Trend follow low volatility",
+            conservative=True,
+            priority=40,
+            required_market_keys={"trend_state", "volatility_regime"},
+            required_conditions={"volatility_regime": "LOW"},
+        ),
+        StrategyProfile(
+            strategy_id="mean_revert_v1_range",
+            engine_id="mean_revert",
+            description="Mean reversion range",
+            conservative=True,
+            priority=50,
+            required_market_keys={"trend_state"},
+            required_conditions={"trend_state": "RANGE"},
+        ),
+        StrategyProfile(
+            strategy_id="mean_revert_v1_low_vol",
+            engine_id="mean_revert",
+            description="Mean reversion low volatility",
+            conservative=True,
+            priority=60,
+            required_market_keys={"trend_state", "volatility_regime"},
+            required_conditions={"trend_state": "RANGE", "volatility_regime": "LOW"},
+        ),
+        StrategyProfile(
+            strategy_id="mean_revert_v1_strict",
+            engine_id="mean_revert",
+            description="Mean reversion strict range",
+            conservative=False,
+            priority=70,
+            required_market_keys={"trend_state", "range_state"},
+            required_conditions={"trend_state": "RANGE", "range_state": "TIGHT"},
+        ),
+        StrategyProfile(
+            strategy_id="breakout_v1_normal",
+            engine_id="breakout",
+            description="Breakout expanding volatility",
+            conservative=False,
+            priority=80,
+            required_market_keys={"volatility_regime"},
+            required_conditions={"volatility_regime": "EXPANDING"},
+        ),
+        StrategyProfile(
+            strategy_id="breakout_v1_high_vol",
+            engine_id="breakout",
+            description="Breakout high volatility",
+            conservative=False,
+            priority=90,
+            required_market_keys={"volatility_regime"},
+            required_conditions={"volatility_regime": "HIGH"},
+        ),
+        StrategyProfile(
+            strategy_id="breakout_v1_spike",
+            engine_id="breakout",
+            description="Breakout momentum spike",
+            conservative=False,
+            priority=100,
+            required_market_keys={"momentum_state"},
+            required_conditions={"momentum_state": "SPIKE"},
+        ),
+    ]
+
+
+def get_profiles() -> list[StrategyProfile]:
+    profiles = build_profiles()
+    return sorted(profiles, key=lambda profile: (profile.priority, profile.strategy_id))
+
+
+def get_profile(strategy_id: str) -> StrategyProfile | None:
+    for profile in build_profiles():
+        if profile.strategy_id == strategy_id:
+            return profile
+    return None
