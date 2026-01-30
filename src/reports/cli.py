@@ -3,7 +3,8 @@
 import argparse
 from pathlib import Path
 
-from .decision_report import sanitize_run_id, write_report
+from .decision_report import write_report
+from utils.run_id import sanitize_run_id
 
 
 def main() -> None:

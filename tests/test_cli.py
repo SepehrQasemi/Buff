@@ -119,4 +119,5 @@ def test_cli_invalid_run_id_fails(tmp_path: Path) -> None:
 
     result = _run_cli(["report", "--run-id", "../bad"], workspaces)
 
-    assert result.returncode != 0
+    assert result.returncode == 2
+    assert "ERROR:" in result.stderr

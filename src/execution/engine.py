@@ -24,6 +24,7 @@ from decision_records.schema import (
     RiskStatus,
     validate_decision_record,
 )
+from utils.run_id import sanitize_run_id
 
 
 def _utc_now() -> str:
@@ -169,15 +170,6 @@ class ExecutionEngine:
 def _utc_now_z() -> str:
     ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     return ts.replace("+00:00", "Z")
-
-
-def sanitize_run_id(run_id: str) -> str:
-    if not run_id:
-        raise ValueError("missing_run_id")
-    for ch in run_id:
-        if not (ch.isalnum() or ch in {"_", "-"}):
-            raise ValueError("invalid_run_id")
-    return run_id
 
 
 def _write_decision_record(path: Path, record: dict) -> None:

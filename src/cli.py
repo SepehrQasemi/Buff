@@ -6,12 +6,13 @@ from pathlib import Path
 
 from chatbot.artifacts import get_run_artifacts, list_runs
 from decision_records.schema import validate_decision_record
-from reports.decision_report import load_decision_records, sanitize_run_id, write_report
+from reports.decision_report import load_decision_records, write_report
+from utils.run_id import sanitize_run_id
 from workspaces.indexer import write_index
 
 
 def _error(message: str) -> None:
-    print(message, file=sys.stderr)
+    print(f"ERROR: {message}", file=sys.stderr)
 
 
 def main() -> None:
@@ -72,6 +73,9 @@ def main() -> None:
             print("valid")
             return
 
+    except ValueError as exc:
+        _error(str(exc))
+        sys.exit(2)
     except Exception as exc:
         _error(str(exc))
         sys.exit(1)
