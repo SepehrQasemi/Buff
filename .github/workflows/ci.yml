@@ -15,18 +15,34 @@ jobs:
           python-version: "3.11"
           cache: "pip"
       - name: Install dependencies
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install -U pip
+
+          install_deps() {
+            if [ -f requirements-dev.txt ]; then
+              python -m pip install -r requirements-dev.txt
+              return 0
+            fi
+            if [ -f requirements.txt ]; then
+              python -m pip install -r requirements.txt
+              python -m pip install ruff pytest
+              return 0
+            fi
+            python -m pip install ruff pytest
+            return 0
+          }
+
           if [ -f pyproject.toml ]; then
-            python -m pip install -e ".[dev]"
-          elif [ -f requirements-dev.txt ]; then
-            python -m pip install -r requirements-dev.txt
-          elif [ -f requirements.txt ]; then
-            python -m pip install -r requirements.txt
-            python -m pip install ruff pytest
-          else
-            python -m pip install ruff pytest
+            if python -m pip install -e ".[dev]"; then
+              exit 0
+            fi
+            install_deps
+            exit 0
           fi
+
+          install_deps
       - name: Lint
         run: ruff check .
       - name: Test

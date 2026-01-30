@@ -1,6 +1,6 @@
 # CODEOWNERS
 # Replace @Buff-Trading-AI with a real team or user if available.
-/src/execution/ @Buff-Trading-AI
-/src/risk/ @Buff-Trading-AI
-/src/control_plane/ @Buff-Trading-AI
-/.github/ @Buff-Trading-AI
+/src/execution/ @Buff-Trading-AI @SepehrQasemi
+/src/risk/ @Buff-Trading-AI @SepehrQasemi
+/src/control_plane/ @Buff-Trading-AI @SepehrQasemi
+/.github/ @Buff-Trading-AI @SepehrQasemi
