@@ -62,6 +62,7 @@ risk_status, execution_status, reason (for BLOCKED/ERROR), inputs_digest, artifa
 
 run_id is sanitized to `[A-Za-z0-9_-]` and records are fail-closed if validation fails.
 Control state loading defaults to DISARMED if the state file is missing or corrupt.
+
 ## End-to-End Flow
 
 Data -> Features -> Risk -> Strategy Selection -> Execution
@@ -75,7 +76,7 @@ Data -> Features -> Risk -> Strategy Selection -> Execution
 ## Done v1.0
 
 - Stable paper trading
-- Full audit trail (workspaces/<run_id>/decision_records.jsonl)
+- Full audit trail (`workspaces/<run_id>/decision_records.jsonl`)
 - Deterministic, reproducible runs
 
 ## Modes
