@@ -59,7 +59,12 @@ def load_run_summary(run_dir: Path) -> dict:
         try:
             outputs = write_report(run_dir.parent, run_id)
         except Exception as exc:
-            return {"status": "invalid", "run_id": run_id, "error": str(exc)}
+            # Keep error strings deterministic; avoid exception messages with line numbers.
+            return {
+                "status": "invalid",
+                "run_id": run_id,
+                "error": f"invalid_decision_records:{type(exc).__name__}",
+            }
         summary = _safe_load_summary(summary_path, run_id)
         summary["summary_path"] = _relative_path(Path(outputs["report_summary"]), workspaces_dir)
         summary["report_path"] = _relative_path(Path(outputs["report_md"]), workspaces_dir)
