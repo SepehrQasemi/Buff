@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from risk.types import RiskState
+
 
 class StrategyEngine(Protocol):
     engine_id: str
@@ -33,3 +35,20 @@ class StrategyProfile:
                 return False, [f"PROFILE_CONDITION_MISMATCH:{key}"]
 
         return True, ["PROFILE_OK"]
+
+
+class StrategySpec(Protocol):
+    strategy_id: str
+    name: str
+    description: str
+    allowed_risk_states: set[RiskState]
+    tags: set[str]
+
+
+@dataclass(frozen=True)
+class StrategySpecImpl:
+    strategy_id: str
+    name: str
+    description: str
+    allowed_risk_states: set[RiskState]
+    tags: set[str]

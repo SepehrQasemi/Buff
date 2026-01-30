@@ -1,34 +1,58 @@
 from __future__ import annotations
 
+from risk.types import RiskState
 from selector.selector import select_strategy
 
 
 def test_red_veto() -> None:
-    result = select_strategy(market_state={"trend_state": "UP"}, risk_state="RED", timeframe="1h")
-    assert result["strategy_id"] == "NONE"
-    assert "RISK_VETO:RED" in result["reason"]
+    signals = {
+        "trend_state": "unknown",
+        "volatility_regime": "unknown",
+        "momentum_state": "unknown",
+        "structure_state": "unknown",
+    }
+    result = select_strategy(signals, RiskState.RED)
+    assert result.strategy_id is None
+    assert result.rule_id == "R0"
 
 
 def test_green_select_trend_conservative_up() -> None:
-    result = select_strategy(market_state={"trend_state": "UP"}, risk_state="GREEN", timeframe="1h")
-    assert result["strategy_id"] == "trend_follow_v1_conservative"
-    assert any(reason.startswith("SELECTED:") for reason in result["reason"])
+    signals = {
+        "trend_state": "up",
+        "volatility_regime": "low",
+        "momentum_state": "neutral",
+        "structure_state": "breakout",
+    }
+    result = select_strategy(signals, RiskState.GREEN)
+    assert result.strategy_id == "TREND_FOLLOW"
+    assert result.rule_id == "R2"
 
 
 def test_yellow_only_conservative() -> None:
-    result = select_strategy(market_state={"trend_state": "DOWN"}, risk_state="YELLOW", timeframe="1h")
-    assert result["strategy_id"] == "NONE"
-    assert "RISK_LIMIT:YELLOW" in result["reason"]
+    signals = {
+        "trend_state": "down",
+        "volatility_regime": "mid",
+        "momentum_state": "bear",
+        "structure_state": "breakout",
+    }
+    result = select_strategy(signals, RiskState.YELLOW)
+    assert result.strategy_id == "DEFENSIVE"
+    assert result.rule_id == "R1"
 
 
 def test_missing_keys_returns_none() -> None:
-    result = select_strategy(market_state={}, risk_state="GREEN", timeframe="1h")
-    assert result["strategy_id"] == "NONE"
-    assert "NO_APPLICABLE_STRATEGY" in result["reason"]
+    result = select_strategy({}, RiskState.GREEN)
+    assert result.strategy_id is None
+    assert result.rule_id == "R9"
 
 
 def test_deterministic_repeatability() -> None:
-    market_state = {"trend_state": "RANGE", "volatility_regime": "LOW"}
-    result_a = select_strategy(market_state=market_state, risk_state="GREEN", timeframe="1h")
-    result_b = select_strategy(market_state=market_state, risk_state="GREEN", timeframe="1h")
+    signals = {
+        "trend_state": "flat",
+        "volatility_regime": "low",
+        "momentum_state": "neutral",
+        "structure_state": "meanrevert",
+    }
+    result_a = select_strategy(signals, RiskState.GREEN)
+    result_b = select_strategy(signals, RiskState.GREEN)
     assert result_a == result_b
