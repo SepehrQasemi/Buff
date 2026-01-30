@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Iterable
 
 from decision_records.schema import SCHEMA_VERSION, validate_decision_record
+from utils.run_id import sanitize_run_id
 
 
 def load_decision_records(path: Path) -> list[dict]:
@@ -25,15 +26,6 @@ def load_decision_records(path: Path) -> list[dict]:
             validate_decision_record(record)
             records.append(record)
     return records
-
-
-def sanitize_run_id(run_id: str) -> str:
-    if not run_id:
-        raise ValueError("missing_run_id")
-    for ch in run_id:
-        if not (ch.isalnum() or ch in {"_", "-"}):
-            raise ValueError("invalid_run_id")
-    return run_id
 
 
 def _sorted_counts(items: Iterable[str]) -> dict[str, int]:

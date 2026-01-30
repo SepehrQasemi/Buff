@@ -134,6 +134,20 @@ python -m src.workspaces.cli show --run-id <id> --workspaces workspaces
 python -m src.workspaces.cli index --workspaces workspaces
 ```
 
+## Buff Audit CLI (M4.6)
+
+Unified read-only entrypoint for audit workflows (no trading or strategy logic).
+
+Commands:
+
+```bash
+python -m src.cli index --workspaces workspaces
+python -m src.cli list-runs --workspaces workspaces
+python -m src.cli show --run-id <id> --workspaces workspaces
+python -m src.cli report --run-id <id> --workspaces workspaces --last-n 50
+python -m src.cli validate-run --run-id <id> --workspaces workspaces
+```
+
 ## Chatbot Read-Only Artifact Navigator (M4.5)
 
 Provides deterministic, read-only lookup of audit artifacts for a given run.
