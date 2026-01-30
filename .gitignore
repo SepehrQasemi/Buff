@@ -3,8 +3,26 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.so
+*.egg-info/
+.eggs/
+
+# Virtualenv
 .venv/
 venv/
+ENV/
+
+# Build artifacts
+build/
+dist/
+*.whl
+
+# Test caches
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ruff_cache/
 
 # Data / logs / secrets
 /data/
@@ -12,6 +30,8 @@ venv/
 *.csv
 *.log
 .env
+.env.*
+!.env.example
 
 # Manual workspaces
 /workspaces/

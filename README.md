@@ -16,6 +16,27 @@ registered, approved strategies through a controlled pipeline.
 - Execution runs independently from UI and requires explicit arming in the control plane.
 - Full audit trail for every decision and order action.
 
+## Quickstart
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install -e ".[dev]"
+```
+
+## Quality Gates
+
+```bash
+ruff check .
+pytest -q
+ruff format --check .
+```
+
+## Governance / Safety
+
+See SECURITY.md for disclosure and secrets policy. The project forbids prediction or
+signal logic and requires deterministic, auditable changes.
 ## End-to-End Flow
 
 Data -> Features -> Risk -> Strategy Selection -> Execution

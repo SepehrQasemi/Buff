@@ -1,0 +1,5 @@
+# Use specific owners where possible; fallback to org.
+/src/execution/ @Buff-Trading-AI/core
+/src/risk/ @Buff-Trading-AI/core
+/src/control_plane/ @Buff-Trading-AI/core
+/.github/ @Buff-Trading-AI/core
