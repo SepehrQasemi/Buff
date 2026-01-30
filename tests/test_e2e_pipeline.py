@@ -7,11 +7,12 @@ import pandas as pd
 
 from control_plane.control import arm
 from control_plane.state import ControlConfig, Environment, SystemState
+from decision_records.schema import validate_decision_record
 from execution.engine import execute_paper_run
 from strategy_registry.registry import StrategySpec, _reset_registry, register_strategy
 
 
-def test_e2e_pipeline_writes_decision_record(tmp_path, monkeypatch) -> None:
+def test_e2e_pipeline_writes_valid_record(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
     _reset_registry()
     register_strategy(
@@ -48,14 +49,11 @@ def test_e2e_pipeline_writes_decision_record(tmp_path, monkeypatch) -> None:
         },
         features={"close": [1.0, 1.0, 1.0]},
         risk_decision={"risk_state": "GREEN"},
-        selected_strategy={"strategy_id": "dummy"},
+        selected_strategy={"name": "dummy", "version": "1.0.0"},
         control_state=control_state,
     )
     assert out["status"] == "ok"
 
     records_path = Path("workspaces") / "e2e" / "decision_records.jsonl"
-    lines = records_path.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 1
-    record = json.loads(lines[0])
-    assert record["schema_version"] == "dr.v1"
-    assert "selection" in record
+    record = json.loads(records_path.read_text(encoding="utf-8").strip())
+    validate_decision_record(record)
