@@ -1,0 +1,253 @@
+﻿{
+  "meta": {
+    "version": 1.0,
+    "purpose": "fundamental_risk_permission_only",
+    "forbidden_terms": [
+      "buy",
+      "sell",
+      "long",
+      "short",
+      "predict",
+      "target",
+      "moon",
+      "dump"
+    ],
+    "defaults": {
+      "timezone": "UTC",
+      "fail_safe_on_missing": "yellow"
+    }
+  },
+  "domains": ["macro", "onchain", "news"],
+  "outputs": {
+    "macro_risk_state": ["low", "medium", "high", "unknown"],
+    "onchain_stress_level": ["normal", "elevated", "extreme", "unknown"],
+    "news_risk_flag": [true, false, "unknown"],
+    "final_risk_state": ["green", "yellow", "red"]
+  },
+  "inputs_catalog": [
+    {
+      "key": "fed_rate_change",
+      "domain": "macro",
+      "dtype": "float",
+      "unit": "percentage_points",
+      "freq": "event",
+      "critical": true
+    },
+    {
+      "key": "cpi_actual",
+      "domain": "macro",
+      "dtype": "float",
+      "unit": "percent_yoy",
+      "freq": "monthly",
+      "critical": false
+    },
+    {
+      "key": "cpi_expected",
+      "domain": "macro",
+      "dtype": "float",
+      "unit": "percent_yoy",
+      "freq": "monthly",
+      "critical": false
+    },
+    {
+      "key": "nvt_ratio",
+      "domain": "onchain",
+      "dtype": "float",
+      "unit": "ratio",
+      "critical": false
+    },
+    {
+      "key": "mvrv_ratio",
+      "domain": "onchain",
+      "dtype": "float",
+      "unit": "ratio",
+      "critical": false
+    },
+    {
+      "key": "exchange_netflow_zscore",
+      "domain": "onchain",
+      "dtype": "float",
+      "unit": "zscore",
+      "critical": false
+    },
+    {
+      "key": "token_unlock_pct_7d",
+      "domain": "onchain",
+      "dtype": "float",
+      "unit": "percent_of_circulating_supply",
+      "critical": true
+    },
+    {
+      "key": "event_importance",
+      "domain": "news",
+      "dtype": "str",
+      "enum": ["low", "medium", "high"],
+      "critical": true
+    },
+    {
+      "key": "minutes_to_event",
+      "domain": "news",
+      "dtype": "int",
+      "unit": "minutes",
+      "critical": true
+    },
+    {
+      "key": "gdelt_event_count_zscore",
+      "domain": "news",
+      "dtype": "float",
+      "unit": "zscore",
+      "critical": false
+    }
+  ],
+  "rules": [
+    {
+      "id": "MACRO_001",
+      "domain": "macro",
+      "name": "aggressive_rate_hike",
+      "inputs": ["fed_rate_change"],
+      "when": {
+        "all": [
+          {"gte": {"fed_rate_change": 0.75}}
+        ]
+      },
+      "then": {"set": {"macro_risk_state": "high"}},
+      "severity": 0.9
+    },
+    {
+      "id": "MACRO_002",
+      "domain": "macro",
+      "name": "inflation_surprise",
+      "inputs": ["cpi_actual", "cpi_expected"],
+      "when": {
+        "all": [
+          {"gte_abs_diff": {"lhs": "cpi_actual", "rhs": "cpi_expected", "value": 0.5}}
+        ]
+      },
+      "then": {"set": {"macro_risk_state": "medium"}},
+      "severity": 0.6
+    },
+    {
+      "id": "ONCHAIN_001",
+      "domain": "onchain",
+      "name": "extreme_mvrv",
+      "inputs": ["mvrv_ratio"],
+      "when": {
+        "all": [
+          {"gte": {"mvrv_ratio": 3.5}}
+        ]
+      },
+      "then": {"set": {"onchain_stress_level": "extreme"}},
+      "severity": 0.8
+    },
+    {
+      "id": "ONCHAIN_002",
+      "domain": "onchain",
+      "name": "exchange_inflow_spike",
+      "inputs": ["exchange_netflow_zscore"],
+      "when": {
+        "all": [
+          {"gte": {"exchange_netflow_zscore": 3.0}}
+        ]
+      },
+      "then": {"set": {"onchain_stress_level": "elevated"}},
+      "severity": 0.7
+    },
+    {
+      "id": "ONCHAIN_003",
+      "domain": "onchain",
+      "name": "large_token_unlock_7d",
+      "inputs": ["token_unlock_pct_7d"],
+      "when": {
+        "all": [
+          {"gte": {"token_unlock_pct_7d": 5.0}}
+        ]
+      },
+      "then": {"set": {"onchain_stress_level": "elevated"}},
+      "severity": 0.6
+    },
+    {
+      "id": "NEWS_001",
+      "domain": "news",
+      "name": "high_impact_event_window",
+      "inputs": ["event_importance", "minutes_to_event"],
+      "when": {
+        "all": [
+          {"eq": {"event_importance": "high"}},
+          {"lte": {"minutes_to_event": 120}}
+        ]
+      },
+      "then": {"set": {"news_risk_flag": true}},
+      "severity": 0.8
+    },
+    {
+      "id": "NEWS_002",
+      "domain": "news",
+      "name": "geopolitical_shock_spike",
+      "inputs": ["gdelt_event_count_zscore"],
+      "when": {
+        "all": [
+          {"gte": {"gdelt_event_count_zscore": 2.5}}
+        ]
+      },
+      "then": {"set": {"news_risk_flag": true}},
+      "severity": 0.7
+    }
+  ],
+  "aggregation": {
+    "rules": [
+      {
+        "id": "AGG_RED",
+        "when": {
+          "any": [
+            {"eq": {"macro_risk_state": "high"}},
+            {"eq": {"onchain_stress_level": "extreme"}},
+            {"eq": {"news_risk_flag": true}}
+          ]
+        },
+        "then": {
+          "set": {
+            "final_risk_state": "red",
+            "trade_permission": false,
+            "size_multiplier": 0.0
+          }
+        }
+      },
+      {
+        "id": "AGG_YELLOW",
+        "when": {
+          "any": [
+            {"eq": {"macro_risk_state": "medium"}},
+            {"eq": {"onchain_stress_level": "elevated"}},
+            {"eq": {"macro_risk_state": "unknown"}},
+            {"eq": {"onchain_stress_level": "unknown"}},
+            {"eq": {"news_risk_flag": "unknown"}}
+          ]
+        },
+        "then": {
+          "set": {
+            "final_risk_state": "yellow",
+            "trade_permission": true,
+            "size_multiplier": 0.35
+          }
+        }
+      },
+      {
+        "id": "AGG_GREEN",
+        "when": {
+          "all": [
+            {"eq": {"macro_risk_state": "low"}},
+            {"eq": {"onchain_stress_level": "normal"}},
+            {"eq": {"news_risk_flag": false}}
+          ]
+        },
+        "then": {
+          "set": {
+            "final_risk_state": "green",
+            "trade_permission": true,
+            "size_multiplier": 1.0
+          }
+        }
+      }
+    ]
+  }
+}

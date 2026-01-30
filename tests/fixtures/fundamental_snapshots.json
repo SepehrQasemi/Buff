@@ -1,0 +1,42 @@
+﻿[
+  {
+    "timestamp": "2026-01-01T00:00:00Z",
+    "macro": {
+      "fed_rate_change": 0.0,
+      "cpi_actual": 3.0,
+      "cpi_expected": 3.1
+    },
+    "onchain": {
+      "nvt_ratio": 1.2,
+      "mvrv_ratio": 2.0,
+      "exchange_netflow_zscore": 1.0,
+      "token_unlock_pct_7d": 1.0
+    },
+    "news": {
+      "event_importance": "low",
+      "minutes_to_event": 999,
+      "gdelt_event_count_zscore": 0.1
+    },
+    "provenance": {
+      "source": "offline_fixture",
+      "as_of": "2026-01-01T00:00:00Z"
+    }
+  },
+  {
+    "timestamp": "2026-01-02T00:00:00Z",
+    "macro": {
+      "fed_rate_change": 1.0
+    },
+    "onchain": {
+      "mvrv_ratio": 4.0
+    },
+    "news": {
+      "event_importance": "high",
+      "minutes_to_event": 60
+    },
+    "provenance": {
+      "source": "offline_fixture",
+      "as_of": "2026-01-02T00:00:00Z"
+    }
+  }
+]
