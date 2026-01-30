@@ -21,7 +21,7 @@ class DecisionStub:
 
 def _load_snapshots() -> list[dict]:
     path = Path("tests/fixtures/fundamental_snapshots.json")
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
 def test_red_blocks_action() -> None:
