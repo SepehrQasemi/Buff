@@ -12,6 +12,7 @@ def main() -> int:
     parser.add_argument("--restart-every-seconds", type=int, default=300)
     parser.add_argument("--rotate-every-records", type=int, default=5000)
     parser.add_argument("--replay-every-records", type=int, default=2000)
+    parser.add_argument("--feed", type=str, default=None)
     args = parser.parse_args()
 
     config = LongRunConfig(
@@ -20,6 +21,7 @@ def main() -> int:
         restart_every_seconds=args.restart_every_seconds,
         rotate_every_records=args.rotate_every_records,
         replay_every_records=args.replay_every_records,
+        feed_path=args.feed,
     )
 
     try:
