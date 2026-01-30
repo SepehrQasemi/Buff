@@ -22,7 +22,7 @@ def test_unknown_run_returns_empty_paths(tmp_path: Path) -> None:
     assert result["decision_records"] == ""
     assert result["report_md"] == ""
     assert result["report_summary"] == ""
-    assert result["index"] == ""
+    assert result["index"] == "workspaces/index.json"
 
 
 def test_known_run_with_full_artifacts(tmp_path: Path) -> None:

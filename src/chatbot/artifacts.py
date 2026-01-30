@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -44,7 +44,7 @@ def get_run_artifacts(run_id: str, workspaces_dir: Path = Path("workspaces")) ->
             "decision_records": "",
             "report_md": "",
             "report_summary": "",
-            "index": "",
+            "index": index_rel,
         }
 
     run_dir = workspaces_dir / run_id
