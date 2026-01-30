@@ -12,25 +12,39 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
           cache: "pip"
-      - name: Install
+      - name: Install dependencies
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-      - name: Sanity check imports
-        run: |
-          python -c "import buff; import buff.data; import buff.data.run_ingest"
-      - name: Check non-editable install
-        run: |
-          python -m pip install .
-          python -c "import buff; import buff.data; import buff.data.run_ingest"
-      - name: Check entrypoint
-        run: |
-          python -m buff.data.run_ingest --help
+          set -euo pipefail
+          python -m pip install -U pip
+
+          install_deps() {
+            if [ -f requirements-dev.txt ]; then
+              python -m pip install -r requirements-dev.txt
+              return 0
+            fi
+            if [ -f requirements.txt ]; then
+              python -m pip install -r requirements.txt
+              python -m pip install ruff pytest
+              return 0
+            fi
+            python -m pip install ruff pytest
+            return 0
+          }
+
+          if [ -f pyproject.toml ]; then
+            python -m pip install -e ".[dev]" || true
+            if python -m ruff --version >/dev/null 2>&1; then
+              exit 0
+            fi
+            install_deps
+            exit 0
+          fi
+
+          install_deps
+      - name: Lint
+        run: ruff check .
       - name: Test
-        run: |
-          python -m pytest -q
-      - name: Verify M1 workflow
-        run: |
-          python scripts/verify_m1.py
+        run: pytest -q

@@ -59,10 +59,10 @@ def _normalize_df(df: pd.DataFrame) -> pd.DataFrame:
 def _fixed_freq(timeframe: str) -> str:
     if timeframe.endswith("m"):
         minutes = int(timeframe[:-1])
-        return f"{minutes}T"
+        return f"{minutes}min"
     if timeframe.endswith("h"):
         hours = int(timeframe[:-1])
-        return f"{hours}H"
+        return f"{hours}h"
     if timeframe.endswith("d"):
         days = int(timeframe[:-1])
         return f"{days}D"
