@@ -105,3 +105,17 @@ See ARCHITECTURE.md, PROJECT_SCOPE.md, and EXECUTION_SAFETY.md for details.
 
 Use at your own risk. This project is intended for real personal use but must be validated
 carefully before any live trading.
+
+## Report Generator (M4.3)
+
+Generates deterministic audit reports from decision logs.
+
+- Reads: `workspaces/<run_id>/decision_records.jsonl`
+- Writes: `workspaces/<run_id>/report.md` and `workspaces/<run_id>/report_summary.json`
+
+Example:
+
+```bash
+python -m src.reports.cli --run-id demo
+python -m src.reports.cli --run-id demo --workspace workspaces --last-n 25
+```
