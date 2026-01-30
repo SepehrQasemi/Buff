@@ -17,19 +17,27 @@ def save_state(state: ControlState, path: Path | None = None) -> None:
     payload = asdict(state)
     payload["state"] = state.state.value
     payload["environment"] = state.environment.value
-    with path.open("w", encoding="utf-8") as handle:
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    with tmp_path.open("w", encoding="utf-8") as handle:
         json.dump(payload, handle, indent=2, sort_keys=True)
         handle.write("\n")
+    tmp_path.replace(path)
 
 
 def load_state(path: Path | None = None) -> ControlState:
     path = path or _default_path()
     if not path.exists():
         return ControlState()
-    data = json.loads(path.read_text(encoding="utf-8"))
-    return ControlState(
-        state=SystemState(data.get("state", SystemState.DISARMED.value)),
-        environment=Environment(data.get("environment", Environment.PAPER.value)),
-        approvals=set(data.get("approvals", [])),
-        reason=data.get("reason"),
-    )
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return ControlState(reason="state_load_error")
+    try:
+        return ControlState(
+            state=SystemState(data.get("state", SystemState.DISARMED.value)),
+            environment=Environment(data.get("environment", Environment.PAPER.value)),
+            approvals=set(data.get("approvals", [])),
+            reason=data.get("reason"),
+        )
+    except Exception:
+        return ControlState(reason="state_load_error")

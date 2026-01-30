@@ -54,7 +54,15 @@ from control_plane.state import ControlConfig, Environment
 state = arm(ControlConfig(environment=Environment.PAPER, required_approvals={"ok"}), approvals=["ok"])
 ```
 
-Paper execution writes `decision_records.jsonl` under `workspaces/<run_id>/`.
+## Decision Record Schema v1.0
+
+Paper execution writes `workspaces/<run_id>/decision_records.jsonl` with required fields:
+schema_version, run_id, timestamp_utc, environment, control_status, strategy{name,version},
+risk_status, execution_status, reason (for BLOCKED/ERROR), inputs_digest, artifact_paths.
+
+run_id is sanitized to `[A-Za-z0-9_-]` and records are fail-closed if validation fails.
+Control state loading defaults to DISARMED if the state file is missing or corrupt.
+
 ## End-to-End Flow
 
 Data -> Features -> Risk -> Strategy Selection -> Execution
@@ -68,7 +76,7 @@ Data -> Features -> Risk -> Strategy Selection -> Execution
 ## Done v1.0
 
 - Stable paper trading
-- Full audit trail (decision_records.jsonl)
+- Full audit trail (`workspaces/<run_id>/decision_records.jsonl`)
 - Deterministic, reproducible runs
 
 ## Modes

@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Callable
+import json
 from pathlib import Path
+from typing import Callable
 
 from risk.types import Permission, RiskState
 
@@ -13,8 +14,16 @@ from .idempotency import IdempotencyStore
 from .locks import RiskLocks, evaluate_locks
 from .types import ExecutionDecision, IntentSide, OrderIntent, PositionState
 
-from audit.decision_records import DecisionRecordWriter
 from control_plane.state import ControlState, SystemState
+from decision_records import inputs_digest
+from decision_records.schema import (
+    SCHEMA_VERSION,
+    ControlStatus,
+    Environment,
+    ExecutionStatus,
+    RiskStatus,
+    validate_decision_record,
+)
 
 
 def _utc_now() -> str:
@@ -157,6 +166,27 @@ class ExecutionEngine:
         self.decision_writer.append(record)
 
 
+def _utc_now_z() -> str:
+    ts = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    return ts.replace("+00:00", "Z")
+
+
+def sanitize_run_id(run_id: str) -> str:
+    if not run_id:
+        raise ValueError("missing_run_id")
+    for ch in run_id:
+        if not (ch.isalnum() or ch in {"_", "-"}):
+            raise ValueError("invalid_run_id")
+    return run_id
+
+
+def _write_decision_record(path: Path, record: dict) -> None:
+    validate_decision_record(record)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True, ensure_ascii=False))
+        handle.write("\n")
+
 def execute_paper_run(
     input_data: dict,
     features: dict,
@@ -164,8 +194,6 @@ def execute_paper_run(
     selected_strategy: dict,
     control_state: ControlState,
 ) -> dict:
-    if control_state.state != SystemState.ARMED:
-        raise RuntimeError("control_not_armed")
     if "run_id" not in input_data:
         raise ValueError("missing_run_id")
     if "timeframe" not in input_data:
@@ -173,63 +201,61 @@ def execute_paper_run(
     if "risk_state" not in risk_decision:
         raise ValueError("missing_risk_state")
 
-    run_id = str(input_data["run_id"])
-    timeframe = str(input_data["timeframe"])
-    market_state = input_data.get("market_state", {})
+    run_id = sanitize_run_id(str(input_data["run_id"]))
     risk_state = str(risk_decision["risk_state"])
+    if risk_state not in {RiskStatus.GREEN.value, RiskStatus.RED.value}:
+        raise ValueError("invalid_risk_state")
 
-    workspace_dir = Path("workspaces") / run_id
-    workspace_dir.mkdir(parents=True, exist_ok=True)
-    records_path = workspace_dir / "decision_records.jsonl"
+    strategy_name = selected_strategy.get("name")
+    strategy_version = selected_strategy.get("version")
+    if not strategy_name or not strategy_version:
+        raise ValueError("invalid_strategy")
 
-    writer = DecisionRecordWriter(out_path=str(records_path), run_id=run_id, start_seq=0)
-    try:
-        if risk_state == "RED":
-            selection = {
-                "strategy_id": "NONE",
-                "engine_id": None,
-                "reason": ["RISK_VETO:RED"],
-                "simulated": True,
-                "status": "blocked",
-            }
-            writer.append(
-                timeframe=timeframe,
-                risk_state=risk_state,
-                market_state=market_state,
-                selection=selection,
-            )
-            return {"status": "blocked", "reason": "risk_veto", "simulated": True}
+    control_status = (
+        ControlStatus.ARMED.value
+        if control_state.state == SystemState.ARMED
+        else ControlStatus.DISARMED.value
+    )
 
-        strategy_id = selected_strategy.get("strategy_id")
-        if not strategy_id:
-            selection = {
-                "strategy_id": "NONE",
-                "engine_id": None,
-                "reason": ["INVALID_STRATEGY"],
-                "simulated": True,
-                "status": "blocked",
-            }
-            writer.append(
-                timeframe=timeframe,
-                risk_state=risk_state,
-                market_state=market_state,
-                selection=selection,
-            )
-            return {"status": "blocked", "reason": "invalid_strategy", "simulated": True}
+    records_rel = Path("workspaces") / run_id / "decision_records.jsonl"
+    base_dir = Path("workspaces").resolve()
+    records_path = (base_dir / run_id / "decision_records.jsonl").resolve()
+    if base_dir not in records_path.parents:
+        raise ValueError("invalid_records_path")
 
-        selection = {
-            "strategy_id": str(strategy_id),
-            "engine_id": selected_strategy.get("engine_id"),
-            "reason": ["PAPER_OK"],
-            "simulated": True,
-            "status": "ok",
-        }
-        writer.append(
-            timeframe=timeframe,
-            risk_state=risk_state,
-            market_state=market_state,
-            selection=selection,
-        )
-        return {"status": "ok", "strategy_id": str(strategy_id), "simulated": True}
-    finally:
-        writer.close()
+    summary_payload = {
+        "run_id": run_id,
+        "strategy": {"name": strategy_name, "version": strategy_version},
+        "risk_status": risk_state,
+        "control_status": control_status,
+    }
+    digest = inputs_digest(summary_payload)
+
+    execution_status = ExecutionStatus.EXECUTED.value
+    reason: str | None = None
+    if control_state.state != SystemState.ARMED:
+        execution_status = ExecutionStatus.BLOCKED.value
+        reason = "control_not_armed"
+    elif risk_state == RiskStatus.RED.value:
+        execution_status = ExecutionStatus.BLOCKED.value
+        reason = "risk_veto"
+
+    record = {
+        "schema_version": SCHEMA_VERSION,
+        "run_id": run_id,
+        "timestamp_utc": _utc_now_z(),
+        "environment": Environment.PAPER.value,
+        "control_status": control_status,
+        "strategy": {"name": strategy_name, "version": strategy_version},
+        "risk_status": risk_state,
+        "execution_status": execution_status,
+        "reason": reason,
+        "inputs_digest": digest,
+        "artifact_paths": {"decision_records": records_rel.as_posix()},
+    }
+
+    _write_decision_record(records_path, record)
+
+    if execution_status != ExecutionStatus.EXECUTED.value:
+        return {"status": "blocked", "reason": reason, "simulated": True}
+    return {"status": "ok", "strategy_id": strategy_name, "simulated": True}
