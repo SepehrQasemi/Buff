@@ -9,21 +9,10 @@ from control_plane.control import arm
 from control_plane.state import ControlConfig, Environment, SystemState
 from decision_records.schema import validate_decision_record
 from execution.engine import execute_paper_run
-from strategy_registry.registry import StrategySpec, _reset_registry, register_strategy
 
 
 def test_e2e_pipeline_writes_valid_record(tmp_path, monkeypatch) -> None:
     monkeypatch.chdir(tmp_path)
-    _reset_registry()
-    register_strategy(
-        StrategySpec(
-            name="dummy",
-            version="1.0.0",
-            description="dummy",
-            required_features=["close"],
-        )
-    )
-
     _ = pd.DataFrame(
         {
             "ts": pd.date_range("2023-01-01", periods=3, freq="1min", tz="UTC"),
