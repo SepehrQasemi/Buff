@@ -3,8 +3,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from control_plane.state import ControlState, SystemState
 from decision_records.schema import validate_decision_record
 from execution.engine import execute_paper_run
