@@ -24,6 +24,7 @@ def test_missing_column_fails() -> None:
 
 def test_bad_dtype_fails() -> None:
     df = pd.read_csv("tests/goldens/expected.csv")
+    df["close"] = df["close"].astype("object")
     df.loc[0, "close"] = "bad"
     with pytest.raises(ValueError):
         validate_ohlcv(df)

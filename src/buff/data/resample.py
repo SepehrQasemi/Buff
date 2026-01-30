@@ -67,11 +67,11 @@ def resample_fixed(df: pd.DataFrame, timeframe: str) -> ResampleResult:
     elif timeframe == "2w":
         rule = "2W-MON"
     elif minutes < 60:
-        rule = f"{minutes}T"
+        rule = f"{minutes}min"
     elif minutes % 60 == 0:
-        rule = f"{minutes // 60}H"
+        rule = f"{minutes // 60}h"
     else:
-        rule = f"{minutes}T"
+        rule = f"{minutes}min"
 
     frame = df.sort_values("ts").set_index("ts")
     resampled = frame.resample(rule, label="left", closed="left")
