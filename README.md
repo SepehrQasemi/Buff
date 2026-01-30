@@ -148,6 +148,11 @@ python -m src.cli report --run-id <id> --workspaces workspaces --last-n 50
 python -m src.cli validate-run --run-id <id> --workspaces workspaces
 ```
 
+## Golden fixtures + E2E CLI verification (M4.7)
+
+End-to-end tests generate small deterministic workspace fixtures on the fly.
+No workspace fixtures are committed to the repo.
+
 ## Chatbot Read-Only Artifact Navigator (M4.5)
 
 Provides deterministic, read-only lookup of audit artifacts for a given run.
