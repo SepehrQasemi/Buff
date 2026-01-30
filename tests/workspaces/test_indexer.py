@@ -76,6 +76,11 @@ def test_write_index_deterministic(tmp_path: Path) -> None:
     index = json.loads(index_json)
     runs = [run["run_id"] for run in index["runs"]]
     assert runs == sorted(runs)
+    assert "None" not in index_md
+    for run in index["runs"]:
+        report_path = run.get("report_path")
+        assert report_path is not None
+        assert report_path == "" or "/" in report_path
 
 
 def test_list_run_dirs_sorted(tmp_path: Path) -> None:

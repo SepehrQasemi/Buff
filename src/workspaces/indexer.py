@@ -42,10 +42,17 @@ def load_run_summary(run_dir: Path) -> dict:
     records_path = run_dir / "decision_records.jsonl"
 
     if summary_path.exists():
+        if not report_path.exists():
+            try:
+                write_report(workspaces_dir, run_id)
+            except Exception:
+                pass
         summary = _safe_load_summary(summary_path, run_id)
         summary.setdefault("summary_path", _relative_path(summary_path, workspaces_dir))
         if report_path.exists():
             summary.setdefault("report_path", _relative_path(report_path, workspaces_dir))
+        else:
+            summary.setdefault("report_path", "")
         return summary
 
     if records_path.exists():
@@ -72,8 +79,8 @@ def build_index(workspaces_dir: Path) -> dict:
         entry = {
             "run_id": summary.get("run_id", run_dir.name),
             "status": summary.get("status", "invalid"),
-            "summary_path": summary.get("summary_path"),
-            "report_path": summary.get("report_path"),
+            "summary_path": summary.get("summary_path") or "",
+            "report_path": summary.get("report_path") or "",
             "total": summary.get("total"),
             "executed": summary.get("executed"),
             "blocked": summary.get("blocked"),
@@ -105,16 +112,21 @@ def render_index_markdown(index: dict) -> str:
     lines.append("| " + " | ".join(headers) + " |")
     lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
 
+    def _display(value: object) -> str:
+        if value is None or value == "":
+            return "-"
+        return str(value)
+
     for run in index.get("runs", []):
         row = [
-            str(run.get("run_id", "")),
-            str(run.get("status", "")),
-            str(run.get("total", "")),
-            str(run.get("executed", "")),
-            str(run.get("blocked", "")),
-            str(run.get("error", "")),
-            str(run.get("summary_path", "")),
-            str(run.get("report_path", "")),
+            _display(run.get("run_id")),
+            _display(run.get("status")),
+            _display(run.get("total")),
+            _display(run.get("executed")),
+            _display(run.get("blocked")),
+            _display(run.get("error")),
+            _display(run.get("summary_path")),
+            _display(run.get("report_path")),
         ]
         lines.append("| " + " | ".join(row) + " |")
 
