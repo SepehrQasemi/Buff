@@ -36,6 +36,8 @@ htmlcov/
 # Manual workspaces
 /workspaces/
 
+# Temp report artifacts
+/.tmp_report/
 # Allow golden fixtures
 !tests/goldens/
 !tests/goldens/*.csv
