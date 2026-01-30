@@ -35,7 +35,8 @@ jobs:
           }
 
           if [ -f pyproject.toml ]; then
-            if python -m pip install -e ".[dev]"; then
+            python -m pip install -e ".[dev]" || true
+            if python -m ruff --version >/dev/null 2>&1; then
               exit 0
             fi
             install_deps
