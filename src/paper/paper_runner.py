@@ -6,7 +6,10 @@ from pathlib import Path
 
 from audit.decision_records import DecisionRecordWriter, ensure_run_dir, infer_next_seq_from_jsonl
 from audit.replay import replay_verify
+from risk.types import RiskState
+from selector.records import selection_to_record
 from selector.selector import select_strategy
+from selector.types import MarketSignals
 
 
 @dataclass(frozen=True)
@@ -18,14 +21,34 @@ class PaperRunConfig:
     out_dir: str = "runs"
 
 
-def generate_mock_market_state(i: int) -> dict:
+def generate_mock_market_state(i: int) -> MarketSignals:
     if i % 4 == 0:
-        return {"trend_state": "UP"}
+        return {
+            "trend_state": "up",
+            "volatility_regime": "low",
+            "momentum_state": "bull",
+            "structure_state": "breakout",
+        }
     if i % 4 == 1:
-        return {"trend_state": "DOWN"}
+        return {
+            "trend_state": "down",
+            "volatility_regime": "mid",
+            "momentum_state": "bear",
+            "structure_state": "breakout",
+        }
     if i % 4 == 2:
-        return {"trend_state": "RANGE", "volatility_regime": "LOW"}
-    return {"volatility_regime": "HIGH", "momentum_state": "SPIKE"}
+        return {
+            "trend_state": "flat",
+            "volatility_regime": "low",
+            "momentum_state": "neutral",
+            "structure_state": "meanrevert",
+        }
+    return {
+        "trend_state": "unknown",
+        "volatility_regime": "high",
+        "momentum_state": "unknown",
+        "structure_state": "none",
+    }
 
 
 def _writer_for_run(run_id: str, out_dir: str) -> tuple[DecisionRecordWriter, str]:
@@ -48,17 +71,18 @@ def run_paper_smoke(config: PaperRunConfig) -> dict:
     for step in range(config.steps):
         market_state = generate_mock_market_state(step)
         if step % 10 == 0:
-            risk_state = "RED"
+            risk_state = RiskState.RED
         elif step % 5 == 0:
-            risk_state = "YELLOW"
+            risk_state = RiskState.YELLOW
         else:
-            risk_state = "GREEN"
+            risk_state = RiskState.GREEN
 
-        select_strategy(
-            market_state=market_state,
-            risk_state=risk_state,
+        selection = select_strategy(market_state, risk_state)
+        writer.append(
             timeframe=config.timeframe,
-            record_writer=writer,
+            risk_state=risk_state.value,
+            market_state=market_state,
+            selection=selection_to_record(selection),
         )
 
         if config.restart_every > 0 and (step + 1) % config.restart_every == 0:

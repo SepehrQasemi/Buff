@@ -1,106 +1,92 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from strategies.registry import build_engines, get_profiles
-
-if TYPE_CHECKING:  # pragma: no cover
-    from audit.decision_records import DecisionRecordWriter
+from risk.types import RiskState
+from selector.types import MarketSignals, SelectionResult
+from strategies.menu import STRATEGY_MENU
 
 
-def select_strategy(
+def _ensure_strategy_id(strategy_id: str) -> None:
+    if strategy_id not in STRATEGY_MENU:
+        raise ValueError(f"Unknown strategy_id: {strategy_id}")
+
+
+def _result(
     *,
-    market_state: dict,
-    risk_state: str,
-    timeframe: str,
-    record_writer: "DecisionRecordWriter | None" = None,
-) -> dict:
-    risk_state_norm = risk_state.upper()
-    reasons: list[str] = []
+    strategy_id: str | None,
+    reason: str,
+    rule_id: str,
+    inputs: dict[str, object],
+) -> SelectionResult:
+    if strategy_id is not None:
+        _ensure_strategy_id(strategy_id)
+    return SelectionResult(
+        strategy_id=strategy_id,
+        reason=reason,
+        rule_id=rule_id,
+        inputs=inputs,
+    )
 
-    if risk_state_norm == "RED":
-        out = {
-            "strategy_id": "NONE",
-            "engine_id": None,
-            "risk_state": risk_state_norm,
-            "timeframe": timeframe,
-            "reason": ["RISK_VETO:RED"],
-        }
-        if record_writer is not None:
-            record_writer.append(
-                timeframe=timeframe,
-                risk_state=risk_state_norm,
-                market_state=market_state,
-                selection={
-                    "strategy_id": out["strategy_id"],
-                    "engine_id": out["engine_id"],
-                    "reason": out["reason"],
-                },
-            )
-        return out
 
-    engines = build_engines()
-    profiles = get_profiles()
+def select_strategy(signals: MarketSignals, risk_state: RiskState) -> SelectionResult:
+    trend_state = signals.get("trend_state", "unknown")
+    volatility_regime = signals.get("volatility_regime", "unknown")
+    structure_state = signals.get("structure_state", "unknown")
+    risk_state_value = risk_state.value
 
-    if risk_state_norm == "YELLOW":
-        profiles = [profile for profile in profiles if profile.conservative]
-        reasons.append("RISK_LIMIT:YELLOW")
-
-    selected = None
-    for profile in profiles:
-        ok_profile, profile_reasons = profile.is_profile_applicable(market_state=market_state)
-        if not ok_profile:
-            continue
-
-        engine = engines.get(profile.engine_id)
-        if engine is None:
-            continue
-
-        ok_engine, engine_reasons = engine.is_applicable(
-            market_state=market_state, timeframe=timeframe
+    # Risk precedence: RED/YELLOW override any market-derived rules.
+    if risk_state == RiskState.RED:
+        return _result(
+            strategy_id=None,
+            reason="risk=RED",
+            rule_id="R0",
+            inputs={"risk_state": risk_state_value},
         )
-        if not ok_engine:
-            continue
 
-        selected = {
-            "strategy_id": profile.strategy_id,
-            "engine_id": profile.engine_id,
-            "risk_state": risk_state_norm,
-            "timeframe": timeframe,
-            "reason": reasons + profile_reasons + engine_reasons + [f"SELECTED:{profile.strategy_id}"],
-        }
-        break
+    if risk_state == RiskState.YELLOW:
+        return _result(
+            strategy_id="DEFENSIVE",
+            reason="risk=YELLOW",
+            rule_id="R1",
+            inputs={"risk_state": risk_state_value},
+        )
 
-    if selected is None:
-        out = {
-            "strategy_id": "NONE",
-            "engine_id": None,
-            "risk_state": risk_state_norm,
-            "timeframe": timeframe,
-            "reason": reasons + ["NO_APPLICABLE_STRATEGY"],
-        }
-        if record_writer is not None:
-            record_writer.append(
-                timeframe=timeframe,
-                risk_state=risk_state_norm,
-                market_state=market_state,
-                selection={
-                    "strategy_id": out["strategy_id"],
-                    "engine_id": out["engine_id"],
-                    "reason": out["reason"],
-                },
-            )
-        return out
-
-    if record_writer is not None:
-        record_writer.append(
-            timeframe=timeframe,
-            risk_state=risk_state_norm,
-            market_state=market_state,
-            selection={
-                "strategy_id": selected["strategy_id"],
-                "engine_id": selected.get("engine_id"),
-                "reason": selected["reason"],
+    if (
+        trend_state in {"up", "down"}
+        and volatility_regime in {"low", "mid"}
+        and structure_state == "breakout"
+    ):
+        return _result(
+            strategy_id="TREND_FOLLOW",
+            reason="trend+breakout & vol not high",
+            rule_id="R2",
+            inputs={
+                "risk_state": risk_state_value,
+                "trend_state": trend_state,
+                "volatility_regime": volatility_regime,
+                "structure_state": structure_state,
             },
         )
-    return selected
+
+    if (
+        trend_state == "flat"
+        and volatility_regime in {"low", "mid"}
+        and structure_state == "meanrevert"
+    ):
+        return _result(
+            strategy_id="MEAN_REVERT",
+            reason="range+meanrevert & vol not high",
+            rule_id="R3",
+            inputs={
+                "risk_state": risk_state_value,
+                "trend_state": trend_state,
+                "volatility_regime": volatility_regime,
+                "structure_state": structure_state,
+            },
+        )
+
+    return _result(
+        strategy_id=None,
+        reason="no_rule_matched",
+        rule_id="R9",
+        inputs={"risk_state": risk_state_value},
+    )

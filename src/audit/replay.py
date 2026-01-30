@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from audit.decision_records import compute_market_state_hash, parse_json_line
+from risk.types import RiskState
+from selector.records import selection_to_record
 from selector.selector import select_strategy
 
 _LAST_LOAD_ERRORS = 0
@@ -55,8 +57,9 @@ def last_load_errors() -> int:
 def normalize_selection(sel: dict) -> dict:
     return {
         "strategy_id": sel.get("strategy_id"),
-        "engine_id": sel.get("engine_id"),
-        "reason": sel.get("reason", []),
+        "rule_id": sel.get("rule_id"),
+        "reason": sel.get("reason"),
+        "inputs": sel.get("inputs", {}),
     }
 
 
@@ -78,14 +81,18 @@ def replay_verify(*, records_path: str, strict: bool = False) -> ReplayResult:
             hash_mismatch += 1
             continue
 
-        out = select_strategy(
-            market_state=record.get("market_state", {}),
-            risk_state=record.get("risk_state", ""),
-            timeframe=record.get("timeframe", ""),
-            record_writer=None,
-        )
+        risk_state_raw = record.get("risk_state", "")
+        if isinstance(risk_state_raw, str):
+            try:
+                risk_state = RiskState(risk_state_raw)
+            except ValueError:
+                risk_state = RiskState.RED
+        else:
+            risk_state = RiskState.RED
+
+        out = select_strategy(record.get("market_state", {}), risk_state)
         expected = normalize_selection(record.get("selection", {}))
-        got = normalize_selection(out)
+        got = normalize_selection(selection_to_record(out))
         if expected == got:
             matched += 1
         else:
