@@ -133,3 +133,15 @@ python -m src.workspaces.cli list --workspaces workspaces
 python -m src.workspaces.cli show --run-id <id> --workspaces workspaces
 python -m src.workspaces.cli index --workspaces workspaces
 ```
+
+## Chatbot Read-Only Artifact Navigator (M4.5)
+
+Provides deterministic, read-only lookup of audit artifacts for a given run.
+No interpretation or decision-making is performed.
+
+Commands:
+
+```bash
+python -m src.chatbot.cli list-runs
+python -m src.chatbot.cli show-run --run-id <id>
+```
