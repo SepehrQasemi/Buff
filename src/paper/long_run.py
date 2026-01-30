@@ -14,6 +14,8 @@ from audit.decision_records import (
 from audit.replay import replay_verify
 from paper.market_state_feed import cycling_feed, load_market_state_feed
 from paper.paper_runner import generate_mock_market_state
+from risk.types import RiskState
+from selector.records import selection_to_record
 from selector.selector import select_strategy
 
 
@@ -29,12 +31,12 @@ class LongRunConfig:
     feed_path: str | None = None
 
 
-def _risk_state(step: int) -> str:
+def _risk_state(step: int) -> RiskState:
     if step % 10 == 0:
-        return "RED"
+        return RiskState.RED
     if step % 5 == 0:
-        return "YELLOW"
-    return "GREEN"
+        return RiskState.YELLOW
+    return RiskState.GREEN
 
 
 def _resolve_run_dir(run_id: str, out_dir: str) -> Path:
@@ -96,11 +98,12 @@ def run_long_paper(config: LongRunConfig) -> dict:
         else:
             market_state = generate_mock_market_state(step)
         risk_state = _risk_state(step)
-        select_strategy(
-            market_state=market_state,
-            risk_state=risk_state,
+        selection = select_strategy(market_state, risk_state)
+        writer.append(
             timeframe=config.timeframe,
-            record_writer=writer,
+            risk_state=risk_state.value,
+            market_state=market_state,
+            selection=selection_to_record(selection),
         )
         step += 1
         records_written += 1
