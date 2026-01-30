@@ -34,7 +34,7 @@ def _utc_now() -> str:
 
 
 def _fundamental_enabled() -> bool:
-    return os.getenv("BUFF_FUNDAMENTAL_RISK", "").strip() in {"1", "true", "TRUE", "yes", "YES"}
+    return os.getenv("BUFF_FUNDAMENTAL_RISK", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _fundamental_rules_path() -> str:
