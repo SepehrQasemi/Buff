@@ -35,6 +35,8 @@ ruff format --check .
 
 ## Governance / Safety
 
+See GITHUB_SETTINGS_CHECKLIST.md for required GitHub UI settings.
+
 See SECURITY.md for disclosure and secrets policy. The project forbids prediction or
 signal logic and requires deterministic, auditable changes.
 ## End-to-End Flow

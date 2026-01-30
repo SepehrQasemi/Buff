@@ -1,5 +1,6 @@
-# Use specific owners where possible; fallback to org.
-/src/execution/ @Buff-Trading-AI/core
-/src/risk/ @Buff-Trading-AI/core
-/src/control_plane/ @Buff-Trading-AI/core
-/.github/ @Buff-Trading-AI/core
+# CODEOWNERS
+# Replace @Buff-Trading-AI with a real team or user if available.
+/src/execution/ @Buff-Trading-AI
+/src/risk/ @Buff-Trading-AI
+/src/control_plane/ @Buff-Trading-AI
+/.github/ @Buff-Trading-AI

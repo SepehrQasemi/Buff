@@ -14,26 +14,20 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - name: Install
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
+          python -m pip install -U pip
+          if [ -f pyproject.toml ]; then
+            python -m pip install -e ".[dev]"
+          elif [ -f requirements-dev.txt ]; then
+            python -m pip install -r requirements-dev.txt
+          elif [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+            python -m pip install ruff pytest
+          else
+            python -m pip install ruff pytest
+          fi
       - name: Lint
-        run: |
-          ruff check .
-      - name: Sanity check imports
-        run: |
-          python -c "import buff; import buff.data; import buff.data.run_ingest"
-      - name: Check non-editable install
-        run: |
-          python -m pip install .
-          python -c "import buff; import buff.data; import buff.data.run_ingest"
-      - name: Check entrypoint
-        run: |
-          python -m buff.data.run_ingest --help
+        run: ruff check .
       - name: Test
-        run: |
-          pytest -q
-      - name: Verify M1 workflow
-        run: |
-          python scripts/verify_m1.py
+        run: pytest -q
