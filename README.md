@@ -119,3 +119,17 @@ Example:
 python -m src.reports.cli --run-id demo
 python -m src.reports.cli --run-id demo --workspace workspaces --last-n 25
 ```
+
+## Workspace Index (M4.4)
+
+Builds a deterministic index of audit runs in `workspaces/`.
+
+- Outputs: `workspaces/index.json` and `workspaces/index.md`
+
+Commands:
+
+```bash
+python -m src.workspaces.cli list --workspaces workspaces
+python -m src.workspaces.cli show --run-id <id> --workspaces workspaces
+python -m src.workspaces.cli index --workspaces workspaces
+```
