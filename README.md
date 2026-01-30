@@ -39,6 +39,22 @@ See GITHUB_SETTINGS_CHECKLIST.md for required GitHub UI settings.
 
 See SECURITY.md for disclosure and secrets policy. The project forbids prediction or
 signal logic and requires deterministic, auditable changes.
+
+## Control Plane (arming / kill switch)
+
+Execution is gated by an explicit control plane. You must arm the system with
+approved inputs before any paper execution can run. A kill switch always disarms.
+
+Example (code):
+
+```python
+from control_plane.control import arm
+from control_plane.state import ControlConfig, Environment
+
+state = arm(ControlConfig(environment=Environment.PAPER, required_approvals={"ok"}), approvals=["ok"])
+```
+
+Paper execution writes `decision_records.jsonl` under `workspaces/<run_id>/`.
 ## End-to-End Flow
 
 Data -> Features -> Risk -> Strategy Selection -> Execution

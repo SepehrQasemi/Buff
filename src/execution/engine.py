@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Callable
+from pathlib import Path
 
 from risk.types import Permission, RiskState
 
@@ -11,6 +12,9 @@ from .brokers import Broker, OrderResult
 from .idempotency import IdempotencyStore
 from .locks import RiskLocks, evaluate_locks
 from .types import ExecutionDecision, IntentSide, OrderIntent, PositionState
+
+from audit.decision_records import DecisionRecordWriter
+from control_plane.state import ControlState, SystemState
 
 
 def _utc_now() -> str:
@@ -151,3 +155,81 @@ class ExecutionEngine:
             },
         )
         self.decision_writer.append(record)
+
+
+def execute_paper_run(
+    input_data: dict,
+    features: dict,
+    risk_decision: dict,
+    selected_strategy: dict,
+    control_state: ControlState,
+) -> dict:
+    if control_state.state != SystemState.ARMED:
+        raise RuntimeError("control_not_armed")
+    if "run_id" not in input_data:
+        raise ValueError("missing_run_id")
+    if "timeframe" not in input_data:
+        raise ValueError("missing_timeframe")
+    if "risk_state" not in risk_decision:
+        raise ValueError("missing_risk_state")
+
+    run_id = str(input_data["run_id"])
+    timeframe = str(input_data["timeframe"])
+    market_state = input_data.get("market_state", {})
+    risk_state = str(risk_decision["risk_state"])
+
+    workspace_dir = Path("workspaces") / run_id
+    workspace_dir.mkdir(parents=True, exist_ok=True)
+    records_path = workspace_dir / "decision_records.jsonl"
+
+    writer = DecisionRecordWriter(out_path=str(records_path), run_id=run_id, start_seq=0)
+    try:
+        if risk_state == "RED":
+            selection = {
+                "strategy_id": "NONE",
+                "engine_id": None,
+                "reason": ["RISK_VETO:RED"],
+                "simulated": True,
+                "status": "blocked",
+            }
+            writer.append(
+                timeframe=timeframe,
+                risk_state=risk_state,
+                market_state=market_state,
+                selection=selection,
+            )
+            return {"status": "blocked", "reason": "risk_veto", "simulated": True}
+
+        strategy_id = selected_strategy.get("strategy_id")
+        if not strategy_id:
+            selection = {
+                "strategy_id": "NONE",
+                "engine_id": None,
+                "reason": ["INVALID_STRATEGY"],
+                "simulated": True,
+                "status": "blocked",
+            }
+            writer.append(
+                timeframe=timeframe,
+                risk_state=risk_state,
+                market_state=market_state,
+                selection=selection,
+            )
+            return {"status": "blocked", "reason": "invalid_strategy", "simulated": True}
+
+        selection = {
+            "strategy_id": str(strategy_id),
+            "engine_id": selected_strategy.get("engine_id"),
+            "reason": ["PAPER_OK"],
+            "simulated": True,
+            "status": "ok",
+        }
+        writer.append(
+            timeframe=timeframe,
+            risk_state=risk_state,
+            market_state=market_state,
+            selection=selection,
+        )
+        return {"status": "ok", "strategy_id": str(strategy_id), "simulated": True}
+    finally:
+        writer.close()
