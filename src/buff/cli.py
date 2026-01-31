@@ -14,6 +14,7 @@ import pandas as pd
 from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
+from audit.bundle import BundleError, build_bundle
 from execution.idempotency_inspect import (
     IdempotencyInspectError,
     fetch_all_records,
@@ -91,9 +92,22 @@ def main() -> None:
     idempo_export.add_argument("--db-path", dest="db_path", type=str, default=None)
     idempo_export.add_argument("--out", dest="out_path", type=str, default=None)
 
+    audit_parser = subparsers.add_parser("audit", help="Audit tools")
+    audit_sub = audit_parser.add_subparsers(dest="audit_cmd", required=True)
+    audit_bundle = audit_sub.add_parser("bundle", help="Export audit bundle")
+    audit_bundle.add_argument("--out", required=True)
+    audit_bundle.add_argument("--format", choices=["zip", "dir"], default="zip")
+    audit_bundle.add_argument("--as-of-utc", dest="as_of_utc", type=str, default=None)
+    audit_bundle.add_argument("--db-path", dest="db_path", type=str, default=None)
+    audit_bundle.add_argument("--decision-records", dest="decision_records", type=str, default=None)
+    audit_bundle.add_argument("--include-logs", dest="include_logs", nargs="*", default=[])
+
     args = parser.parse_args()
     if args.command == "idempotency":
         _run_idempotency(args)
+        return
+    if args.command == "audit":
+        _run_audit(args)
         return
     if args.command != "features":
         raise SystemExit(2)
@@ -259,6 +273,31 @@ def _cmd_idempotency_export(path: Path, out_path: str | None) -> None:
         out.write_text(payload, encoding="utf-8")
         return
     print(payload, end="")
+
+
+def _run_audit(args: argparse.Namespace) -> None:
+    if args.audit_cmd != "bundle":
+        raise SystemExit(2)
+    db_path = _resolve_db_path(args.db_path)
+    if args.decision_records:
+        decision_records = Path(args.decision_records)
+    else:
+        decision_records = Path("workspaces")
+    out_path = Path(args.out)
+    include_logs = [Path(path) for path in args.include_logs]
+    try:
+        build_bundle(
+            out_path=out_path,
+            fmt=args.format,
+            as_of_utc=args.as_of_utc,
+            db_path=db_path,
+            decision_records_path=decision_records,
+            include_logs=include_logs,
+        )
+    except BundleError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+    print(f"bundle_written: {out_path}")
 
 
 if __name__ == "__main__":
