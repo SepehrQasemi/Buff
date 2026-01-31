@@ -6,7 +6,7 @@ from pathlib import Path
 from execution.audit import DecisionWriter
 from execution.brokers import PaperBroker
 from execution.engine import ExecutionEngine
-from execution.idempotency import IdempotencyStore
+from execution.idempotency_sqlite import SQLiteIdempotencyStore, default_idempotency_db_path
 from execution.locks import RiskLocks
 from execution.types import ExecutionDecision, OrderIntent
 from risk.contracts import RiskInputs
@@ -92,7 +92,7 @@ class ControlPlane:
         engine = ExecutionEngine(
             broker=PaperBroker(),
             decision_writer=DecisionWriter(decision_path),
-            idempotency=IdempotencyStore(),
+            idempotency=SQLiteIdempotencyStore(default_idempotency_db_path()),
         )
         return engine.handle_intent(
             intent=intent,

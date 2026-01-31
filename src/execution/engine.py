@@ -114,7 +114,7 @@ class ExecutionEngine:
                     risk_state=risk_state,
                     permission=Permission.BLOCK,
                     action="blocked",
-                    reason="idempotency_error",
+                    reason="idempotency_persist_error",
                     status="blocked",
                 )
             decision = ExecutionDecision(
@@ -172,7 +172,7 @@ class ExecutionEngine:
                         risk_state=risk_state,
                         permission=Permission.BLOCK,
                         action="blocked",
-                        reason="idempotency_error",
+                        reason="idempotency_persist_error",
                         status="blocked",
                     )
                 self._write_record(
@@ -215,7 +215,7 @@ class ExecutionEngine:
                 risk_state=risk_state,
                 permission=Permission.BLOCK,
                 action="blocked",
-                reason="idempotency_error",
+                reason="idempotency_persist_error",
                 status="blocked",
             )
 
@@ -260,7 +260,7 @@ class ExecutionEngine:
                     risk_state=risk_state,
                     permission=Permission.BLOCK,
                     action="blocked",
-                    reason="idempotency_error",
+                    reason="idempotency_persist_error",
                     status="blocked",
                 )
             self._write_record(
@@ -300,7 +300,7 @@ class ExecutionEngine:
                     risk_state=risk_state,
                     permission=Permission.BLOCK,
                     action="blocked",
-                    reason="idempotency_error",
+                    reason="idempotency_persist_error",
                     status="blocked",
                 )
             self._write_record(
@@ -347,7 +347,7 @@ class ExecutionEngine:
                 risk_state=risk_state,
                 permission=Permission.BLOCK,
                 action="blocked",
-                reason="idempotency_error",
+                reason="idempotency_persist_error",
                 status="blocked",
             )
         decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)

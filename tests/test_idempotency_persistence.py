@@ -7,7 +7,8 @@ import pytest
 from execution.audit import DecisionWriter
 from execution.brokers import PaperBroker
 from execution.engine import ExecutionEngine
-from execution.idempotency import IdempotencyStore
+from execution.idempotency import build_idempotency_record, make_idempotency_key
+from execution.idempotency_sqlite import SQLiteIdempotencyStore
 from execution.locks import RiskLocks
 from execution.types import IntentSide, OrderIntent
 from risk.contracts import RiskInputs
@@ -62,20 +63,22 @@ def _intent(event_id: str, qty: float = 1.0) -> OrderIntent:
     )
 
 
-def _engine(tmp_path: Path) -> tuple[ExecutionEngine, PaperBroker]:
-    broker = PaperBroker()
-    engine = ExecutionEngine(
+def _engine(tmp_path: Path, broker: PaperBroker, db_path: Path) -> ExecutionEngine:
+    return ExecutionEngine(
         broker=broker,
         decision_writer=DecisionWriter(tmp_path / "decision.jsonl"),
-        idempotency=IdempotencyStore(),
+        idempotency=SQLiteIdempotencyStore(db_path),
     )
-    return engine, broker
 
 
-def test_dedup_same_intent(tmp_path: Path) -> None:
-    engine, broker = _engine(tmp_path)
+def test_persistent_dedupe_across_restarts(tmp_path: Path) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine_a = _engine(tmp_path, broker, db_path)
+    engine_b = _engine(tmp_path, broker, db_path)
     intent = _intent("evt-1")
-    engine.handle_intent(
+
+    engine_a.handle_intent(
         intent=intent,
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
@@ -88,7 +91,7 @@ def test_dedup_same_intent(tmp_path: Path) -> None:
         feature_snapshot_hash="features",
         strategy_id="strat-1",
     )
-    engine.handle_intent(
+    engine_b.handle_intent(
         intent=intent,
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
@@ -101,49 +104,48 @@ def test_dedup_same_intent(tmp_path: Path) -> None:
         feature_snapshot_hash="features",
         strategy_id="strat-1",
     )
+
     assert len(broker.submitted) == 1
 
 
-def test_dedup_diff_intent_qty(tmp_path: Path) -> None:
-    engine, broker = _engine(tmp_path)
-    engine.handle_intent(
-        intent=_intent("evt-1", qty=1.0),
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
+def test_unique_constraint_preserves_first_record(tmp_path: Path) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    store = SQLiteIdempotencyStore(db_path)
+    key = "idem-key"
+    record_one = build_idempotency_record(
+        status="PROCESSED",
+        order_id="order-1",
+        audit_ref="audit-1",
+        decision={"action": "placed"},
+        timestamp_utc="2026-01-01T00:00:00Z",
     )
-    engine.handle_intent(
-        intent=_intent("evt-2", qty=2.0),
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
+    record_two = build_idempotency_record(
+        status="PROCESSED",
+        order_id="order-2",
+        audit_ref="audit-2",
+        decision={"action": "placed"},
+        timestamp_utc="2026-01-01T00:00:00Z",
     )
-    assert len(broker.submitted) == 2
+
+    store.put(key, record_one)
+    store.put(key, record_two)
+    stored = store.get(key)
+
+    assert stored["order_id"] == "order-1"
+    assert stored["audit_ref"] == "audit-1"
 
 
-def test_store_failure_blocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    engine, broker = _engine(tmp_path)
+def test_db_failure_blocks_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
 
-    def _boom(_key: str) -> bool:
-        raise RuntimeError("store_down")
+    def _boom() -> None:
+        raise RuntimeError("db_down")
 
-    monkeypatch.setattr(engine.idempotency, "has", _boom)
+    monkeypatch.setattr(engine.idempotency, "_connect", _boom)
     decision = engine.handle_intent(
-        intent=_intent("evt-3"),
+        intent=_intent("evt-2"),
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
         risk_inputs=_risk_inputs(),
@@ -155,6 +157,17 @@ def test_store_failure_blocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         feature_snapshot_hash="features",
         strategy_id="strat-1",
     )
+
     assert decision.action == "blocked"
     assert decision.reason == "idempotency_persist_error"
     assert broker.submitted == []
+
+
+def test_different_intents_generate_distinct_keys(tmp_path: Path) -> None:
+    intent_a = _intent("evt-1", qty=1.0)
+    intent_b = _intent("evt-2", qty=2.0)
+
+    key_a = make_idempotency_key(intent_a)
+    key_b = make_idempotency_key(intent_b)
+
+    assert key_a != key_b
