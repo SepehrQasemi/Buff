@@ -7,6 +7,8 @@ import pytest
 from control_plane.core import ControlPlane, ControlPlaneState
 from execution.locks import RiskLocks
 from execution.types import IntentSide, OrderIntent
+from risk.contracts import RiskInputs
+from risk.state_machine import RiskConfig as GateRiskConfig
 from risk.types import Permission, RiskState
 from strategies.registry import StrategyRegistry, StrategySpec
 from ui.api import UIContext, arm_live, run_paper
@@ -33,6 +35,25 @@ def _locks() -> RiskLocks:
         kill_switch=False,
         mandatory_protective_exit=True,
     )
+
+
+def _risk_inputs() -> RiskInputs:
+    return RiskInputs(
+        symbol="BTCUSDT",
+        timeframe="1h",
+        as_of="2024-01-01T00:00:00+00:00",
+        atr_pct=0.01,
+        realized_vol=0.01,
+        missing_fraction=0.0,
+        timestamps_valid=True,
+        latest_metrics_valid=True,
+        invalid_index=False,
+        invalid_close=False,
+    )
+
+
+def _risk_config() -> GateRiskConfig:
+    return GateRiskConfig(missing_red=0.2, atr_yellow=0.02, atr_red=0.05)
 
 
 def test_unknown_strategy_cannot_arm() -> None:
@@ -62,6 +83,8 @@ def test_ui_cannot_execute_without_arm(tmp_path: Path) -> None:
         intent=_intent(),
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
         locks=_locks(),
         current_exposure=0.0,
         trades_today=0,
@@ -84,6 +107,8 @@ def test_unapproved_strategy_blocked_even_if_armed(tmp_path: Path) -> None:
         intent=_intent(),
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
         locks=_locks(),
         current_exposure=0.0,
         trades_today=0,
