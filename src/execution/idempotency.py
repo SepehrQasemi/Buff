@@ -34,6 +34,20 @@ class IdempotencyStore:
     def put(self, key: str, record: Mapping[str, Any]) -> None:
         self.records[key] = dict(record)
 
+    def reserve_inflight(self, key: str, record: Mapping[str, Any]) -> bool:
+        if key in self.records:
+            return False
+        self.records[key] = dict(record)
+        return True
+
+    def get_record(self, key: str) -> Mapping[str, Any]:
+        return self.records[key]
+
+    def finalize_processed(self, key: str, record: Mapping[str, Any]) -> None:
+        if key not in self.records:
+            raise KeyError(key)
+        self.records[key] = dict(record)
+
 
 def build_idempotency_record(
     *,
@@ -42,11 +56,23 @@ def build_idempotency_record(
     audit_ref: str | None,
     decision: Mapping[str, Any],
     timestamp_utc: str | None = None,
+    first_seen_utc: str | None = None,
 ) -> Mapping[str, Any]:
+    first_seen = first_seen_utc or timestamp_utc or _utc_now_z()
     return {
         "status": status,
         "order_id": order_id,
         "timestamp_utc": timestamp_utc or _utc_now_z(),
+        "first_seen_utc": first_seen,
         "audit_ref": audit_ref,
         "decision": dict(decision),
+        "result": dict(decision),
+    }
+
+
+def build_inflight_record(*, first_seen_utc: str | None = None) -> Mapping[str, Any]:
+    return {
+        "status": "INFLIGHT",
+        "first_seen_utc": first_seen_utc or _utc_now_z(),
+        "result": None,
     }
