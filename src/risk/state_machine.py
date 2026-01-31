@@ -74,9 +74,7 @@ def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
         return RiskDecision(RiskState.RED, reasons, _snapshot(inputs))
 
     if inputs.missing_fraction > cfg.missing_red:
-        return RiskDecision(
-            RiskState.RED, ["missing_fraction_exceeded"], _snapshot(inputs)
-        )
+        return RiskDecision(RiskState.RED, ["missing_fraction_exceeded"], _snapshot(inputs))
 
     atr_pct = inputs.atr_pct
     realized_vol = inputs.realized_vol
