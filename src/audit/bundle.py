@@ -6,11 +6,11 @@ import shutil
 import sys
 import tempfile
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
 from audit.schema import canonical_json
-from execution.clock import parse_utc, format_utc
 from buff.features.metadata import get_git_sha, sha256_file
 from execution.idempotency_inspect import (
     IdempotencyInspectError,
@@ -42,7 +42,7 @@ def collect_metadata(
 ) -> dict[str, Any]:
     if as_of_utc is not None:
         try:
-            as_of_utc = format_utc(parse_utc(as_of_utc))
+            as_of_utc = _format_utc(_parse_utc(as_of_utc))
         except ValueError as exc:
             raise BundleError("invalid_as_of_utc") from exc
     env_vars = {key: os.environ[key] for key in sorted(os.environ) if key.startswith("BUFF_")}
@@ -75,6 +75,19 @@ def export_idempotency_jsonl(db_path: Path, out_path: Path) -> None:
     lines = [canonical_json({"key": key, "record": record}) for key, record in rows]
     payload = "\n".join(lines) + ("\n" if lines else "")
     out_path.write_text(payload, encoding="utf-8")
+
+
+def _parse_utc(value: str):
+    ts = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(ts)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _format_utc(value) -> str:
+    ts = value.astimezone(timezone.utc).isoformat(timespec="seconds")
+    return ts.replace("+00:00", "Z")
 
 
 def _iter_decision_files(path: Path) -> list[Path]:
