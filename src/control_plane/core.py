@@ -9,6 +9,8 @@ from execution.engine import ExecutionEngine
 from execution.idempotency import IdempotencyStore
 from execution.locks import RiskLocks
 from execution.types import ExecutionDecision, OrderIntent
+from risk.contracts import RiskInputs
+from risk.state_machine import RiskConfig as GateRiskConfig
 from risk.types import Permission, RiskState
 from strategies.registry import StrategyRegistry
 
@@ -53,6 +55,8 @@ class ControlPlane:
         intent: OrderIntent,
         risk_state: RiskState,
         permission: Permission,
+        risk_inputs: RiskInputs,
+        risk_config: GateRiskConfig,
         locks: RiskLocks,
         current_exposure: float | None,
         trades_today: int | None,
@@ -94,6 +98,8 @@ class ControlPlane:
             intent=intent,
             risk_state=risk_state,
             permission=permission,
+            risk_inputs=risk_inputs,
+            risk_config=risk_config,
             locks=locks,
             current_exposure=current_exposure,
             trades_today=trades_today,

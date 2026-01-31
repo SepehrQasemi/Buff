@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from risk.evaluator import evaluate_risk
+from risk.evaluator import evaluate_risk_report
 
 
 pytestmark = pytest.mark.unit
@@ -39,7 +39,7 @@ def _make_payload() -> dict:
         }
     )
     features = pd.DataFrame({"atr_14": [0.5] * len(timestamps)})
-    return evaluate_risk(features, ohlcv)
+    return evaluate_risk_report(features, ohlcv)
 
 
 def test_risk_report_schema_validation() -> None:
