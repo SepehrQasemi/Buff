@@ -49,7 +49,7 @@ def _missing_fraction(series_list: list[pd.Series], lookback: int) -> float:
     return float(missing.mean())
 
 
-def evaluate_risk(
+def evaluate_risk_report(
     features: pd.DataFrame,
     ohlcv: pd.DataFrame,
     *,

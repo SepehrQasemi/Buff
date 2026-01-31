@@ -10,7 +10,7 @@ import pandas as pd
 from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
-from risk.evaluator import evaluate_risk
+from risk.evaluator import evaluate_risk_report
 from risk.report import write_risk_report
 from risk.types import RiskContext
 
@@ -101,7 +101,7 @@ def main() -> None:
     )
     write_json(meta_path, metadata)
 
-    report = evaluate_risk(
+    report = evaluate_risk_report(
         out,
         feature_input,
         context=RiskContext(

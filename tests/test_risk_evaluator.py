@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from risk.evaluator import evaluate_risk
+from risk.evaluator import evaluate_risk_report
 from risk.types import RiskConfig, RiskContext
 
 
@@ -29,7 +29,7 @@ def test_evaluator_green_report() -> None:
     ohlcv = _make_ohlcv(rows)
     features = pd.DataFrame({"atr_14": [0.5] * rows})
 
-    report = evaluate_risk(
+    report = evaluate_risk_report(
         features,
         ohlcv,
         context=RiskContext(workspace="demo", symbol="BTC/USDT", timeframe="1h"),
@@ -51,7 +51,7 @@ def test_evaluator_invalid_timestamps_red() -> None:
     ohlcv.loc[5, "timestamp"] = ohlcv.loc[0, "timestamp"]
     features = pd.DataFrame({"atr_14": [0.5] * rows})
 
-    report = evaluate_risk(features, ohlcv)
+    report = evaluate_risk_report(features, ohlcv)
 
     assert report["risk_state"] == "RED"
     assert "invalid_timestamps" in report["reasons"]
@@ -66,7 +66,7 @@ def test_evaluator_missing_values_red() -> None:
     features = pd.DataFrame({"atr_14": atr_values})
 
     config = RiskConfig(missing_lookback=10, max_missing_fraction=0.2)
-    report = evaluate_risk(features, ohlcv, config=config)
+    report = evaluate_risk_report(features, ohlcv, config=config)
 
     assert report["risk_state"] == "RED"
     assert "missing_fraction_exceeded" in report["reasons"]
@@ -83,7 +83,7 @@ def test_evaluator_invalid_index_red() -> None:
         }
     )
     features = pd.DataFrame({"atr_14": [0.1] * rows})
-    report = evaluate_risk(features, ohlcv)
+    report = evaluate_risk_report(features, ohlcv)
     assert report["risk_state"] == "RED"
     assert "invalid_index" in report["reasons"]
 
@@ -93,7 +93,7 @@ def test_evaluator_invalid_close_red() -> None:
     ohlcv = _make_ohlcv(rows)
     ohlcv.loc[0, "close"] = 0.0
     features = pd.DataFrame({"atr_14": [0.1] * rows})
-    report = evaluate_risk(features, ohlcv)
+    report = evaluate_risk_report(features, ohlcv)
     assert report["risk_state"] == "RED"
     assert "invalid_close" in report["reasons"]
 
@@ -102,7 +102,7 @@ def test_evaluator_missing_metrics_red() -> None:
     rows = 30
     ohlcv = _make_ohlcv(rows)
     features = pd.DataFrame({"atr_14": [float("nan")] * rows})
-    report = evaluate_risk(features, ohlcv)
+    report = evaluate_risk_report(features, ohlcv)
     assert report["risk_state"] == "RED"
     assert "missing_metrics" in report["reasons"]
 
@@ -112,7 +112,7 @@ def test_evaluator_missing_metrics_close_nan() -> None:
     ohlcv = _make_ohlcv(rows)
     ohlcv.loc[rows - 1, "close"] = float("nan")
     features = pd.DataFrame({"atr_14": [0.1] * rows})
-    report = evaluate_risk(features, ohlcv)
+    report = evaluate_risk_report(features, ohlcv)
     assert report["risk_state"] == "RED"
     assert "missing_metrics" in report["reasons"]
 
@@ -121,8 +121,8 @@ def test_evaluator_determinism() -> None:
     rows = 40
     ohlcv = _make_ohlcv(rows)
     features = pd.DataFrame({"atr_14": [0.5] * rows})
-    report_a = evaluate_risk(features, ohlcv)
-    report_b = evaluate_risk(features, ohlcv)
+    report_a = evaluate_risk_report(features, ohlcv)
+    report_b = evaluate_risk_report(features, ohlcv)
     assert report_a == report_b
 
 
@@ -130,7 +130,7 @@ def test_evaluator_output_fields() -> None:
     rows = 40
     ohlcv = _make_ohlcv(rows)
     features = pd.DataFrame({"atr_14": [0.5] * rows})
-    report = evaluate_risk(features, ohlcv)
+    report = evaluate_risk_report(features, ohlcv)
     assert report["metrics"]["atr_pct"] is not None
     assert report["metrics"]["realized_vol"] is not None
     assert isinstance(report["metrics"]["thresholds"], dict)
@@ -145,7 +145,7 @@ def test_evaluator_non_monotonic_timestamps_red() -> None:
     ohlcv = _make_ohlcv(rows)
     ohlcv.loc[5, "timestamp"] = ohlcv.loc[2, "timestamp"] - pd.Timedelta(hours=1)
     features = pd.DataFrame({"atr_14": [0.1] * rows})
-    report = evaluate_risk(features, ohlcv)
+    report = evaluate_risk_report(features, ohlcv)
     assert report["risk_state"] == "RED"
     assert "invalid_timestamps" in report["reasons"]
 
@@ -163,7 +163,7 @@ def test_evaluator_realized_vol_computation() -> None:
     )
     features = pd.DataFrame({"atr_14": [0.5] * 4})
     config = RiskConfig(realized_vol_window=3)
-    report = evaluate_risk(features, ohlcv, config=config)
+    report = evaluate_risk_report(features, ohlcv, config=config)
     log_returns = np.log(close).diff()
     realized = log_returns.rolling(window=3, min_periods=3).std(ddof=0)
     expected = float(realized.iloc[-1])

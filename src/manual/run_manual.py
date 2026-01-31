@@ -10,7 +10,7 @@ import pandas as pd
 
 from buff.data.store import load_parquet, ohlcv_parquet_path
 from buff.features.runner import run_features
-from risk.evaluator import evaluate_risk
+from risk.evaluator import evaluate_risk_report
 from risk.report import write_risk_report
 from risk.types import RiskContext
 from utils.path_guard import guard_manual_write
@@ -99,7 +99,7 @@ def main() -> None:
     )
 
     if ohlcv.empty:
-        report = evaluate_risk(pd.DataFrame(), ohlcv, context=context)
+        report = evaluate_risk_report(pd.DataFrame(), ohlcv, context=context)
         write_risk_report(report, mode="manual")
         return
 
@@ -109,7 +109,7 @@ def main() -> None:
 
     features = run_features(features_input)
 
-    report = evaluate_risk(features, features_input, context=context)
+    report = evaluate_risk_report(features, features_input, context=context)
     write_risk_report(report, mode="manual")
 
 
