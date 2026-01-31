@@ -4,9 +4,11 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
-  test:
+  ci:
+    name: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,7 +47,9 @@ jobs:
 
           install_deps
       - name: Lint
-        run: ruff check .
+        run: |
+          ruff format --check .
+          ruff check .
       - name: Install package
         run: python -m pip install -e .
       - name: Test
