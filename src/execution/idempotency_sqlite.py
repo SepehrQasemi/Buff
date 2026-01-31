@@ -9,6 +9,10 @@ from typing import Any, Mapping
 from audit.schema import canonical_json
 
 
+class IdempotencyPersistenceError(RuntimeError):
+    pass
+
+
 SCHEMA_VERSION = 1
 
 
@@ -48,26 +52,63 @@ class SQLiteIdempotencyStore:
             raise ValueError("unsupported_schema_version")
 
     def has(self, key: str) -> bool:
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT 1 FROM idempotency_records WHERE key = ? LIMIT 1", (key,)
-            ).fetchone()
-        return row is not None
+        try:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM idempotency_records WHERE key = ? LIMIT 1", (key,)
+                ).fetchone()
+            return row is not None
+        except sqlite3.Error as exc:
+            raise IdempotencyPersistenceError("idempotency_store_error") from exc
 
     def get(self, key: str) -> Mapping[str, Any]:
-        with self._connect() as conn:
-            row = conn.execute(
-                "SELECT record_json FROM idempotency_records WHERE key = ?",
-                (key,),
-            ).fetchone()
-        if row is None:
-            raise KeyError(key)
-        return json.loads(row[0])
+        try:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT record_json FROM idempotency_records WHERE key = ?",
+                    (key,),
+                ).fetchone()
+            if row is None:
+                raise KeyError(key)
+            return json.loads(row[0])
+        except sqlite3.Error as exc:
+            raise IdempotencyPersistenceError("idempotency_store_error") from exc
 
     def put(self, key: str, record: Mapping[str, Any]) -> None:
         payload = canonical_json(record)
-        with self._connect() as conn:
-            conn.execute(
-                "INSERT OR IGNORE INTO idempotency_records (key, record_json) VALUES (?, ?)",
-                (key, payload),
-            )
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    "INSERT OR IGNORE INTO idempotency_records (key, record_json) VALUES (?, ?)",
+                    (key, payload),
+                )
+        except sqlite3.Error as exc:
+            raise IdempotencyPersistenceError("idempotency_store_error") from exc
+
+    def reserve_inflight(self, key: str, record: Mapping[str, Any]) -> bool:
+        payload = canonical_json(record)
+        try:
+            with self._connect() as conn:
+                cursor = conn.execute(
+                    "INSERT OR IGNORE INTO idempotency_records (key, record_json) VALUES (?, ?)",
+                    (key, payload),
+                )
+            return cursor.rowcount == 1
+        except sqlite3.Error as exc:
+            raise IdempotencyPersistenceError("idempotency_store_error") from exc
+
+    def get_record(self, key: str) -> Mapping[str, Any]:
+        return self.get(key)
+
+    def finalize_processed(self, key: str, record: Mapping[str, Any]) -> None:
+        payload = canonical_json(record)
+        try:
+            with self._connect() as conn:
+                cursor = conn.execute(
+                    "UPDATE idempotency_records SET record_json = ? WHERE key = ?",
+                    (payload, key),
+                )
+            if cursor.rowcount == 0:
+                raise IdempotencyPersistenceError("idempotency_missing_key")
+        except sqlite3.Error as exc:
+            raise IdempotencyPersistenceError("idempotency_store_error") from exc

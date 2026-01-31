@@ -18,6 +18,7 @@ from .brokers import Broker, OrderResult
 from .idempotency import (
     IdempotencyStore,
     build_idempotency_record,
+    build_inflight_record,
     make_idempotency_key,
 )
 from .locks import RiskLocks, evaluate_locks
@@ -90,23 +91,95 @@ class ExecutionEngine:
         strategy_id: str,
         now_fn: Callable[[], str] = _utc_now,
     ) -> ExecutionDecision:
+        idempotency_key = make_idempotency_key(intent, run_id=intent.metadata.get("run_id"))
+        first_seen_utc = now_fn()
+        try:
+            reserved = self.idempotency.reserve_inflight(
+                idempotency_key, build_inflight_record(first_seen_utc=first_seen_utc)
+            )
+        except Exception:
+            return ExecutionDecision(
+                risk_state=risk_state,
+                permission=Permission.BLOCK,
+                action="blocked",
+                reason="idempotency_persist_error",
+                status="blocked",
+            )
+
+        if not reserved:
+            try:
+                record = self.idempotency.get_record(idempotency_key)
+            except Exception:
+                return ExecutionDecision(
+                    risk_state=risk_state,
+                    permission=Permission.BLOCK,
+                    action="blocked",
+                    reason="idempotency_persist_error",
+                    status="blocked",
+                )
+            status = str(record.get("status", ""))
+            if status == "PROCESSED":
+                result = record.get("result") or record.get("decision") or {}
+                decision = ExecutionDecision(
+                    risk_state=RiskState(str(result.get("risk_state", risk_state.value))),
+                    permission=Permission(str(result.get("permission", permission.value))),
+                    action=str(result.get("action", "blocked")),
+                    reason=str(result.get("reason", "idempotency_deduped")),
+                    status=str(result.get("status", "blocked")),
+                    order_ids=tuple(result.get("order_ids", ())),
+                    filled_qty=float(result.get("filled_qty", 0.0)),
+                )
+                self._write_record(
+                    intent,
+                    decision,
+                    data_snapshot_hash,
+                    feature_snapshot_hash,
+                    strategy_id,
+                    now_fn(),
+                )
+                return decision
+            if status == "INFLIGHT":
+                return ExecutionDecision(
+                    risk_state=risk_state,
+                    permission=Permission.BLOCK,
+                    action="blocked",
+                    reason="idempotency_inflight",
+                    status="blocked",
+                )
+            return ExecutionDecision(
+                risk_state=risk_state,
+                permission=Permission.BLOCK,
+                action="blocked",
+                reason="idempotency_unknown",
+                status="blocked",
+            )
+
         gate = gate_execution(risk_inputs, risk_config)
         if not gate.allowed:
+            decision = ExecutionDecision(
+                risk_state=RiskState(gate.decision.state.value),
+                permission=Permission.BLOCK,
+                action="blocked",
+                reason=gate.reason or "risk_veto",
+                status="blocked",
+            )
+            timestamp = now_fn()
             try:
-                key = make_idempotency_key(intent, run_id=intent.metadata.get("run_id"))
-                self.idempotency.put(
-                    key,
+                self.idempotency.finalize_processed(
+                    idempotency_key,
                     build_idempotency_record(
                         status="PROCESSED",
                         order_id=None,
                         audit_ref=None,
                         decision={
-                            "risk_state": gate.decision.state.value,
-                            "permission": Permission.BLOCK.value,
-                            "action": "blocked",
-                            "reason": gate.reason or "risk_veto",
-                            "status": "blocked",
+                            "risk_state": decision.risk_state.value,
+                            "permission": decision.permission.value,
+                            "action": decision.action,
+                            "reason": decision.reason,
+                            "status": decision.status,
                         },
+                        timestamp_utc=timestamp,
+                        first_seen_utc=first_seen_utc,
                     ),
                 )
             except Exception:
@@ -117,15 +190,8 @@ class ExecutionEngine:
                     reason="idempotency_persist_error",
                     status="blocked",
                 )
-            decision = ExecutionDecision(
-                risk_state=RiskState(gate.decision.state.value),
-                permission=Permission.BLOCK,
-                action="blocked",
-                reason=gate.reason or "risk_veto",
-                status="blocked",
-            )
             self._write_record(
-                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, timestamp
             )
             return decision
 
@@ -150,10 +216,10 @@ class ExecutionEngine:
             fundamental_payload = seed_decision.fundamental_risk
             applied_multiplier = seed_decision.size_multiplier
             if seed_decision.action == "blocked":
+                timestamp = now_fn()
                 try:
-                    key = make_idempotency_key(intent, run_id=intent.metadata.get("run_id"))
-                    self.idempotency.put(
-                        key,
+                    self.idempotency.finalize_processed(
+                        idempotency_key,
                         build_idempotency_record(
                             status="PROCESSED",
                             order_id=None,
@@ -165,6 +231,8 @@ class ExecutionEngine:
                                 "reason": seed_decision.reason,
                                 "status": seed_decision.status,
                             },
+                            timestamp_utc=timestamp,
+                            first_seen_utc=first_seen_utc,
                         ),
                     )
                 except Exception:
@@ -181,43 +249,9 @@ class ExecutionEngine:
                     data_snapshot_hash,
                     feature_snapshot_hash,
                     strategy_id,
-                    now_fn(),
+                    timestamp,
                 )
                 return seed_decision
-
-        try:
-            idempotency_key = make_idempotency_key(intent, run_id=intent.metadata.get("run_id"))
-            if self.idempotency.has(idempotency_key):
-                record = self.idempotency.get(idempotency_key)
-                decision = ExecutionDecision(
-                    risk_state=RiskState(str(record["decision"]["risk_state"])),
-                    permission=Permission(str(record["decision"]["permission"])),
-                    action=str(record["decision"]["action"]),
-                    reason=str(record["decision"]["reason"]),
-                    status=str(record["decision"]["status"]),
-                    order_ids=tuple(record["decision"].get("order_ids", ())),
-                    filled_qty=float(record["decision"].get("filled_qty", 0.0)),
-                )
-                decision = _attach_fundamental_metadata(
-                    decision, fundamental_payload, applied_multiplier
-                )
-                self._write_record(
-                    intent,
-                    decision,
-                    data_snapshot_hash,
-                    feature_snapshot_hash,
-                    strategy_id,
-                    now_fn(),
-                )
-                return decision
-        except Exception:
-            return ExecutionDecision(
-                risk_state=risk_state,
-                permission=Permission.BLOCK,
-                action="blocked",
-                reason="idempotency_persist_error",
-                status="blocked",
-            )
 
         # Risk veto enforced via gate_execution only. No secondary veto here.
 
@@ -239,8 +273,9 @@ class ExecutionEngine:
             decision = _attach_fundamental_metadata(
                 decision, fundamental_payload, applied_multiplier
             )
+            timestamp = now_fn()
             try:
-                self.idempotency.put(
+                self.idempotency.finalize_processed(
                     idempotency_key,
                     build_idempotency_record(
                         status="PROCESSED",
@@ -253,6 +288,8 @@ class ExecutionEngine:
                             "reason": decision.reason,
                             "status": decision.status,
                         },
+                        timestamp_utc=timestamp,
+                        first_seen_utc=first_seen_utc,
                     ),
                 )
             except Exception:
@@ -264,7 +301,7 @@ class ExecutionEngine:
                     status="blocked",
                 )
             self._write_record(
-                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, timestamp
             )
             return decision
 
@@ -279,8 +316,9 @@ class ExecutionEngine:
             decision = _attach_fundamental_metadata(
                 decision, fundamental_payload, applied_multiplier
             )
+            timestamp = now_fn()
             try:
-                self.idempotency.put(
+                self.idempotency.finalize_processed(
                     idempotency_key,
                     build_idempotency_record(
                         status="PROCESSED",
@@ -293,6 +331,8 @@ class ExecutionEngine:
                             "reason": decision.reason,
                             "status": decision.status,
                         },
+                        timestamp_utc=timestamp,
+                        first_seen_utc=first_seen_utc,
                     ),
                 )
             except Exception:
@@ -304,7 +344,7 @@ class ExecutionEngine:
                     status="blocked",
                 )
             self._write_record(
-                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, timestamp
             )
             return decision
 
@@ -324,8 +364,9 @@ class ExecutionEngine:
             filled_qty=order_result.filled_qty,
             status=order_result.status,
         )
+        timestamp = now_fn()
         try:
-            self.idempotency.put(
+            self.idempotency.finalize_processed(
                 idempotency_key,
                 build_idempotency_record(
                     status="PROCESSED",
@@ -340,6 +381,8 @@ class ExecutionEngine:
                         "order_ids": list(decision.order_ids),
                         "filled_qty": decision.filled_qty,
                     },
+                    timestamp_utc=timestamp,
+                    first_seen_utc=first_seen_utc,
                 ),
             )
         except Exception:
@@ -347,12 +390,12 @@ class ExecutionEngine:
                 risk_state=risk_state,
                 permission=Permission.BLOCK,
                 action="blocked",
-                reason="idempotency_persist_error",
+                reason="idempotency_finalize_error",
                 status="blocked",
             )
         decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
         self._write_record(
-            intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+            intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, timestamp
         )
         return decision
 

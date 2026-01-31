@@ -7,7 +7,8 @@ import pytest
 from execution.audit import DecisionWriter
 from execution.brokers import PaperBroker
 from execution.engine import ExecutionEngine
-from execution.idempotency import IdempotencyStore
+from execution.idempotency import build_inflight_record, make_idempotency_key
+from execution.idempotency_sqlite import SQLiteIdempotencyStore
 from execution.locks import RiskLocks
 from execution.types import IntentSide, OrderIntent
 from risk.contracts import RiskInputs
@@ -62,20 +63,28 @@ def _intent(event_id: str, qty: float = 1.0) -> OrderIntent:
     )
 
 
-def _engine(tmp_path: Path) -> tuple[ExecutionEngine, PaperBroker]:
-    broker = PaperBroker()
-    engine = ExecutionEngine(
+def _engine(tmp_path: Path, broker: PaperBroker, db_path: Path) -> ExecutionEngine:
+    return ExecutionEngine(
         broker=broker,
         decision_writer=DecisionWriter(tmp_path / "decision.jsonl"),
-        idempotency=IdempotencyStore(),
+        idempotency=SQLiteIdempotencyStore(db_path),
     )
-    return engine, broker
 
 
-def test_dedup_same_intent(tmp_path: Path) -> None:
-    engine, broker = _engine(tmp_path)
+def test_finalize_failure_keeps_inflight_and_blocks_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
     intent = _intent("evt-1")
-    engine.handle_intent(
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("finalize_failed")
+
+    monkeypatch.setattr(engine.idempotency, "finalize_processed", _boom)
+
+    decision = engine.handle_intent(
         intent=intent,
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
@@ -88,26 +97,104 @@ def test_dedup_same_intent(tmp_path: Path) -> None:
         feature_snapshot_hash="features",
         strategy_id="strat-1",
     )
-    engine.handle_intent(
-        intent=intent,
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
-    )
+
     assert len(broker.submitted) == 1
+    assert decision.action == "blocked"
+    assert decision.reason == "idempotency_finalize_error"
+
+    decision_retry = engine.handle_intent(
+        intent=intent,
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="strat-1",
+    )
+
+    assert len(broker.submitted) == 1
+    assert decision_retry.action == "blocked"
+    assert decision_retry.reason == "idempotency_inflight"
 
 
-def test_dedup_diff_intent_qty(tmp_path: Path) -> None:
-    engine, broker = _engine(tmp_path)
+def test_processed_dedupes_without_resubmit(tmp_path: Path) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
+    intent = _intent("evt-2")
+
+    decision = engine.handle_intent(
+        intent=intent,
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="strat-1",
+    )
+    decision_retry = engine.handle_intent(
+        intent=intent,
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="strat-1",
+    )
+
+    assert len(broker.submitted) == 1
+    assert decision.action == "placed"
+    assert decision_retry.action == "placed"
+
+
+def test_inflight_record_blocks_second_attempt(tmp_path: Path) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
+    intent = _intent("evt-3")
+
+    key = make_idempotency_key(intent)
+    store = SQLiteIdempotencyStore(db_path)
+    store.reserve_inflight(key, build_inflight_record(first_seen_utc="2026-01-01T00:00:00Z"))
+
+    decision = engine.handle_intent(
+        intent=intent,
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="strat-1",
+    )
+
+    assert broker.submitted == []
+    assert decision.action == "blocked"
+    assert decision.reason == "idempotency_inflight"
+
+
+def test_different_intents_submit_twice(tmp_path: Path) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
+
     engine.handle_intent(
-        intent=_intent("evt-1", qty=1.0),
+        intent=_intent("evt-4", qty=1.0),
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
         risk_inputs=_risk_inputs(),
@@ -120,7 +207,7 @@ def test_dedup_diff_intent_qty(tmp_path: Path) -> None:
         strategy_id="strat-1",
     )
     engine.handle_intent(
-        intent=_intent("evt-2", qty=2.0),
+        intent=_intent("evt-5", qty=2.0),
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
         risk_inputs=_risk_inputs(),
@@ -132,18 +219,24 @@ def test_dedup_diff_intent_qty(tmp_path: Path) -> None:
         feature_snapshot_hash="features",
         strategy_id="strat-1",
     )
+
     assert len(broker.submitted) == 2
 
 
-def test_store_failure_blocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    engine, broker = _engine(tmp_path)
+def test_reserve_failure_blocks_before_submit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
 
-    def _boom(_key: str, _record: dict) -> bool:
+    def _boom(*_args: object, **_kwargs: object) -> bool:
         raise RuntimeError("store_down")
 
     monkeypatch.setattr(engine.idempotency, "reserve_inflight", _boom)
+
     decision = engine.handle_intent(
-        intent=_intent("evt-3"),
+        intent=_intent("evt-6"),
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
         risk_inputs=_risk_inputs(),
@@ -155,6 +248,7 @@ def test_store_failure_blocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
         feature_snapshot_hash="features",
         strategy_id="strat-1",
     )
+
+    assert broker.submitted == []
     assert decision.action == "blocked"
     assert decision.reason == "idempotency_persist_error"
-    assert broker.submitted == []
