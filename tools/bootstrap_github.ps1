@@ -20,14 +20,18 @@ $RepoFull = "$Owner/$Repo"
 
 function Get-AllMilestones {
   $milestones = @()
-  $page = 1
-  while ($true) {
-    $batch = gh api "/repos/$Owner/$Repo/milestones?state=all&per_page=100&page=$page" | ConvertFrom-Json
-    if ($null -eq $batch) { break }
-    if ($batch -isnot [System.Collections.IEnumerable] -or $batch -is [string]) { $batch = @($batch) }
-    if ($batch.Count -eq 0) { break }
-    $milestones += $batch
-    $page++
+  foreach ($state in @('open', 'closed')) {
+    $page = 1
+    while ($true) {
+      $batch = gh api "/repos/$Owner/$Repo/milestones?state=$state&per_page=100&page=$page" | ConvertFrom-Json
+      if ($null -eq $batch) { break }
+      if ($batch -isnot [System.Collections.IEnumerable] -or $batch -is [string]) { $batch = @($batch) }
+      $batch = $batch | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('title') -and $_.PSObject.Properties.Match('number') }
+      $batch = @($batch)
+      if ($batch.Count -eq 0) { break }
+      $milestones += $batch
+      $page++
+    }
   }
   return $milestones
 }
@@ -69,13 +73,28 @@ function Ensure-Milestone {
     [array]$ExistingMilestones,
     [ref]$CreatedList
   )
-  $found = $ExistingMilestones | Where-Object { $_.title -eq $Title }
+  $found = $ExistingMilestones | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('title') -and $_.title -eq $Title -and $_.PSObject.Properties.Match('number') }
   if ($found) { return $found[0] }
 
   $payload = @{ title = $Title; description = $Description } | ConvertTo-Json
-  $created = gh api -X POST "/repos/$Owner/$Repo/milestones" -H "Accept: application/vnd.github+json" -f title=$Title -f description=$Description | ConvertFrom-Json
-  $CreatedList.Value += $created
-  return $created
+  $created = $null
+  $createError = $null
+  try {
+    $created = gh api -X POST "/repos/$Owner/$Repo/milestones" -H "Accept: application/vnd.github+json" -f title=$Title -f description=$Description | ConvertFrom-Json
+  } catch {
+    $createError = $_
+  }
+  if ($created -is [psobject] -and $created.PSObject.Properties.Match('number')) {
+    $CreatedList.Value += $created
+    return $created
+  }
+
+  $refreshed = Get-AllMilestones
+  $fallback = $refreshed | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('title') -and $_.title -eq $Title -and $_.PSObject.Properties.Match('number') }
+  if ($fallback) { return $fallback[0] }
+
+  $createdText = if ($created) { ($created | ConvertTo-Json -Depth 6) } elseif ($createError) { $createError.Exception.Message } else { 'Unknown error' }
+  throw "Milestone create failed for '$Title'. Response: $createdText"
 }
 
 function Ensure-Label {
@@ -102,7 +121,7 @@ function Ensure-Issue {
     [array]$ExistingIssues,
     [ref]$CreatedList
   )
-  $found = $ExistingIssues | Where-Object { $_.title -eq $Title }
+  $found = $ExistingIssues | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('title') -and $_.title -eq $Title }
   if ($found) { return $found[0] }
 
   $payload = @{
@@ -181,6 +200,12 @@ $issuesSpec = @(
 
 foreach ($spec in $issuesSpec) {
   $ms = $milestoneMap[$spec.Milestone]
+  $msNumberProp = if ($ms -is [psobject]) { $ms.PSObject.Properties['number'] } else { $null }
+  if (-not $msNumberProp) {
+    $msText = ($ms | ConvertTo-Json -Depth 6)
+    throw "Milestone '$($spec.Milestone)' not found or missing number. Value: $msText"
+  }
+  $msNumber = $msNumberProp.Value
   $labels = switch ($spec.Milestone) {
     'M4 — Risk / Permission Layer' { @('risk','enhancement') }
     'M5 — Strategy Registry + Selector' { @('enhancement') }
@@ -189,7 +214,7 @@ foreach ($spec in $issuesSpec) {
     default { @() }
   }
   $body = New-IssueBody -Problem $spec.Problem -Criteria $spec.Criteria
-  Ensure-Issue -Title $spec.Title -Body $body -MilestoneNumber $ms.number -Labels $labels -ExistingIssues $existingIssues -CreatedList ([ref]$createdIssues) | Out-Null
+  Ensure-Issue -Title $spec.Title -Body $body -MilestoneNumber $msNumber -Labels $labels -ExistingIssues $existingIssues -CreatedList ([ref]$createdIssues) | Out-Null
 }
 
 if ($createdMilestones.Count -gt 0) {
