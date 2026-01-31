@@ -42,3 +42,6 @@ class ExecutionDecision:
     order_ids: tuple[str, ...] = ()
     filled_qty: float = 0.0
     status: str = ""
+    size_multiplier: float = 1.0
+    block_reason: str | None = None
+    fundamental_risk: dict | None = None

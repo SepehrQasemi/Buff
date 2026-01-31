@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
+import os
 import json
 from pathlib import Path
 from typing import Callable
 
 from risk.types import Permission, RiskState
+from risk_fundamental.integration import apply_fundamental_permission, get_default_rules_path
 
 from .audit import DecisionRecord, DecisionWriter
 from .brokers import Broker, OrderResult
@@ -31,6 +33,33 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _fundamental_enabled() -> bool:
+    return os.getenv("BUFF_FUNDAMENTAL_RISK", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _fundamental_rules_path() -> str:
+    return os.getenv("BUFF_FUNDAMENTAL_RULES_PATH", get_default_rules_path())
+
+
+def _fundamental_snapshot_from_intent(intent: OrderIntent) -> dict:
+    raw = intent.metadata.get("fundamental_snapshot")
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _attach_fundamental_metadata(
+    decision: ExecutionDecision, payload: dict | None, size_multiplier: float
+) -> ExecutionDecision:
+    if not payload:
+        return decision
+    return replace(decision, size_multiplier=size_multiplier, fundamental_risk=payload)
+
+
 @dataclass
 class ExecutionEngine:
     broker: Broker
@@ -52,6 +81,36 @@ class ExecutionEngine:
         strategy_id: str,
         now_fn: Callable[[], str] = _utc_now,
     ) -> ExecutionDecision:
+        fundamental_payload: dict | None = None
+        applied_multiplier = 1.0
+        if _fundamental_enabled():
+            seed_decision = ExecutionDecision(
+                risk_state=risk_state,
+                permission=permission,
+                action="pending",
+                reason="fundamental_check",
+                status="pending",
+            )
+            seed_decision, _fundamental = apply_fundamental_permission(
+                seed_decision,
+                _fundamental_snapshot_from_intent(intent),
+                enabled=True,
+                rules_path=_fundamental_rules_path(),
+            )
+            fundamental_payload = seed_decision.fundamental_risk
+            applied_multiplier = seed_decision.size_multiplier
+            if seed_decision.action == "blocked":
+                self.idempotency.mark(intent.event_id)
+                self._write_record(
+                    intent,
+                    seed_decision,
+                    data_snapshot_hash,
+                    feature_snapshot_hash,
+                    strategy_id,
+                    now_fn(),
+                )
+                return seed_decision
+
         if self.idempotency.seen(intent.event_id):
             decision = ExecutionDecision(
                 risk_state=risk_state,
@@ -60,6 +119,7 @@ class ExecutionEngine:
                 reason="duplicate_event",
                 status="ignored",
             )
+            decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
             self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
             return decision
 
@@ -72,6 +132,7 @@ class ExecutionEngine:
                 reason="risk_block",
                 status="blocked",
             )
+            decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
             self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
             return decision
 
@@ -91,6 +152,7 @@ class ExecutionEngine:
                 reason=lock_status.reason,
                 status="blocked",
             )
+            decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
             self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
             return decision
 
@@ -103,12 +165,17 @@ class ExecutionEngine:
                 reason="already_flat",
                 status="noop",
             )
+            decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
             self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
             return decision
 
-        order_result = self._submit_order(intent)
+        order_intent = intent
+        if applied_multiplier != 1.0:
+            order_intent = replace(intent, quantity=float(intent.quantity) * applied_multiplier)
+
+        order_result = self._submit_order(order_intent)
         self.idempotency.mark(intent.event_id)
-        self._advance_state(intent, order_result)
+        self._advance_state(order_intent, order_result)
 
         decision = ExecutionDecision(
             risk_state=risk_state,
@@ -119,6 +186,7 @@ class ExecutionEngine:
             filled_qty=order_result.filled_qty,
             status=order_result.status,
         )
+        decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
         self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
         return decision
 
@@ -163,6 +231,12 @@ class ExecutionEngine:
                 "filled_qty": decision.filled_qty,
                 "status": decision.status,
             },
+            metadata={
+                "fundamental_risk": decision.fundamental_risk,
+                "applied_size_multiplier": decision.size_multiplier,
+            }
+            if decision.fundamental_risk is not None
+            else {"applied_size_multiplier": decision.size_multiplier},
         )
         self.decision_writer.append(record)
 
