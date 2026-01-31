@@ -15,6 +15,7 @@ from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
 from audit.bundle import BundleError, build_bundle
+from audit.verify import verify_bundle
 from execution.idempotency_inspect import (
     IdempotencyInspectError,
     fetch_all_records,
@@ -101,6 +102,12 @@ def main() -> None:
     audit_bundle.add_argument("--db-path", dest="db_path", type=str, default=None)
     audit_bundle.add_argument("--decision-records", dest="decision_records", type=str, default=None)
     audit_bundle.add_argument("--include-logs", dest="include_logs", nargs="*", default=[])
+    audit_verify = audit_sub.add_parser("verify", help="Verify audit bundle")
+    audit_verify.add_argument("--bundle", required=True)
+    audit_verify.add_argument("--format", choices=["auto", "zip", "dir"], default="auto")
+    audit_verify.add_argument("--strict", action="store_true")
+    audit_verify.add_argument("--json", dest="json_out", action="store_true")
+    audit_verify.add_argument("--as-of-utc", dest="as_of_utc", type=str, default=None)
 
     args = parser.parse_args()
     if args.command == "idempotency":
@@ -276,6 +283,26 @@ def _cmd_idempotency_export(path: Path, out_path: str | None) -> None:
 
 
 def _run_audit(args: argparse.Namespace) -> None:
+    if args.audit_cmd == "verify":
+        report = verify_bundle(
+            path=Path(args.bundle),
+            fmt=args.format,
+            strict=args.strict,
+            as_of_utc=args.as_of_utc,
+        )
+        if args.json_out:
+            print(json.dumps(report, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+        else:
+            if report["ok"]:
+                print("audit_verify: ok")
+            else:
+                print("audit_verify: failed")
+            for item in report["errors"]:
+                print(f"error: {item['code']} {item.get('path', '')}".strip(), file=sys.stderr)
+            for item in report["warnings"]:
+                print(f"warning: {item['code']} {item.get('path', '')}".strip(), file=sys.stderr)
+        raise SystemExit(0 if report["ok"] else 1)
+
     if args.audit_cmd != "bundle":
         raise SystemExit(2)
     db_path = _resolve_db_path(args.db_path)
