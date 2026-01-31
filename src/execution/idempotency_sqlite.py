@@ -100,6 +100,32 @@ class SQLiteIdempotencyStore:
     def get_record(self, key: str) -> Mapping[str, Any]:
         return self.get(key)
 
+    def try_recover_inflight(
+        self, key: str, *, old_reserved_at_utc: str, new_record: Mapping[str, Any]
+    ) -> bool:
+        payload = canonical_json(new_record)
+        try:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT record_json FROM idempotency_records WHERE key = ?",
+                    (key,),
+                ).fetchone()
+                if row is None:
+                    return False
+                current_raw = row[0]
+                current = json.loads(current_raw)
+                if current.get("status") != "INFLIGHT":
+                    return False
+                if current.get("reserved_at_utc") != old_reserved_at_utc:
+                    return False
+                cursor = conn.execute(
+                    "UPDATE idempotency_records SET record_json = ? WHERE key = ? AND record_json = ?",
+                    (payload, key, current_raw),
+                )
+            return cursor.rowcount == 1
+        except sqlite3.Error as exc:
+            raise IdempotencyPersistenceError("idempotency_store_error") from exc
+
     def finalize_processed(self, key: str, record: Mapping[str, Any]) -> None:
         payload = canonical_json(record)
         try:
