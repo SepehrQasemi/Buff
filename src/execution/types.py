@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Mapping
 
+from audit.schema import canonical_json, sha256_hex
+
 from risk.types import RiskState, Permission
 
 
@@ -31,6 +33,20 @@ class OrderIntent:
     leverage: float
     protective_exit_required: bool
     metadata: Mapping[str, str] = field(default_factory=dict)
+
+    def intent_hash(self) -> str:
+        """Deterministic payload hash (excludes event_id and intent_id)."""
+
+        payload = {
+            "symbol": self.symbol,
+            "timeframe": self.timeframe,
+            "side": self.side.value,
+            "quantity": self.quantity,
+            "leverage": self.leverage,
+            "protective_exit_required": self.protective_exit_required,
+            "metadata": dict(self.metadata),
+        }
+        return sha256_hex(canonical_json(payload))
 
 
 @dataclass(frozen=True)
