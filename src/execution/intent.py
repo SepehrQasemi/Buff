@@ -9,7 +9,8 @@ from math import isfinite
 from typing import Any, Mapping
 import uuid
 
-from audit.schema import canonical_json, sha256_hex
+import hashlib
+import json
 
 
 class OrderSide(str, Enum):
@@ -50,7 +51,7 @@ class OrderIntent:
         }
 
     def canonical_json(self) -> str:
-        return canonical_json(self.to_dict())
+        return _canonical_json(self.to_dict())
 
     def intent_hash(self) -> str:
         payload = {
@@ -63,7 +64,7 @@ class OrderIntent:
             "client_tag": self.client_tag,
             "metadata": dict(self.metadata),
         }
-        return sha256_hex(canonical_json(payload))
+        return _sha256_hex(_canonical_json(payload))
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "OrderIntent":
@@ -88,6 +89,14 @@ class OrderIntent:
 def _utc_now_z() -> str:
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return ts.replace("+00:00", "Z")
+
+
+def _canonical_json(obj: object) -> str:
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _sha256_hex(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def _parse_side(value: Any) -> OrderSide:
