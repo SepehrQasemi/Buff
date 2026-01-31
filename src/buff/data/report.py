@@ -73,7 +73,9 @@ def _fixed_freq(timeframe: str) -> str:
     raise ValueError(f"Unknown fixed timeframe: {timeframe}")
 
 
-def _expected_index(first_ts: pd.Timestamp, last_ts: pd.Timestamp, timeframe: str) -> pd.DatetimeIndex:
+def _expected_index(
+    first_ts: pd.Timestamp, last_ts: pd.Timestamp, timeframe: str
+) -> pd.DatetimeIndex:
     freq = calendar_freq(timeframe)
     if freq:
         return pd.date_range(first_ts, last_ts, freq=freq, tz="UTC")
@@ -271,9 +273,9 @@ def build_report(
 
     return {
         "timeframes": sorted(set(timeframes_list)),
-        "symbols": sorted(set(symbols_list)) if symbols_list else sorted(
-            {item["symbol"] for item in per_symbol}
-        ),
+        "symbols": sorted(set(symbols_list))
+        if symbols_list
+        else sorted({item["symbol"] for item in per_symbol}),
         "global": global_report,
         "per_symbol": per_symbol,
     }
@@ -287,7 +289,9 @@ def write_report(report: dict, out_path: Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate deterministic OHLCV data quality report.")
+    parser = argparse.ArgumentParser(
+        description="Generate deterministic OHLCV data quality report."
+    )
     parser.add_argument(
         "--symbols",
         type=str,

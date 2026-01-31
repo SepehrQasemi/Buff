@@ -1,4 +1,4 @@
-﻿"""Offline snapshot provider that reads from a JSON fixture."""
+"""Offline snapshot provider that reads from a JSON fixture."""
 
 from __future__ import annotations
 

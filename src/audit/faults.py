@@ -15,7 +15,11 @@ def write_corrupted_jsonl(path: str) -> None:
         "risk_state": "GREEN",
         "market_state": {"trend_state": "UP"},
         "market_state_hash": "sha256:dummy",
-        "selection": {"strategy_id": "trend_follow_v1_conservative", "engine_id": "trend", "reason": []},
+        "selection": {
+            "strategy_id": "trend_follow_v1_conservative",
+            "engine_id": "trend",
+            "reason": [],
+        },
     }
     record_b = {
         "schema_version": "dr.v1",
@@ -32,7 +36,7 @@ def write_corrupted_jsonl(path: str) -> None:
         canonical_json(record_a),
         "{bad json",
         canonical_json(record_b),
-        "{\"schema_version\": \"dr.v1\"",
+        '{"schema_version": "dr.v1"',
     ]
     Path(path).write_text("\n".join(lines) + "\n", encoding="utf-8")
 

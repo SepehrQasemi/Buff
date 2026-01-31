@@ -14,14 +14,16 @@ pytestmark = pytest.mark.integration
 
 
 def create_test_parquet_and_report(tmp_path, symbol="BTC/USDT", rows=10):
-    df = pd.DataFrame({
-        "ts": pd.date_range("2023-01-01", periods=rows, freq="1min", tz="UTC"),
-        "open": [100.0] * rows,
-        "high": [101.0] * rows,
-        "low": [99.0] * rows,
-        "close": [100.5] * rows,
-        "volume": [1000.0] * rows,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": pd.date_range("2023-01-01", periods=rows, freq="1min", tz="UTC"),
+            "open": [100.0] * rows,
+            "high": [101.0] * rows,
+            "low": [99.0] * rows,
+            "close": [100.5] * rows,
+            "volume": [1000.0] * rows,
+        }
+    )
 
     data_dir = tmp_path / "data" / "ohlcv"
     filepath = ohlcv_parquet_path(data_dir, symbol, "1m")
@@ -43,6 +45,7 @@ def test_verify_outputs_pass_correct_data(tmp_path, monkeypatch):
     create_test_parquet_and_report(tmp_path, "BTC/USDT", rows=10)
 
     from buff.data import verify_outputs as verify_module
+
     outputs = []
 
     def capture_print(*args, **kwargs):
@@ -57,14 +60,16 @@ def test_verify_outputs_pass_correct_data(tmp_path, monkeypatch):
 def test_verify_outputs_fail_zero_volume_mismatch(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
-    df = pd.DataFrame({
-        "ts": pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC"),
-        "open": [100.0] * 10,
-        "high": [101.0] * 10,
-        "low": [99.0] * 10,
-        "close": [100.5] * 10,
-        "volume": [1000.0] * 10,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC"),
+            "open": [100.0] * 10,
+            "high": [101.0] * 10,
+            "low": [99.0] * 10,
+            "close": [100.5] * 10,
+            "volume": [1000.0] * 10,
+        }
+    )
 
     data_dir = tmp_path / "data" / "ohlcv"
     filepath = ohlcv_parquet_path(data_dir, "BTC/USDT", "1m")
@@ -120,6 +125,7 @@ def test_verify_outputs_fail_zero_volume_mismatch(tmp_path, monkeypatch):
     report_path.write_text(json.dumps(report), encoding="utf-8")
 
     from buff.data import verify_outputs as verify_module
+
     outputs = []
 
     def capture_print(*args, **kwargs):
@@ -134,14 +140,16 @@ def test_verify_outputs_fail_zero_volume_mismatch(tmp_path, monkeypatch):
 def test_verify_outputs_fail_gap_range_in_data(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
-    df = pd.DataFrame({
-        "ts": pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC"),
-        "open": [100.0] * 10,
-        "high": [101.0] * 10,
-        "low": [99.0] * 10,
-        "close": [100.5] * 10,
-        "volume": [1000.0] * 10,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC"),
+            "open": [100.0] * 10,
+            "high": [101.0] * 10,
+            "low": [99.0] * 10,
+            "close": [100.5] * 10,
+            "volume": [1000.0] * 10,
+        }
+    )
 
     data_dir = tmp_path / "data" / "ohlcv"
     filepath = ohlcv_parquet_path(data_dir, "BTC/USDT", "1m")
@@ -211,6 +219,7 @@ def test_verify_outputs_fail_gap_range_in_data(tmp_path, monkeypatch):
     report_path.write_text(json.dumps(report), encoding="utf-8")
 
     from buff.data import verify_outputs as verify_module
+
     outputs = []
 
     def capture_print(*args, **kwargs):
@@ -226,6 +235,7 @@ def test_verify_outputs_report_missing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
     from buff.data import verify_outputs as verify_module
+
     outputs = []
 
     def capture_print(*args, **kwargs):
@@ -234,4 +244,6 @@ def test_verify_outputs_report_missing(tmp_path, monkeypatch):
     with patch("builtins.print", side_effect=capture_print):
         verify_module.verify_outputs()
 
-    assert any("not found" in line.lower() for line in outputs),         f"Expected 'not found' in output, got: {outputs}"
+    assert any("not found" in line.lower() for line in outputs), (
+        f"Expected 'not found' in output, got: {outputs}"
+    )

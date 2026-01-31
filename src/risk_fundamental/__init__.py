@@ -1,4 +1,4 @@
-﻿"""Fundamental risk permission layer (offline-first, deterministic)."""
+"""Fundamental risk permission layer (offline-first, deterministic)."""
 
 from .contracts import Evidence, FundamentalSnapshot
 from .engine import FundamentalRiskDecision, FundamentalRiskEngine

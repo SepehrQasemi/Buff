@@ -1,4 +1,4 @@
-﻿"""Fail-safe behavior tests for fundamental risk."""
+"""Fail-safe behavior tests for fundamental risk."""
 
 from __future__ import annotations
 

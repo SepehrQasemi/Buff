@@ -1,4 +1,4 @@
-﻿"""CLI for running the fundamental risk engine against offline fixtures."""
+"""CLI for running the fundamental risk engine against offline fixtures."""
 
 from __future__ import annotations
 

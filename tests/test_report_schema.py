@@ -50,6 +50,7 @@ def test_report_schema_validation(tmp_path: Path) -> None:
 
     try:
         import jsonschema
+
         jsonschema.validate(instance=report, schema=schema)
     except ModuleNotFoundError:
         _minimal_validate(schema, report)

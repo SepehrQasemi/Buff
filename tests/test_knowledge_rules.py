@@ -70,7 +70,9 @@ def test_rules_have_required_fields() -> None:
         assert all(isinstance(item, str) for item in rule["inputs"]), "inputs must be strings"
         assert set(rule["inputs"]).issubset(ALLOWED_INPUTS), "inputs contain invalid fields"
         assert isinstance(rule["parameters"], dict), "parameters must be a dict"
-        assert isinstance(rule["references"], list) and rule["references"], "references must be non-empty"
+        assert isinstance(rule["references"], list) and rule["references"], (
+            "references must be non-empty"
+        )
         assert isinstance(rule["formula"], str) and rule["formula"].strip(), "formula required"
         description = rule.get("description", "")
         assert isinstance(description, str) and description.strip(), "description required"

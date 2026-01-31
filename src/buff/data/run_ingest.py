@@ -158,7 +158,9 @@ def main() -> None:
             if args.offline:
                 base_df = _load_fixture(Path(args.fixtures_dir), symbol, base_timeframe)
             else:
-                base_df = fetch_ohlcv_all(exchange, symbol, base_timeframe, start_ms, limit=args.limit)
+                base_df = fetch_ohlcv_all(
+                    exchange, symbol, base_timeframe, start_ms, limit=args.limit
+                )
 
             base_df = base_df.sort_values("ts").reset_index(drop=True)
             base_path = ohlcv_parquet_path(data_dir, symbol, base_timeframe)
@@ -188,9 +190,9 @@ def main() -> None:
     else:
         report_path.write_text("{}", encoding="utf-8")
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"Saved report to {report_path}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-﻿"""Snapshot provider interfaces for fundamental risk."""
+"""Snapshot provider interfaces for fundamental risk."""
 
 from __future__ import annotations
 

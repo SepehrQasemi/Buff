@@ -1,4 +1,4 @@
-﻿"""Artifacts writer for fundamental risk decisions."""
+"""Artifacts writer for fundamental risk decisions."""
 
 from __future__ import annotations
 

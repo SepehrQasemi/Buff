@@ -12,11 +12,9 @@ class OrderResult:
 
 
 class Broker(Protocol):
-    def submit_order(self, symbol: str, side: str, quantity: float) -> OrderResult:
-        ...
+    def submit_order(self, symbol: str, side: str, quantity: float) -> OrderResult: ...
 
-    def cancel_order(self, order_id: str) -> None:
-        ...
+    def cancel_order(self, order_id: str) -> None: ...
 
 
 class PaperBroker:

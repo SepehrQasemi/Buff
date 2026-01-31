@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from collections import Counter
@@ -126,7 +126,12 @@ def render_markdown(summary: dict, records: list[dict], last_n: int = 50) -> str
         reason_rows = [["None", "0"]]
 
     reasons_section = "\n".join(
-        ["## Blocked/Error Reasons (top)", "", _format_markdown_table(["reason", "count"], reason_rows), ""]
+        [
+            "## Blocked/Error Reasons (top)",
+            "",
+            _format_markdown_table(["reason", "count"], reason_rows),
+            "",
+        ]
     )
 
     last_records = records[-last_n:] if last_n > 0 else records
@@ -166,9 +171,7 @@ def render_markdown(summary: dict, records: list[dict], last_n: int = 50) -> str
     )
 
     artifact_path = records[0].get("artifact_paths", {}).get("decision_records")
-    artifact_section = "\n".join(
-        ["## Artifacts", "", f"decision_records: `{artifact_path}`", ""]
-    )
+    artifact_section = "\n".join(["## Artifacts", "", f"decision_records: `{artifact_path}`", ""])
 
     return "\n".join(header) + "\n".join(
         [

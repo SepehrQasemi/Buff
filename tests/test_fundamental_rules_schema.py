@@ -1,4 +1,4 @@
-﻿"""Schema validation tests for fundamental risk rules."""
+"""Schema validation tests for fundamental risk rules."""
 
 from __future__ import annotations
 

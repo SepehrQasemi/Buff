@@ -1,4 +1,4 @@
-﻿"""Contracts and validation helpers for fundamental risk snapshots."""
+"""Contracts and validation helpers for fundamental risk snapshots."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿from .indexer import (
+from .indexer import (
     build_index,
     list_run_dirs,
     load_run_summary,

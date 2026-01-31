@@ -34,7 +34,6 @@ class TestExpectedStepSeconds:
             expected_step_seconds("xyz")
 
 
-
 class TestComputeQuality:
     """Tests for compute_quality."""
 
@@ -74,9 +73,7 @@ class TestComputeQuality:
     def test_duplicate_timestamps(self) -> None:
         """Duplicate timestamps should be counted."""
         dates = pd.date_range("2022-01-01", periods=5, freq="1h", tz="UTC")
-        dates_with_dup = pd.DatetimeIndex(
-            list(dates) + [dates[1]]
-        )  # Duplicate second timestamp
+        dates_with_dup = pd.DatetimeIndex(list(dates) + [dates[1]])  # Duplicate second timestamp
         df = pd.DataFrame(
             {
                 "ts": dates_with_dup,
@@ -209,6 +206,7 @@ class TestComputeQuality:
         assert quality.duplicates == 1
         assert quality.missing_candles == 1
         assert quality.zero_volume == 1
+
     def test_missing_examples_extraction(self) -> None:
         """Missing candles examples should be correctly identified."""
         # Create 3 candles: at 00:00, 01:00, and 03:00 (missing 02:00)

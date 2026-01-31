@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from strategy_registry.registry import StrategySpec, _reset_registry, register_strategy, list_strategies
+from strategy_registry.registry import (
+    StrategySpec,
+    _reset_registry,
+    register_strategy,
+    list_strategies,
+)
 from strategy_registry.selector import select_strategy
 
 

@@ -1,4 +1,4 @@
-﻿"""YAML loader and validation for fundamental risk rules."""
+"""YAML loader and validation for fundamental risk rules."""
 
 from __future__ import annotations
 
@@ -28,7 +28,9 @@ def validate_rules(payload: dict[str, Any]) -> None:
         raise ValueError("rules_meta_missing")
 
     forbidden_terms = meta.get("forbidden_terms")
-    if not isinstance(forbidden_terms, list) or not all(isinstance(t, str) for t in forbidden_terms):
+    if not isinstance(forbidden_terms, list) or not all(
+        isinstance(t, str) for t in forbidden_terms
+    ):
         raise ValueError("forbidden_terms_invalid")
     forbidden_terms_lower = [term.lower() for term in forbidden_terms]
 

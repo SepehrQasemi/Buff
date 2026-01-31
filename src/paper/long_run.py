@@ -46,7 +46,9 @@ def _resolve_run_dir(run_id: str, out_dir: str) -> Path:
     return run_dir
 
 
-def _writer_for_shard(run_id: str, shard_index: int, start_seq: int, out_dir: str) -> DecisionRecordWriter:
+def _writer_for_shard(
+    run_id: str, shard_index: int, start_seq: int, out_dir: str
+) -> DecisionRecordWriter:
     base = Path(out_dir)
     base.mkdir(parents=True, exist_ok=True)
     cwd = Path.cwd()
@@ -123,7 +125,10 @@ def run_long_paper(config: LongRunConfig) -> dict:
             shard_index, next_seq = infer_next_shard_and_seq(str(run_dir))
             writer = _writer_for_shard(config.run_id, shard_index, next_seq, config.out_dir)
 
-        if config.restart_every_seconds > 0 and time.time() - last_restart >= config.restart_every_seconds:
+        if (
+            config.restart_every_seconds > 0
+            and time.time() - last_restart >= config.restart_every_seconds
+        ):
             writer.close()
             shard_index, next_seq = infer_next_shard_and_seq(str(run_dir))
             writer = _writer_for_shard(config.run_id, shard_index, next_seq, config.out_dir)

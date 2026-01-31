@@ -45,7 +45,9 @@ def test_risk_red_blocks(tmp_path, monkeypatch) -> None:
         control_state=ControlState(state=SystemState.ARMED),
     )
     assert out["status"] == "blocked"
-    record = json.loads(Path("workspaces/run1/decision_records.jsonl").read_text(encoding="utf-8").strip())
+    record = json.loads(
+        Path("workspaces/run1/decision_records.jsonl").read_text(encoding="utf-8").strip()
+    )
     assert record["execution_status"] == "BLOCKED"
     assert record["reason"]
 
@@ -60,7 +62,9 @@ def test_green_armed_executes(tmp_path, monkeypatch) -> None:
         control_state=ControlState(state=SystemState.ARMED),
     )
     assert out["status"] == "ok"
-    record = json.loads(Path("workspaces/run1/decision_records.jsonl").read_text(encoding="utf-8").strip())
+    record = json.loads(
+        Path("workspaces/run1/decision_records.jsonl").read_text(encoding="utf-8").strip()
+    )
     assert record["schema_version"] == "1.0"
     assert record["inputs_digest"]
 
