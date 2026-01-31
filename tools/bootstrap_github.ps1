@@ -22,8 +22,10 @@ function Get-AllMilestones {
   $milestones = @()
   $page = 1
   while ($true) {
-    $batch = gh api "/repos/$Owner/$Repo/milestones" -f state=all -f per_page=100 -f page=$page | ConvertFrom-Json
-    if (-not $batch -or $batch.Count -eq 0) { break }
+    $batch = gh api "/repos/$Owner/$Repo/milestones?state=all&per_page=100&page=$page" | ConvertFrom-Json
+    if ($null -eq $batch) { break }
+    if ($batch -isnot [System.Array]) { $batch = @($batch) }
+    if ($batch.Count -eq 0) { break }
     $milestones += $batch
     $page++
   }
@@ -34,8 +36,10 @@ function Get-AllLabels {
   $labels = @()
   $page = 1
   while ($true) {
-    $batch = gh api "/repos/$Owner/$Repo/labels" -f per_page=100 -f page=$page | ConvertFrom-Json
-    if (-not $batch -or $batch.Count -eq 0) { break }
+    $batch = gh api "/repos/$Owner/$Repo/labels?per_page=100&page=$page" | ConvertFrom-Json
+    if ($null -eq $batch) { break }
+    if ($batch -isnot [System.Array]) { $batch = @($batch) }
+    if ($batch.Count -eq 0) { break }
     $labels += $batch
     $page++
   }
@@ -46,9 +50,11 @@ function Get-AllIssues {
   $issues = @()
   $page = 1
   while ($true) {
-    $batch = gh api "/repos/$Owner/$Repo/issues" -f state=all -f per_page=100 -f page=$page | ConvertFrom-Json
+    $batch = gh api "/repos/$Owner/$Repo/issues?state=all&per_page=100&page=$page" | ConvertFrom-Json
+    if ($null -eq $batch) { break }
+    if ($batch -isnot [System.Array]) { $batch = @($batch) }
     $batch = $batch | Where-Object { -not $_.pull_request }
-    if (-not $batch -or $batch.Count -eq 0) { break }
+    if ($batch.Count -eq 0) { break }
     $issues += $batch
     $page++
   }
