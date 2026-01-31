@@ -3,13 +3,24 @@
 from __future__ import annotations
 
 import argparse
+import json
+from datetime import datetime, timezone
 from pathlib import Path
+import sys
+from typing import Any
 
 import pandas as pd
 
 from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
+from execution.idempotency_inspect import (
+    IdempotencyInspectError,
+    fetch_all_records,
+    fetch_record,
+    open_idempotency_db,
+)
+from execution.idempotency_sqlite import default_idempotency_db_path
 from risk.evaluator import evaluate_risk_report
 from risk.report import write_risk_report
 from risk.types import RiskContext
@@ -34,6 +45,14 @@ def _read_input(path: Path, input_format: str) -> pd.DataFrame:
     raise ValueError("Input format must be csv or parquet")
 
 
+def _parse_utc(value: str) -> datetime:
+    ts = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(ts)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _normalize_timestamp_column(df: pd.DataFrame) -> pd.DataFrame:
     if "timestamp" in df.columns:
         return df
@@ -56,7 +75,26 @@ def main() -> None:
     features_parser.add_argument("--timeframe", type=str, default=None, help="Timeframe label")
     features_parser.add_argument("--run_id", type=str, default=None, help="Optional run id")
 
+    idempotency_parser = subparsers.add_parser("idempotency", help="Inspect idempotency store")
+    idempotency_sub = idempotency_parser.add_subparsers(dest="idempo_cmd", required=True)
+
+    idempo_list = idempotency_sub.add_parser("list", help="List idempotency records")
+    idempo_list.add_argument("--db-path", dest="db_path", type=str, default=None)
+    idempo_list.add_argument("--as-of-utc", dest="as_of_utc", type=str, default=None)
+    idempo_list.add_argument("--json", dest="json_out", action="store_true")
+
+    idempo_show = idempotency_sub.add_parser("show", help="Show a single record")
+    idempo_show.add_argument("key")
+    idempo_show.add_argument("--db-path", dest="db_path", type=str, default=None)
+
+    idempo_export = idempotency_sub.add_parser("export", help="Export idempotency records")
+    idempo_export.add_argument("--db-path", dest="db_path", type=str, default=None)
+    idempo_export.add_argument("--out", dest="out_path", type=str, default=None)
+
     args = parser.parse_args()
+    if args.command == "idempotency":
+        _run_idempotency(args)
+        return
     if args.command != "features":
         raise SystemExit(2)
 
@@ -112,6 +150,115 @@ def main() -> None:
         ),
     )
     write_risk_report(report, mode="system")
+
+
+def _resolve_db_path(arg: str | None) -> Path:
+    return Path(arg) if arg else default_idempotency_db_path()
+
+
+def _open_db_or_exit(path: Path):
+    try:
+        return open_idempotency_db(str(path))
+    except (FileNotFoundError, IdempotencyInspectError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+
+def _run_idempotency(args: argparse.Namespace) -> None:
+    db_path = _resolve_db_path(getattr(args, "db_path", None))
+    if args.idempo_cmd == "list":
+        _cmd_idempotency_list(db_path, args)
+        return
+    if args.idempo_cmd == "show":
+        _cmd_idempotency_show(db_path, args.key)
+        return
+    if args.idempo_cmd == "export":
+        _cmd_idempotency_export(db_path, args.out_path)
+        return
+    raise SystemExit(2)
+
+
+def _cmd_idempotency_list(path: Path, args: argparse.Namespace) -> None:
+    conn = _open_db_or_exit(path)
+    try:
+        rows = fetch_all_records(conn)
+    finally:
+        conn.close()
+
+    as_of = None
+    if args.as_of_utc:
+        try:
+            as_of = _parse_utc(args.as_of_utc)
+        except ValueError as exc:
+            print(f"error: invalid as-of-utc: {args.as_of_utc}", file=sys.stderr)
+            raise SystemExit(1) from exc
+
+    if args.json_out:
+        payload: list[dict[str, Any]] = []
+        for key, record in rows:
+            reserved_at = record.get("reserved_at_utc")
+            age = None
+            if as_of is not None and isinstance(reserved_at, str) and reserved_at:
+                age = int((as_of - _parse_utc(reserved_at)).total_seconds())
+            payload.append(
+                {
+                    "key": key,
+                    "status": record.get("status"),
+                    "reserved_at_utc": reserved_at,
+                    "age_seconds": age,
+                }
+            )
+        print(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+        return
+
+    header = ["key", "status", "reserved_at_utc", "age_seconds"]
+    print("\t".join(header))
+    for key, record in rows:
+        display_key = key[:16]
+        status = str(record.get("status", ""))
+        reserved_at = record.get("reserved_at_utc") or ""
+        age = "NA"
+        if as_of is not None and isinstance(reserved_at, str) and reserved_at:
+            age = str(int((as_of - _parse_utc(reserved_at)).total_seconds()))
+        print(f"{display_key}\t{status}\t{reserved_at}\t{age}")
+
+
+def _cmd_idempotency_show(path: Path, key: str) -> None:
+    conn = _open_db_or_exit(path)
+    try:
+        record = fetch_record(conn, key)
+    finally:
+        conn.close()
+    if record is None:
+        print(f"error: idempotency key not found: {key}", file=sys.stderr)
+        raise SystemExit(2)
+    print(json.dumps(record, sort_keys=True, indent=2, ensure_ascii=False))
+
+
+def _cmd_idempotency_export(path: Path, out_path: str | None) -> None:
+    conn = _open_db_or_exit(path)
+    try:
+        rows = fetch_all_records(conn)
+    finally:
+        conn.close()
+
+    lines = [
+        json.dumps(
+            {"key": key, "record": record},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        for key, record in rows
+    ]
+    payload = "\n".join(lines) + ("\n" if lines else "")
+
+    if out_path:
+        out = Path(out_path)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(payload, encoding="utf-8")
+        return
+    print(payload, end="")
 
 
 if __name__ == "__main__":
