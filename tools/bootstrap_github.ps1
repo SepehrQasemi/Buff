@@ -98,8 +98,13 @@ function Ensure-Issue {
   $found = $ExistingIssues | Where-Object { $_.title -eq $Title }
   if ($found) { return $found[0] }
 
-  $labelsJson = $Labels | ConvertTo-Json
-  $created = gh api -X POST "/repos/$Owner/$Repo/issues" -H "Accept: application/vnd.github+json" -f title=$Title -f body=$Body -f milestone=$MilestoneNumber -f labels=$labelsJson | ConvertFrom-Json
+  $payload = @{
+    title = $Title
+    body = $Body
+    milestone = $MilestoneNumber
+    labels = $Labels
+  } | ConvertTo-Json -Depth 6
+  $created = $payload | gh api -X POST "/repos/$Owner/$Repo/issues" -H "Accept: application/vnd.github+json" --input - | ConvertFrom-Json
   $CreatedList.Value += $created
   return $created
 }
