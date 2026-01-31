@@ -23,6 +23,7 @@ from .idempotency import (
 )
 from .locks import RiskLocks, evaluate_locks
 from .types import ExecutionDecision, IntentSide, OrderIntent, PositionState
+from .clock import Clock, SystemClock, format_utc, parse_utc
 
 from control_plane.state import ControlState, SystemState
 from decision_records import inputs_digest
@@ -47,6 +48,15 @@ def _fundamental_enabled() -> bool:
 
 def _fundamental_rules_path() -> str:
     return os.getenv("BUFF_FUNDAMENTAL_RULES_PATH", get_default_rules_path())
+
+
+def _inflight_ttl_seconds() -> int | None:
+    raw = os.getenv("BUFF_IDEMPOTENCY_INFLIGHT_TTL_SECONDS", "600").strip()
+    try:
+        ttl = int(raw)
+    except ValueError:
+        return None
+    return ttl if ttl >= 0 else None
 
 
 def _fundamental_snapshot_from_intent(intent: OrderIntent) -> dict:
@@ -90,12 +100,41 @@ class ExecutionEngine:
         feature_snapshot_hash: str,
         strategy_id: str,
         now_fn: Callable[[], str] = _utc_now,
+        clock: Clock | None = None,
+        inflight_ttl_seconds: int | None = None,
     ) -> ExecutionDecision:
+        ttl = inflight_ttl_seconds if inflight_ttl_seconds is not None else _inflight_ttl_seconds()
+        if ttl is None:
+            return ExecutionDecision(
+                risk_state=risk_state,
+                permission=Permission.BLOCK,
+                action="blocked",
+                reason="idempotency_config_error",
+                status="blocked",
+            )
+        clock = clock or SystemClock()
+        try:
+            now_dt = clock.now_utc()
+        except Exception:
+            return ExecutionDecision(
+                risk_state=risk_state,
+                permission=Permission.BLOCK,
+                action="blocked",
+                reason="idempotency_clock_error",
+                status="blocked",
+            )
+        now_str = format_utc(now_dt)
+
         idempotency_key = make_idempotency_key(intent, run_id=intent.metadata.get("run_id"))
-        first_seen_utc = now_fn()
+        first_seen_utc = now_str
         try:
             reserved = self.idempotency.reserve_inflight(
-                idempotency_key, build_inflight_record(first_seen_utc=first_seen_utc)
+                idempotency_key,
+                build_inflight_record(
+                    first_seen_utc=first_seen_utc,
+                    reserved_at_utc=first_seen_utc,
+                    reservation_token=1,
+                ),
             )
         except Exception:
             return ExecutionDecision(
@@ -135,24 +174,108 @@ class ExecutionEngine:
                     data_snapshot_hash,
                     feature_snapshot_hash,
                     strategy_id,
-                    now_fn(),
+                    now_str,
                 )
                 return decision
             if status == "INFLIGHT":
+                reserved_at_utc = record.get("reserved_at_utc")
+                token = record.get("reservation_token")
+                if not isinstance(reserved_at_utc, str) or token is None:
+                    return ExecutionDecision(
+                        risk_state=risk_state,
+                        permission=Permission.BLOCK,
+                        action="blocked",
+                        reason="idempotency_inflight_unknown",
+                        status="blocked",
+                    )
+                try:
+                    reserved_at = parse_utc(reserved_at_utc)
+                except Exception:
+                    return ExecutionDecision(
+                        risk_state=risk_state,
+                        permission=Permission.BLOCK,
+                        action="blocked",
+                        reason="idempotency_clock_error",
+                        status="blocked",
+                    )
+                age_seconds = (now_dt - reserved_at).total_seconds()
+                if age_seconds <= ttl:
+                    return ExecutionDecision(
+                        risk_state=risk_state,
+                        permission=Permission.BLOCK,
+                        action="blocked",
+                        reason="idempotency_inflight",
+                        status="blocked",
+                    )
+                next_reserved_at = now_str
+                first_seen_utc = record.get("first_seen_utc") or reserved_at_utc
+                new_record = build_inflight_record(
+                    first_seen_utc=str(first_seen_utc),
+                    reserved_at_utc=next_reserved_at,
+                    reservation_token=int(token) + 1,
+                )
+                try:
+                    recovered = self.idempotency.try_recover_inflight(
+                        idempotency_key,
+                        old_reserved_at_utc=reserved_at_utc,
+                        new_record=new_record,
+                    )
+                except Exception:
+                    return ExecutionDecision(
+                        risk_state=risk_state,
+                        permission=Permission.BLOCK,
+                        action="blocked",
+                        reason="idempotency_persist_error",
+                        status="blocked",
+                    )
+                if not recovered:
+                    try:
+                        record = self.idempotency.get_record(idempotency_key)
+                    except Exception:
+                        return ExecutionDecision(
+                            risk_state=risk_state,
+                            permission=Permission.BLOCK,
+                            action="blocked",
+                            reason="idempotency_persist_error",
+                            status="blocked",
+                        )
+                    status = str(record.get("status", ""))
+                    if status == "PROCESSED":
+                        result = record.get("result") or record.get("decision") or {}
+                        decision = ExecutionDecision(
+                            risk_state=RiskState(str(result.get("risk_state", risk_state.value))),
+                            permission=Permission(str(result.get("permission", permission.value))),
+                            action=str(result.get("action", "blocked")),
+                            reason=str(result.get("reason", "idempotency_deduped")),
+                            status=str(result.get("status", "blocked")),
+                            order_ids=tuple(result.get("order_ids", ())),
+                            filled_qty=float(result.get("filled_qty", 0.0)),
+                        )
+                        self._write_record(
+                            intent,
+                            decision,
+                            data_snapshot_hash,
+                            feature_snapshot_hash,
+                            strategy_id,
+                            now_str,
+                        )
+                        return decision
+                    return ExecutionDecision(
+                        risk_state=risk_state,
+                        permission=Permission.BLOCK,
+                        action="blocked",
+                        reason="idempotency_inflight",
+                        status="blocked",
+                    )
+                first_seen_utc = str(first_seen_utc)
+            else:
                 return ExecutionDecision(
                     risk_state=risk_state,
                     permission=Permission.BLOCK,
                     action="blocked",
-                    reason="idempotency_inflight",
+                    reason="idempotency_unknown",
                     status="blocked",
                 )
-            return ExecutionDecision(
-                risk_state=risk_state,
-                permission=Permission.BLOCK,
-                action="blocked",
-                reason="idempotency_unknown",
-                status="blocked",
-            )
 
         gate = gate_execution(risk_inputs, risk_config)
         if not gate.allowed:
@@ -163,7 +286,7 @@ class ExecutionEngine:
                 reason=gate.reason or "risk_veto",
                 status="blocked",
             )
-            timestamp = now_fn()
+            timestamp = now_str
             try:
                 self.idempotency.finalize_processed(
                     idempotency_key,
@@ -216,7 +339,7 @@ class ExecutionEngine:
             fundamental_payload = seed_decision.fundamental_risk
             applied_multiplier = seed_decision.size_multiplier
             if seed_decision.action == "blocked":
-                timestamp = now_fn()
+                timestamp = now_str
                 try:
                     self.idempotency.finalize_processed(
                         idempotency_key,
@@ -273,7 +396,7 @@ class ExecutionEngine:
             decision = _attach_fundamental_metadata(
                 decision, fundamental_payload, applied_multiplier
             )
-            timestamp = now_fn()
+            timestamp = now_str
             try:
                 self.idempotency.finalize_processed(
                     idempotency_key,
@@ -316,7 +439,7 @@ class ExecutionEngine:
             decision = _attach_fundamental_metadata(
                 decision, fundamental_payload, applied_multiplier
             )
-            timestamp = now_fn()
+            timestamp = now_str
             try:
                 self.idempotency.finalize_processed(
                     idempotency_key,
@@ -364,7 +487,7 @@ class ExecutionEngine:
             filled_qty=order_result.filled_qty,
             status=order_result.status,
         )
-        timestamp = now_fn()
+        timestamp = now_str
         try:
             self.idempotency.finalize_processed(
                 idempotency_key,

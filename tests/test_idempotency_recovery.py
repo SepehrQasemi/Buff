@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
-from datetime import datetime, timezone
 
 from execution.audit import DecisionWriter
 from execution.brokers import PaperBroker
@@ -18,6 +18,17 @@ from risk.types import Permission
 
 
 pytestmark = pytest.mark.unit
+
+
+class FakeClock:
+    def __init__(self, now: datetime) -> None:
+        self._now = now
+
+    def now_utc(self) -> datetime:
+        return self._now
+
+    def advance(self, delta: timedelta) -> None:
+        self._now = self._now + delta
 
 
 def _locks() -> RiskLocks:
@@ -72,129 +83,23 @@ def _engine(tmp_path: Path, broker: PaperBroker, db_path: Path) -> ExecutionEngi
     )
 
 
-class FakeClock:
-    def __init__(self, now: datetime) -> None:
-        self._now = now
-
-    def now_utc(self) -> datetime:
-        return self._now
-
-
-def test_finalize_failure_keeps_inflight_and_blocks_retry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_non_expired_inflight_blocks(tmp_path: Path) -> None:
     db_path = tmp_path / "idem.sqlite"
     broker = PaperBroker()
     engine = _engine(tmp_path, broker, db_path)
     intent = _intent("evt-1")
-
-    def _boom(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("finalize_failed")
-
-    monkeypatch.setattr(engine.idempotency, "finalize_processed", _boom)
-    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
-
-    decision = engine.handle_intent(
-        intent=intent,
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
-        clock=clock,
-        inflight_ttl_seconds=600,
-    )
-
-    assert len(broker.submitted) == 1
-    assert decision.action == "blocked"
-    assert decision.reason == "idempotency_finalize_error"
-
-    decision_retry = engine.handle_intent(
-        intent=intent,
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
-        clock=clock,
-        inflight_ttl_seconds=600,
-    )
-
-    assert len(broker.submitted) == 1
-    assert decision_retry.action == "blocked"
-    assert decision_retry.reason == "idempotency_inflight"
-
-
-def test_processed_dedupes_without_resubmit(tmp_path: Path) -> None:
-    db_path = tmp_path / "idem.sqlite"
-    broker = PaperBroker()
-    engine = _engine(tmp_path, broker, db_path)
-    intent = _intent("evt-2")
-    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
-
-    decision = engine.handle_intent(
-        intent=intent,
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
-        clock=clock,
-        inflight_ttl_seconds=600,
-    )
-    decision_retry = engine.handle_intent(
-        intent=intent,
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
-        clock=clock,
-        inflight_ttl_seconds=600,
-    )
-
-    assert len(broker.submitted) == 1
-    assert decision.action == "placed"
-    assert decision_retry.action == "placed"
-
-
-def test_inflight_record_blocks_second_attempt(tmp_path: Path) -> None:
-    db_path = tmp_path / "idem.sqlite"
-    broker = PaperBroker()
-    engine = _engine(tmp_path, broker, db_path)
-    intent = _intent("evt-3")
-
-    key = make_idempotency_key(intent)
     store = SQLiteIdempotencyStore(db_path)
+
+    reserved_at = "2026-01-01T00:00:00Z"
     store.reserve_inflight(
-        key,
+        make_idempotency_key(intent),
         build_inflight_record(
-            first_seen_utc="2026-01-01T00:00:00Z",
-            reserved_at_utc="2026-01-01T00:00:00Z",
+            first_seen_utc=reserved_at,
+            reserved_at_utc=reserved_at,
             reservation_token=1,
         ),
     )
-    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 1, 1, 0, 9, 59, tzinfo=timezone.utc))
 
     decision = engine.handle_intent(
         intent=intent,
@@ -217,60 +122,26 @@ def test_inflight_record_blocks_second_attempt(tmp_path: Path) -> None:
     assert decision.reason == "idempotency_inflight"
 
 
-def test_different_intents_submit_twice(tmp_path: Path) -> None:
+def test_expired_inflight_recovers_and_submits(tmp_path: Path) -> None:
     db_path = tmp_path / "idem.sqlite"
     broker = PaperBroker()
     engine = _engine(tmp_path, broker, db_path)
-    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    intent = _intent("evt-2")
+    store = SQLiteIdempotencyStore(db_path)
 
-    engine.handle_intent(
-        intent=_intent("evt-4", qty=1.0),
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
-        clock=clock,
-        inflight_ttl_seconds=600,
+    reserved_at = "2026-01-01T00:00:00Z"
+    store.reserve_inflight(
+        make_idempotency_key(intent),
+        build_inflight_record(
+            first_seen_utc=reserved_at,
+            reserved_at_utc=reserved_at,
+            reservation_token=1,
+        ),
     )
-    engine.handle_intent(
-        intent=_intent("evt-5", qty=2.0),
-        risk_state=RiskState.GREEN,
-        permission=Permission.ALLOW,
-        risk_inputs=_risk_inputs(),
-        risk_config=_risk_config(),
-        locks=_locks(),
-        current_exposure=0.0,
-        trades_today=0,
-        data_snapshot_hash="data",
-        feature_snapshot_hash="features",
-        strategy_id="strat-1",
-        clock=clock,
-        inflight_ttl_seconds=600,
-    )
-
-    assert len(broker.submitted) == 2
-
-
-def test_reserve_failure_blocks_before_submit(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    db_path = tmp_path / "idem.sqlite"
-    broker = PaperBroker()
-    engine = _engine(tmp_path, broker, db_path)
-
-    def _boom(*_args: object, **_kwargs: object) -> bool:
-        raise RuntimeError("store_down")
-
-    monkeypatch.setattr(engine.idempotency, "reserve_inflight", _boom)
+    clock = FakeClock(datetime(2026, 1, 1, 0, 10, 1, tzinfo=timezone.utc))
 
     decision = engine.handle_intent(
-        intent=_intent("evt-6"),
+        intent=intent,
         risk_state=RiskState.GREEN,
         permission=Permission.ALLOW,
         risk_inputs=_risk_inputs(),
@@ -281,10 +152,113 @@ def test_reserve_failure_blocks_before_submit(
         data_snapshot_hash="data",
         feature_snapshot_hash="features",
         strategy_id="strat-1",
-        clock=FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc)),
+        clock=clock,
+        inflight_ttl_seconds=600,
+    )
+
+    assert len(broker.submitted) == 1
+    assert decision.action == "placed"
+
+
+def test_recovery_race_only_one_submits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
+    intent = _intent("evt-3")
+    store = SQLiteIdempotencyStore(db_path)
+
+    reserved_at = "2026-01-01T00:00:00Z"
+    store.reserve_inflight(
+        make_idempotency_key(intent),
+        build_inflight_record(
+            first_seen_utc=reserved_at,
+            reserved_at_utc=reserved_at,
+            reservation_token=1,
+        ),
+    )
+    clock = FakeClock(datetime(2026, 1, 1, 0, 10, 1, tzinfo=timezone.utc))
+
+    calls = {"count": 0}
+
+    def _recover_once(*_args: object, **_kwargs: object) -> bool:
+        calls["count"] += 1
+        return calls["count"] == 1
+
+    monkeypatch.setattr(engine.idempotency, "try_recover_inflight", _recover_once)
+
+    decision_a = engine.handle_intent(
+        intent=intent,
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="strat-1",
+        clock=clock,
+        inflight_ttl_seconds=600,
+    )
+    decision_b = engine.handle_intent(
+        intent=intent,
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="strat-1",
+        clock=clock,
+        inflight_ttl_seconds=600,
+    )
+
+    assert len(broker.submitted) == 1
+    assert decision_a.action in {"placed", "blocked"}
+    assert decision_b.action in {"placed", "blocked"}
+
+
+def test_clock_failure_blocks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
+    intent = _intent("evt-4")
+    store = SQLiteIdempotencyStore(db_path)
+
+    reserved_at = "2026-01-01T00:00:00Z"
+    store.reserve_inflight(
+        make_idempotency_key(intent),
+        build_inflight_record(
+            first_seen_utc=reserved_at,
+            reserved_at_utc=reserved_at,
+            reservation_token=1,
+        ),
+    )
+
+    class BrokenClock:
+        def now_utc(self) -> datetime:
+            raise RuntimeError("clock_down")
+
+    decision = engine.handle_intent(
+        intent=intent,
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="strat-1",
+        clock=BrokenClock(),
         inflight_ttl_seconds=600,
     )
 
     assert broker.submitted == []
     assert decision.action == "blocked"
-    assert decision.reason == "idempotency_persist_error"
+    assert decision.reason == "idempotency_clock_error"

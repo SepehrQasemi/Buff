@@ -43,6 +43,19 @@ class IdempotencyStore:
     def get_record(self, key: str) -> Mapping[str, Any]:
         return self.records[key]
 
+    def try_recover_inflight(
+        self, key: str, *, old_reserved_at_utc: str, new_record: Mapping[str, Any]
+    ) -> bool:
+        current = self.records.get(key)
+        if not isinstance(current, Mapping):
+            return False
+        if current.get("status") != "INFLIGHT":
+            return False
+        if current.get("reserved_at_utc") != old_reserved_at_utc:
+            return False
+        self.records[key] = dict(new_record)
+        return True
+
     def finalize_processed(self, key: str, record: Mapping[str, Any]) -> None:
         if key not in self.records:
             raise KeyError(key)
@@ -70,9 +83,16 @@ def build_idempotency_record(
     }
 
 
-def build_inflight_record(*, first_seen_utc: str | None = None) -> Mapping[str, Any]:
+def build_inflight_record(
+    *,
+    first_seen_utc: str | None,
+    reserved_at_utc: str,
+    reservation_token: int,
+) -> Mapping[str, Any]:
     return {
         "status": "INFLIGHT",
-        "first_seen_utc": first_seen_utc or _utc_now_z(),
+        "first_seen_utc": first_seen_utc,
+        "reserved_at_utc": reserved_at_utc,
+        "reservation_token": reservation_token,
         "result": None,
     }
