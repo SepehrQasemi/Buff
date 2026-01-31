@@ -1,6 +1,8 @@
-# CODEOWNERS
-# Replace @Buff-Trading-AI with a real team or user if available.
-/src/execution/ @Buff-Trading-AI @SepehrQasemi
-/src/risk/ @Buff-Trading-AI @SepehrQasemi
-/src/control_plane/ @Buff-Trading-AI @SepehrQasemi
-/.github/ @Buff-Trading-AI @SepehrQasemi
+*  @Buff-Trading-AI/maintainers
+/src/execution/         @Buff-Trading-AI/maintainers
+/src/risk/              @Buff-Trading-AI/maintainers
+/src/control_plane/     @Buff-Trading-AI/maintainers
+/src/selector/          @Buff-Trading-AI/maintainers
+/src/strategy_registry/ @Buff-Trading-AI/maintainers
+/.github/workflows/     @Buff-Trading-AI/maintainers
+/configs/               @Buff-Trading-AI/maintainers

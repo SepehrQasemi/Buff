@@ -1,4 +1,7 @@
 # Buff
+[![CI](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml/badge.svg)](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/Buff-Trading-AI/Buff/actions/workflows/codeql.yml/badge.svg)](https://github.com/Buff-Trading-AI/Buff/actions/workflows/codeql.yml)
+
 
 ## Overview
 
