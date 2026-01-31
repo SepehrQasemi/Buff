@@ -18,6 +18,43 @@ $Owner = 'Buff-Trading-AI'
 $Repo = 'Buff'
 $RepoFull = "$Owner/$Repo"
 
+function Get-PropValue {
+  param(
+    [object]$Obj,
+    [string]$Name
+  )
+  if ($null -eq $Obj) { return $null }
+  if ($Obj -is [string]) { return $null }
+  if ($Obj -is [System.Collections.IDictionary]) {
+    if ($Obj.Contains($Name)) { return $Obj[$Name] }
+    foreach ($key in $Obj.Keys) {
+      if ($key -is [string] -and $key.Equals($Name, [System.StringComparison]::OrdinalIgnoreCase)) {
+        return $Obj[$key]
+      }
+    }
+  }
+  $prop = $Obj.PSObject.Properties | Where-Object { $_.Name -ieq $Name } | Select-Object -First 1
+  if ($prop) { return $prop.Value }
+  return $null
+}
+
+function Normalize-Title {
+  param([string]$Text)
+  if ($null -eq $Text) { return $null }
+  $normalized = $Text -replace '[\u2012\u2013\u2014\u2212]', '-'
+  $normalized = $normalized -replace '\s+', ' '
+  return $normalized.Trim()
+}
+
+function Normalize-TitleKey {
+  param([string]$Text)
+  if ($null -eq $Text) { return $null }
+  $normalized = $Text.ToString().Normalize([System.Text.NormalizationForm]::FormKC)
+  $normalized = $normalized.ToLowerInvariant()
+  $normalized = $normalized -replace '[^a-z0-9]+', ''
+  return $normalized
+}
+
 function Get-AllMilestones {
   $milestones = @()
   foreach ($state in @('open', 'closed')) {
@@ -25,9 +62,7 @@ function Get-AllMilestones {
     while ($true) {
       $batch = gh api "/repos/$Owner/$Repo/milestones?state=$state&per_page=100&page=$page" | ConvertFrom-Json
       if ($null -eq $batch) { break }
-      if ($batch -isnot [System.Collections.IEnumerable] -or $batch -is [string]) { $batch = @($batch) }
-      $batch = $batch | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('title') -and $_.PSObject.Properties.Match('number') }
-      $batch = @($batch)
+      if ($batch -isnot [System.Array]) { $batch = @($batch) }
       if ($batch.Count -eq 0) { break }
       $milestones += $batch
       $page++
@@ -42,7 +77,7 @@ function Get-AllLabels {
   while ($true) {
     $batch = gh api "/repos/$Owner/$Repo/labels?per_page=100&page=$page" | ConvertFrom-Json
     if ($null -eq $batch) { break }
-    if ($batch -isnot [System.Collections.IEnumerable] -or $batch -is [string]) { $batch = @($batch) }
+    if ($batch -isnot [System.Array]) { $batch = @($batch) }
     if ($batch.Count -eq 0) { break }
     $labels += $batch
     $page++
@@ -56,8 +91,8 @@ function Get-AllIssues {
   while ($true) {
     $batch = gh api "/repos/$Owner/$Repo/issues?state=all&per_page=100&page=$page" | ConvertFrom-Json
     if ($null -eq $batch) { break }
-    if ($batch -isnot [System.Collections.IEnumerable] -or $batch -is [string]) { $batch = @($batch) }
-    $batch = $batch | Where-Object { -not $_.PSObject.Properties.Match('pull_request') }
+    if ($batch -isnot [System.Array]) { $batch = @($batch) }
+    $batch = $batch | Where-Object { -not (Get-PropValue $_ 'pull_request') }
     $batch = @($batch)
     if ($batch.Count -eq 0) { break }
     $issues += $batch
@@ -73,7 +108,13 @@ function Ensure-Milestone {
     [array]$ExistingMilestones,
     [ref]$CreatedList
   )
-  $found = $ExistingMilestones | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('title') -and $_.title -eq $Title -and $_.PSObject.Properties.Match('number') }
+  $targetTitle = Normalize-Title $Title
+  $targetKey = Normalize-TitleKey $Title
+  $found = $ExistingMilestones | Where-Object {
+    $title = Get-PropValue $_ 'title'
+    $number = Get-PropValue $_ 'number'
+    $title -and $number -and ((Normalize-Title $title) -eq $targetTitle -or (Normalize-TitleKey $title) -eq $targetKey)
+  }
   if ($found) { return $found[0] }
 
   $payload = @{ title = $Title; description = $Description } | ConvertTo-Json
@@ -84,13 +125,17 @@ function Ensure-Milestone {
   } catch {
     $createError = $_
   }
-  if ($created -is [psobject] -and $created.PSObject.Properties.Match('number')) {
+  if ($null -ne (Get-PropValue $created 'number')) {
     $CreatedList.Value += $created
     return $created
   }
 
   $refreshed = Get-AllMilestones
-  $fallback = $refreshed | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('title') -and $_.title -eq $Title -and $_.PSObject.Properties.Match('number') }
+  $fallback = $refreshed | Where-Object {
+    $title = Get-PropValue $_ 'title'
+    $number = Get-PropValue $_ 'number'
+    $title -and $number -and ((Normalize-Title $title) -eq $targetTitle -or (Normalize-TitleKey $title) -eq $targetKey)
+  }
   if ($fallback) { return $fallback[0] }
 
   $createdText = if ($created) { ($created | ConvertTo-Json -Depth 6) } elseif ($createError) { $createError.Exception.Message } else { 'Unknown error' }
@@ -103,7 +148,7 @@ function Ensure-Label {
     [array]$ExistingLabels,
     [ref]$CreatedList
   )
-  $found = $ExistingLabels | Where-Object { $_.name -eq $Name }
+  $found = $ExistingLabels | Where-Object { (Get-PropValue $_ 'name') -eq $Name }
   if ($found) { return $found[0] }
 
   $color = (Get-Random -Minimum 0 -Maximum 16777215).ToString('X6')
@@ -121,7 +166,7 @@ function Ensure-Issue {
     [array]$ExistingIssues,
     [ref]$CreatedList
   )
-  $found = $ExistingIssues | Where-Object { $_ -is [psobject] -and $_.PSObject.Properties.Match('title') -and $_.title -eq $Title }
+  $found = $ExistingIssues | Where-Object { (Get-PropValue $_ 'title') -eq $Title }
   if ($found) { return $found[0] }
 
   $payload = @{
@@ -200,12 +245,11 @@ $issuesSpec = @(
 
 foreach ($spec in $issuesSpec) {
   $ms = $milestoneMap[$spec.Milestone]
-  $msNumberProp = if ($ms -is [psobject]) { $ms.PSObject.Properties['number'] } else { $null }
-  if (-not $msNumberProp) {
+  $msNumber = Get-PropValue $ms 'number'
+  if ($null -eq $msNumber) {
     $msText = ($ms | ConvertTo-Json -Depth 6)
     throw "Milestone '$($spec.Milestone)' not found or missing number. Value: $msText"
   }
-  $msNumber = $msNumberProp.Value
   $labels = switch ($spec.Milestone) {
     'M4 — Risk / Permission Layer' { @('risk','enhancement') }
     'M5 — Strategy Registry + Selector' { @('enhancement') }
