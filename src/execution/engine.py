@@ -8,6 +8,9 @@ from pathlib import Path
 from typing import Callable
 
 from risk.types import Permission, RiskState
+from risk.contracts import RiskInputs
+from risk.state_machine import RiskConfig as GateRiskConfig
+from execution.gate import gate_execution
 from risk_fundamental.integration import apply_fundamental_permission, get_default_rules_path
 
 from .audit import DecisionRecord, DecisionWriter
@@ -73,6 +76,8 @@ class ExecutionEngine:
         intent: OrderIntent,
         risk_state: RiskState,
         permission: Permission,
+        risk_inputs: RiskInputs,
+        risk_config: GateRiskConfig,
         locks: RiskLocks,
         current_exposure: float | None,
         trades_today: int | None,
@@ -81,6 +86,23 @@ class ExecutionEngine:
         strategy_id: str,
         now_fn: Callable[[], str] = _utc_now,
     ) -> ExecutionDecision:
+        gate = gate_execution(risk_inputs, risk_config)
+        if not gate.allowed:
+            self.idempotency.mark(intent.event_id)
+            decision = ExecutionDecision(
+                risk_state=RiskState(gate.decision.state.value),
+                permission=Permission.BLOCK,
+                action="blocked",
+                reason=gate.reason or "risk_veto",
+                status="blocked",
+            )
+            self._write_record(
+                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+            )
+            return decision
+
+        risk_state = RiskState(gate.decision.state.value)
+        permission = Permission.ALLOW if risk_state == RiskState.GREEN else Permission.RESTRICT
         fundamental_payload: dict | None = None
         applied_multiplier = 1.0
         if _fundamental_enabled():
@@ -127,22 +149,7 @@ class ExecutionEngine:
             )
             return decision
 
-        if risk_state == RiskState.RED or permission == Permission.BLOCK:
-            self.idempotency.mark(intent.event_id)
-            decision = ExecutionDecision(
-                risk_state=risk_state,
-                permission=permission,
-                action="blocked",
-                reason="risk_block",
-                status="blocked",
-            )
-            decision = _attach_fundamental_metadata(
-                decision, fundamental_payload, applied_multiplier
-            )
-            self._write_record(
-                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
-            )
-            return decision
+        # Risk veto enforced via gate_execution only. No secondary veto here.
 
         lock_status = evaluate_locks(
             locks,
