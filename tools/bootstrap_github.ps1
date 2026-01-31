@@ -54,6 +54,7 @@ function Get-AllIssues {
     if ($null -eq $batch) { break }
     if ($batch -isnot [System.Collections.IEnumerable] -or $batch -is [string]) { $batch = @($batch) }
     $batch = $batch | Where-Object { -not $_.PSObject.Properties.Match('pull_request') }
+    $batch = @($batch)
     if ($batch.Count -eq 0) { break }
     $issues += $batch
     $page++
