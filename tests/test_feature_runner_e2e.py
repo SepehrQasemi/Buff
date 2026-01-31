@@ -29,15 +29,69 @@ def test_feature_runner_e2e() -> None:
     expected = expected[out.columns]
     assert list(out.columns) == list(expected.columns)
 
-    np.testing.assert_allclose(out["ema_20"].to_numpy(), expected["ema_20"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
-    np.testing.assert_allclose(out["rsi_14"].to_numpy(), expected["rsi_14"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
-    np.testing.assert_allclose(out["atr_14"].to_numpy(), expected["atr_14"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
-    np.testing.assert_allclose(out["sma_20"].to_numpy(), expected["sma_20"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
-    np.testing.assert_allclose(out["std_20"].to_numpy(), expected["std_20"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
-    np.testing.assert_allclose(out["bb_mid_20_2"].to_numpy(), expected["bb_mid_20_2"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
-    np.testing.assert_allclose(out["bb_upper_20_2"].to_numpy(), expected["bb_upper_20_2"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
-    np.testing.assert_allclose(out["bb_lower_20_2"].to_numpy(), expected["bb_lower_20_2"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
-    np.testing.assert_allclose(out["macd_12_26_9"].to_numpy(), expected["macd_12_26_9"].to_numpy(), rtol=1e-6, atol=1e-6, equal_nan=True)
+    np.testing.assert_allclose(
+        out["ema_20"].to_numpy(),
+        expected["ema_20"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["rsi_14"].to_numpy(),
+        expected["rsi_14"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["atr_14"].to_numpy(),
+        expected["atr_14"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["sma_20"].to_numpy(),
+        expected["sma_20"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["std_20"].to_numpy(),
+        expected["std_20"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["bb_mid_20_2"].to_numpy(),
+        expected["bb_mid_20_2"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["bb_upper_20_2"].to_numpy(),
+        expected["bb_upper_20_2"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["bb_lower_20_2"].to_numpy(),
+        expected["bb_lower_20_2"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["macd_12_26_9"].to_numpy(),
+        expected["macd_12_26_9"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
     np.testing.assert_allclose(
         out["macd_signal_12_26_9"].to_numpy(),
         expected["macd_signal_12_26_9"].to_numpy(),

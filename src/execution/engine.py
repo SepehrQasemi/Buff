@@ -119,8 +119,12 @@ class ExecutionEngine:
                 reason="duplicate_event",
                 status="ignored",
             )
-            decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
-            self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
+            decision = _attach_fundamental_metadata(
+                decision, fundamental_payload, applied_multiplier
+            )
+            self._write_record(
+                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+            )
             return decision
 
         if risk_state == RiskState.RED or permission == Permission.BLOCK:
@@ -132,8 +136,12 @@ class ExecutionEngine:
                 reason="risk_block",
                 status="blocked",
             )
-            decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
-            self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
+            decision = _attach_fundamental_metadata(
+                decision, fundamental_payload, applied_multiplier
+            )
+            self._write_record(
+                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+            )
             return decision
 
         lock_status = evaluate_locks(
@@ -152,8 +160,12 @@ class ExecutionEngine:
                 reason=lock_status.reason,
                 status="blocked",
             )
-            decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
-            self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
+            decision = _attach_fundamental_metadata(
+                decision, fundamental_payload, applied_multiplier
+            )
+            self._write_record(
+                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+            )
             return decision
 
         if intent.side == IntentSide.FLAT and self.position_state == PositionState.FLAT:
@@ -165,8 +177,12 @@ class ExecutionEngine:
                 reason="already_flat",
                 status="noop",
             )
-            decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
-            self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
+            decision = _attach_fundamental_metadata(
+                decision, fundamental_payload, applied_multiplier
+            )
+            self._write_record(
+                intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+            )
             return decision
 
         order_intent = intent
@@ -187,7 +203,9 @@ class ExecutionEngine:
             status=order_result.status,
         )
         decision = _attach_fundamental_metadata(decision, fundamental_payload, applied_multiplier)
-        self._write_record(intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn())
+        self._write_record(
+            intent, decision, data_snapshot_hash, feature_snapshot_hash, strategy_id, now_fn()
+        )
         return decision
 
     def _submit_order(self, intent: OrderIntent) -> OrderResult:
@@ -252,6 +270,7 @@ def _write_decision_record(path: Path, record: dict) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True, ensure_ascii=False))
         handle.write("\n")
+
 
 def execute_paper_run(
     input_data: dict,

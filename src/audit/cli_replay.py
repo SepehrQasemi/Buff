@@ -6,7 +6,9 @@ from audit.replay import replay_verify
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Replay decision_records.jsonl and verify determinism.")
+    parser = argparse.ArgumentParser(
+        description="Replay decision_records.jsonl and verify determinism."
+    )
     parser.add_argument("--records", required=True, help="Path to decision_records.jsonl")
     args = parser.parse_args()
 

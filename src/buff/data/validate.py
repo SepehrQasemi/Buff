@@ -8,6 +8,7 @@ import pandas as pd
 
 from buff.data.store import ohlcv_parquet_path
 
+
 @dataclass
 class DataQuality:
     """Data quality metrics with examples for debugging."""

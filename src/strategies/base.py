@@ -11,8 +11,7 @@ class StrategyEngine(Protocol):
     description: str
     required_market_keys: set[str]
 
-    def is_applicable(self, *, market_state: dict, timeframe: str) -> tuple[bool, list[str]]:
-        ...
+    def is_applicable(self, *, market_state: dict, timeframe: str) -> tuple[bool, list[str]]: ...
 
 
 @dataclass(frozen=True)

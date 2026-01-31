@@ -1,4 +1,4 @@
-﻿"""Artifact writer tests for fundamental risk decisions."""
+"""Artifact writer tests for fundamental risk decisions."""
 
 from __future__ import annotations
 

@@ -56,4 +56,6 @@ def test_cli_metadata(tmp_path: Path) -> None:
     assert payload["columns"] == expected_columns
 
     git_sha = payload.get("git_sha")
-    assert git_sha is None or (len(git_sha) == 40 and all(ch in "0123456789abcdef" for ch in git_sha.lower()))
+    assert git_sha is None or (
+        len(git_sha) == 40 and all(ch in "0123456789abcdef" for ch in git_sha.lower())
+    )

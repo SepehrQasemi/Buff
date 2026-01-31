@@ -1,4 +1,4 @@
-﻿"""Integration tests for fundamental permission adapter."""
+"""Integration tests for fundamental permission adapter."""
 
 from __future__ import annotations
 

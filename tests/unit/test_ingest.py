@@ -40,14 +40,16 @@ class FakeExchange:
         batch = []
         for i in range(self.batch_size):
             ts_ms = since + (i * 3600000)  # 1h = 3600000ms
-            batch.append([
-                ts_ms,  # timestamp
-                100.0 + i,  # open
-                101.0 + i,  # high
-                99.0 + i,   # low
-                100.5 + i,  # close
-                1000.0,     # volume
-            ])
+            batch.append(
+                [
+                    ts_ms,  # timestamp
+                    100.0 + i,  # open
+                    101.0 + i,  # high
+                    99.0 + i,  # low
+                    100.5 + i,  # close
+                    1000.0,  # volume
+                ]
+            )
 
         return batch
 
@@ -80,6 +82,7 @@ class TestIngestPagination:
 
     def test_pagination_with_no_progress_stops(self) -> None:
         """If last_ts doesn't advance, pagination stops."""
+
         class FakeExchangeNoProgress(FakeExchange):
             def __init__(self):
                 super().__init__()
@@ -130,6 +133,7 @@ class TestIngestRetry:
 
     def test_all_retries_exhausted_raises(self) -> None:
         """All retries fail: raise exception."""
+
         class FakeExchangeAlwaysFails(FakeExchange):
             def fetch_ohlcv(self, symbol, timeframe, since=None, limit=None):
                 raise Exception("Network error")

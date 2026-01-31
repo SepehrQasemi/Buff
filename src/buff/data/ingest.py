@@ -111,9 +111,7 @@ def fetch_ohlcv_all(
         return pd.DataFrame(columns=["ts", "open", "high", "low", "close", "volume"])
 
     # Convert to DataFrame
-    df = pd.DataFrame(
-        all_ohlcv, columns=["ts_ms", "open", "high", "low", "close", "volume"]
-    )
+    df = pd.DataFrame(all_ohlcv, columns=["ts_ms", "open", "high", "low", "close", "volume"])
 
     # Convert timestamp from ms to UTC datetime
     df["ts"] = pd.to_datetime(df["ts_ms"], unit="ms", utc=True)

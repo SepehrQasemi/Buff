@@ -26,7 +26,7 @@ def test_valid_rule(tmp_path: Path) -> None:
 
     schema_path = tmp_path / "schema.yaml"
     schema_path.write_text(
-        '{\"required_keys\": [\"id\", \"name\", \"inputs\", \"formula\", \"parameters\", \"references\"]}',
+        '{"required_keys": ["id", "name", "inputs", "formula", "parameters", "references"]}',
         encoding="utf-8",
     )
 

@@ -91,9 +91,7 @@ def evaluate_risk(
     missing_fraction = _missing_fraction(series_list, config.missing_lookback)
 
     latest_atr_pct = float(atr_pct_series.iloc[-1]) if atr_pct_series is not None else None
-    latest_vol = (
-        float(realized_vol_series.iloc[-1]) if realized_vol_series is not None else None
-    )
+    latest_vol = float(realized_vol_series.iloc[-1]) if realized_vol_series is not None else None
 
     latest_metrics_valid = True
     for value in (latest_atr_pct, latest_vol):

@@ -20,14 +20,16 @@ def test_run_ingest_creates_parquet_and_report(tmp_path, monkeypatch):
     reports_dir = tmp_path / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
-    df = pd.DataFrame({
-        "ts": pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC"),
-        "open": [100.0 + i for i in range(10)],
-        "high": [101.0 + i for i in range(10)],
-        "low": [99.0 + i for i in range(10)],
-        "close": [100.5 + i for i in range(10)],
-        "volume": [1000.0] * 10,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC"),
+            "open": [100.0 + i for i in range(10)],
+            "high": [101.0 + i for i in range(10)],
+            "low": [99.0 + i for i in range(10)],
+            "close": [100.5 + i for i in range(10)],
+            "volume": [1000.0] * 10,
+        }
+    )
 
     filepath = ohlcv_parquet_path(data_dir, "BTC/USDT", "1m")
     save_parquet(df, str(filepath))
@@ -47,14 +49,16 @@ def test_run_ingest_creates_parquet_and_report(tmp_path, monkeypatch):
 
 def test_parquet_has_utc_timestamps(tmp_path):
     """Parquet file contains UTC-aware datetime column."""
-    df = pd.DataFrame({
-        "ts": pd.date_range("2023-01-01", periods=50, freq="1min", tz="UTC"),
-        "open": [100.0] * 50,
-        "high": [101.0] * 50,
-        "low": [99.0] * 50,
-        "close": [100.5] * 50,
-        "volume": [1000.0] * 50,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": pd.date_range("2023-01-01", periods=50, freq="1min", tz="UTC"),
+            "open": [100.0] * 50,
+            "high": [101.0] * 50,
+            "low": [99.0] * 50,
+            "close": [100.5] * 50,
+            "volume": [1000.0] * 50,
+        }
+    )
 
     parquet_path = tmp_path / "test.parquet"
     save_parquet(df, str(parquet_path))
@@ -68,14 +72,16 @@ def test_parquet_has_utc_timestamps(tmp_path):
 
 def test_report_json_is_valid(tmp_path):
     """Report JSON can be parsed and has correct types."""
-    df = pd.DataFrame({
-        "ts": pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC"),
-        "open": [100.0] * 10,
-        "high": [101.0] * 10,
-        "low": [99.0] * 10,
-        "close": [100.5] * 10,
-        "volume": [1000.0] * 10,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC"),
+            "open": [100.0] * 10,
+            "high": [101.0] * 10,
+            "low": [99.0] * 10,
+            "close": [100.5] * 10,
+            "volume": [1000.0] * 10,
+        }
+    )
 
     data_dir = tmp_path / "data" / "ohlcv"
     filepath = ohlcv_parquet_path(data_dir, "BTC/USDT", "1m")

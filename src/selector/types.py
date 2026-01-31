@@ -7,6 +7,7 @@ from typing import Literal, TypedDict
 try:
     from risk.types import RiskState
 except ImportError:  # pragma: no cover - local fallback
+
     class RiskState(str, Enum):
         GREEN = "GREEN"
         YELLOW = "YELLOW"

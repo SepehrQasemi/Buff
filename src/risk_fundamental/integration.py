@@ -1,4 +1,4 @@
-﻿"""Integration adapter for applying fundamental risk to execution decisions."""
+"""Integration adapter for applying fundamental risk to execution decisions."""
 
 from __future__ import annotations
 
@@ -34,7 +34,9 @@ def _parse_timestamp(value: str | None) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _snapshot_from_context(context_or_snapshot: FundamentalSnapshot | Mapping[str, Any]) -> FundamentalSnapshot:
+def _snapshot_from_context(
+    context_or_snapshot: FundamentalSnapshot | Mapping[str, Any],
+) -> FundamentalSnapshot:
     if isinstance(context_or_snapshot, FundamentalSnapshot):
         return context_or_snapshot
     context = dict(context_or_snapshot or {})
@@ -124,7 +126,9 @@ def apply_fundamental_permission(
 
     current_multiplier = getattr(decision, "size_multiplier", None)
     if current_multiplier is None:
-        current_multiplier = decision.get("size_multiplier", 1.0) if isinstance(decision, dict) else 1.0
+        current_multiplier = (
+            decision.get("size_multiplier", 1.0) if isinstance(decision, dict) else 1.0
+        )
 
     if fundamental.final_risk_state == "red" or fundamental.trade_permission is False:
         decision = _with_updates(

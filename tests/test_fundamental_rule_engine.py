@@ -1,4 +1,4 @@
-﻿"""Rule engine evaluation tests."""
+"""Rule engine evaluation tests."""
 
 from __future__ import annotations
 

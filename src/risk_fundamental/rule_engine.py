@@ -1,4 +1,4 @@
-﻿"""Safe rule evaluation engine for fundamental risk DSL."""
+"""Safe rule evaluation engine for fundamental risk DSL."""
 
 from __future__ import annotations
 

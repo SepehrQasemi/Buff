@@ -35,14 +35,16 @@ class TestDataQualityJSONSerializable:
         assert '"duplicates": 0' in json_str
 
     def test_compute_quality_output_no_numpy_types(self) -> None:
-        df = pd.DataFrame({
-            "ts": pd.date_range("2023-01-01", periods=100, freq="1min", tz="UTC"),
-            "open": [100.0] * 100,
-            "high": [101.0] * 100,
-            "low": [99.0] * 100,
-            "close": [100.5] * 100,
-            "volume": [1000.0] * 100,
-        })
+        df = pd.DataFrame(
+            {
+                "ts": pd.date_range("2023-01-01", periods=100, freq="1min", tz="UTC"),
+                "open": [100.0] * 100,
+                "high": [101.0] * 100,
+                "low": [99.0] * 100,
+                "close": [100.5] * 100,
+                "volume": [1000.0] * 100,
+            }
+        )
 
         quality = compute_quality(df, "1m")
 
@@ -55,14 +57,16 @@ class TestDataQualityJSONSerializable:
         assert json_str is not None
 
     def test_full_report_dict_serializable(self, tmp_path: Path) -> None:
-        df = pd.DataFrame({
-            "ts": pd.date_range("2023-01-01", periods=50, freq="1min", tz="UTC"),
-            "open": [100.0] * 50,
-            "high": [101.0] * 50,
-            "low": [99.0] * 50,
-            "close": [100.5] * 50,
-            "volume": [1000.0] * 50,
-        })
+        df = pd.DataFrame(
+            {
+                "ts": pd.date_range("2023-01-01", periods=50, freq="1min", tz="UTC"),
+                "open": [100.0] * 50,
+                "high": [101.0] * 50,
+                "low": [99.0] * 50,
+                "close": [100.5] * 50,
+                "volume": [1000.0] * 50,
+            }
+        )
 
         data_dir = tmp_path / "data" / "ohlcv"
         save_parquet(df, str(ohlcv_parquet_path(data_dir, "BTC/USDT", "1m")))

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 
 from decision_records.schema import SCHEMA_VERSION
-from reports.decision_report import load_decision_records, render_markdown, summarize_records, write_report
+from reports.decision_report import (
+    load_decision_records,
+    render_markdown,
+    summarize_records,
+    write_report,
+)
 
 
 def _record(run_id: str, ts: str, status: str, risk: str, reason: str | None = None) -> dict:

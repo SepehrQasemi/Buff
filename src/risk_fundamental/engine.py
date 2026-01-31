@@ -1,4 +1,4 @@
-﻿"""Fundamental risk engine orchestration."""
+"""Fundamental risk engine orchestration."""
 
 from __future__ import annotations
 
@@ -7,7 +7,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from .contracts import Evidence, FundamentalSnapshot, ensure_utc_timestamp, validate_snapshot_against_catalog
+from .contracts import (
+    Evidence,
+    FundamentalSnapshot,
+    ensure_utc_timestamp,
+    validate_snapshot_against_catalog,
+)
 from .rule_engine import evaluate_when
 from .schemas import load_rules
 
@@ -38,7 +43,9 @@ class FundamentalRiskEngine:
 
         snapshot_ts = ensure_utc_timestamp(snapshot.timestamp)
         inputs_catalog = self._rules["inputs_catalog"]
-        missing_inputs, missing_critical = validate_snapshot_against_catalog(snapshot, inputs_catalog)
+        missing_inputs, missing_critical = validate_snapshot_against_catalog(
+            snapshot, inputs_catalog
+        )
 
         states: dict[str, Any] = {
             "macro_risk_state": "unknown",
@@ -50,8 +57,10 @@ class FundamentalRiskEngine:
 
         for rule in self._rules["rules"]:
             domain = rule.get("domain")
-            inputs = snapshot.macro if domain == "macro" else (
-                snapshot.onchain if domain == "onchain" else snapshot.news
+            inputs = (
+                snapshot.macro
+                if domain == "macro"
+                else (snapshot.onchain if domain == "onchain" else snapshot.news)
             )
             matched, reason = evaluate_when(rule.get("when", {}), inputs)
             inputs_used = {key: inputs.get(key) for key in rule.get("inputs", [])}
@@ -72,7 +81,9 @@ class FundamentalRiskEngine:
 
         _apply_domain_defaults(states, matched_domains, snapshot)
 
-        final_state, trade_permission, size_multiplier = _aggregate(states, self._rules["aggregation"])
+        final_state, trade_permission, size_multiplier = _aggregate(
+            states, self._rules["aggregation"]
+        )
 
         if missing_inputs:
             if final_state == "green":

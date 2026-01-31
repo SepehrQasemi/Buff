@@ -13,14 +13,16 @@ pytestmark = pytest.mark.unit
 
 def test_resample_fixed_5m_correctness() -> None:
     dates = pd.date_range("2023-01-01", periods=10, freq="1min", tz="UTC")
-    df = pd.DataFrame({
-        "ts": dates,
-        "open": list(range(10)),
-        "high": [i + 1 for i in range(10)],
-        "low": [i - 1 for i in range(10)],
-        "close": [i + 0.5 for i in range(10)],
-        "volume": [1.0] * 10,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": dates,
+            "open": list(range(10)),
+            "high": [i + 1 for i in range(10)],
+            "low": [i - 1 for i in range(10)],
+            "close": [i + 0.5 for i in range(10)],
+            "volume": [1.0] * 10,
+        }
+    )
 
     res = resample_ohlcv(df, "5m").df
 
@@ -43,14 +45,16 @@ def test_resample_fixed_5m_correctness() -> None:
 
 def test_resample_fixed_1h_correctness() -> None:
     dates = pd.date_range("2023-01-01", periods=60, freq="1min", tz="UTC")
-    df = pd.DataFrame({
-        "ts": dates,
-        "open": list(range(60)),
-        "high": [i + 1 for i in range(60)],
-        "low": [i - 1 for i in range(60)],
-        "close": [i + 0.5 for i in range(60)],
-        "volume": [1.0] * 60,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": dates,
+            "open": list(range(60)),
+            "high": [i + 1 for i in range(60)],
+            "low": [i - 1 for i in range(60)],
+            "close": [i + 0.5 for i in range(60)],
+            "volume": [1.0] * 60,
+        }
+    )
 
     res = resample_ohlcv(df, "1h").df
 
@@ -65,14 +69,16 @@ def test_resample_fixed_1h_correctness() -> None:
 
 def test_resample_determinism() -> None:
     dates = pd.date_range("2023-01-01", periods=12, freq="1min", tz="UTC")
-    df = pd.DataFrame({
-        "ts": dates,
-        "open": list(range(12)),
-        "high": [i + 1 for i in range(12)],
-        "low": [i - 1 for i in range(12)],
-        "close": [i + 0.5 for i in range(12)],
-        "volume": [1.0] * 12,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": dates,
+            "open": list(range(12)),
+            "high": [i + 1 for i in range(12)],
+            "low": [i - 1 for i in range(12)],
+            "close": [i + 0.5 for i in range(12)],
+            "volume": [1.0] * 12,
+        }
+    )
 
     res1 = resample_ohlcv(df, "5m").df
     res2 = resample_ohlcv(df, "5m").df
@@ -89,14 +95,16 @@ def test_resample_calendar_1m_month_boundary() -> None:
             "2023-02-28 23:59:00+00:00",
         ]
     )
-    df = pd.DataFrame({
-        "ts": dates,
-        "open": [100.0, 101.0, 200.0, 201.0],
-        "high": [110.0, 111.0, 210.0, 211.0],
-        "low": [90.0, 91.0, 190.0, 191.0],
-        "close": [105.0, 106.0, 205.0, 206.0],
-        "volume": [1.0, 2.0, 3.0, 4.0],
-    })
+    df = pd.DataFrame(
+        {
+            "ts": dates,
+            "open": [100.0, 101.0, 200.0, 201.0],
+            "high": [110.0, 111.0, 210.0, 211.0],
+            "low": [90.0, 91.0, 190.0, 191.0],
+            "close": [105.0, 106.0, 205.0, 206.0],
+            "volume": [1.0, 2.0, 3.0, 4.0],
+        }
+    )
 
     res = resample_ohlcv(df, "1M").df
 
@@ -111,14 +119,16 @@ def test_resample_calendar_1m_month_boundary() -> None:
 
 def test_gap_propagation_to_5m(tmp_path) -> None:
     dates = pd.date_range("2023-01-01", periods=15, freq="1min", tz="UTC")
-    df = pd.DataFrame({
-        "ts": dates,
-        "open": list(range(15)),
-        "high": [i + 1 for i in range(15)],
-        "low": [i - 1 for i in range(15)],
-        "close": [i + 0.5 for i in range(15)],
-        "volume": [1.0] * 15,
-    })
+    df = pd.DataFrame(
+        {
+            "ts": dates,
+            "open": list(range(15)),
+            "high": [i + 1 for i in range(15)],
+            "low": [i - 1 for i in range(15)],
+            "close": [i + 0.5 for i in range(15)],
+            "volume": [1.0] * 15,
+        }
+    )
 
     df = df[(df["ts"] < dates[5]) | (df["ts"] >= dates[10])]
     res_5m = resample_ohlcv(df, "5m").df

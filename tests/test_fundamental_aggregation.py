@@ -1,4 +1,4 @@
-﻿"""Aggregation behavior tests for fundamental risk."""
+"""Aggregation behavior tests for fundamental risk."""
 
 from __future__ import annotations
 
