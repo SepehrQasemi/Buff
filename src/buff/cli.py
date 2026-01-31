@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import sys
 from typing import Any
@@ -13,7 +14,6 @@ import pandas as pd
 from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
-from execution.clock import parse_utc
 from execution.idempotency_inspect import (
     IdempotencyInspectError,
     fetch_all_records,
@@ -43,6 +43,14 @@ def _read_input(path: Path, input_format: str) -> pd.DataFrame:
     if input_format == "parquet":
         return pd.read_parquet(path, engine="pyarrow")
     raise ValueError("Input format must be csv or parquet")
+
+
+def _parse_utc(value: str) -> datetime:
+    ts = value.replace("Z", "+00:00")
+    parsed = datetime.fromisoformat(ts)
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _normalize_timestamp_column(df: pd.DataFrame) -> pd.DataFrame:
@@ -180,7 +188,7 @@ def _cmd_idempotency_list(path: Path, args: argparse.Namespace) -> None:
     as_of = None
     if args.as_of_utc:
         try:
-            as_of = parse_utc(args.as_of_utc)
+            as_of = _parse_utc(args.as_of_utc)
         except ValueError as exc:
             print(f"error: invalid as-of-utc: {args.as_of_utc}", file=sys.stderr)
             raise SystemExit(1) from exc
@@ -191,7 +199,7 @@ def _cmd_idempotency_list(path: Path, args: argparse.Namespace) -> None:
             reserved_at = record.get("reserved_at_utc")
             age = None
             if as_of is not None and isinstance(reserved_at, str) and reserved_at:
-                age = int((as_of - parse_utc(reserved_at)).total_seconds())
+                age = int((as_of - _parse_utc(reserved_at)).total_seconds())
             payload.append(
                 {
                     "key": key,
@@ -211,7 +219,7 @@ def _cmd_idempotency_list(path: Path, args: argparse.Namespace) -> None:
         reserved_at = record.get("reserved_at_utc") or ""
         age = "NA"
         if as_of is not None and isinstance(reserved_at, str) and reserved_at:
-            age = str(int((as_of - parse_utc(reserved_at)).total_seconds()))
+            age = str(int((as_of - _parse_utc(reserved_at)).total_seconds()))
         print(f"{display_key}\t{status}\t{reserved_at}\t{age}")
 
 
