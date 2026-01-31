@@ -1,24 +1,30 @@
-# Contributing to Buff
+# Contributing
 
-Thanks for contributing! Keep changes focused and deterministic.
+## Quick checks
 
-## Setup
-- Python 3.10+
-- Install dev dependencies:
-  - `python -m pip install -e ".[dev]"`
+```bash
+ruff format .
+ruff check .
+pytest -q
+```
 
-## Quality gates
-- Run lint: `ruff check .`
-- Run tests: `pytest -q`
+## Red-lines (non-negotiable)
 
-## Branch naming
-- Use: `feat/<topic>`, `fix/<topic>`, `chore/<topic>`, `docs/<topic>`
+- No price prediction
+- No buy/sell signals
+- No strategy invention or optimization
+- Deterministic + auditable behavior must be preserved
+- Fail-closed behavior must be preserved (especially in risk/execution/control)
 
-## Pull requests
-- Keep PRs small and scoped.
-- Describe impact and risks.
-- Ensure CI passes and docs updated if needed.
+## Adding indicators or rules (deterministic)
 
-## Determinism & safety
-- No network calls in tests.
-- No non-deterministic output (time, randomness) unless mocked/frozen.
+- Prefer pure functions with explicit inputs/outputs.
+- Avoid network calls or time-based randomness in indicator logic.
+- Ensure outputs are reproducible for the same inputs.
+- Document parameters and default values.
+- Add or update tests to cover edge cases and fail-closed behavior.
+
+## Safety reviews
+
+- Changes under `src/risk` or `src/execution` require a short safety impact note in the PR.
+- Do not relax validation or allow silent fallbacks.
