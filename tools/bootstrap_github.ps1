@@ -53,7 +53,7 @@ function Get-AllIssues {
     $batch = gh api "/repos/$Owner/$Repo/issues?state=all&per_page=100&page=$page" | ConvertFrom-Json
     if ($null -eq $batch) { break }
     if ($batch -isnot [System.Collections.IEnumerable] -or $batch -is [string]) { $batch = @($batch) }
-    $batch = $batch | Where-Object { -not $_.pull_request }
+    $batch = $batch | Where-Object { -not $_.PSObject.Properties.Match('pull_request') }
     if ($batch.Count -eq 0) { break }
     $issues += $batch
     $page++
