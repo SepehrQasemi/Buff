@@ -1,0 +1,161 @@
+﻿schema_version: "1"
+feature_catalog:
+  - name: realized_vol_20
+    aliases:
+      - realized_vol
+    description: Rolling std dev of log returns over a 20-period window.
+regimes:
+  - regime_id: RISK_OFF
+    description: Extreme volatility or missing features; trading disabled.
+    priority: 100
+    conditions:
+      any:
+        - gte: { realized_vol_20: 0.05 }
+        - gte: { atr_pct: 0.03 }
+    allowed_strategy_families:
+      - do_not_trade
+    forbidden_strategy_families:
+      - trend_following
+      - breakout
+      - mean_reversion
+      - market_making
+    risk_modifiers:
+      max_position_size_scale: 0.0
+      trade_cooldown_minutes: 60
+    rationale:
+      - Extreme volatility triggers a no-trade posture.
+      - Fail-closed when required inputs are missing.
+  - regime_id: HIGH_VOL_TREND
+    description: Trending market with elevated volatility.
+    priority: 90
+    conditions:
+      all:
+        - gte: { adx_14: 25 }
+        - any:
+            - gte: { realized_vol_20: 0.03 }
+            - gte: { atr_pct: 0.02 }
+    allowed_strategy_families:
+      - trend_following
+      - breakout
+    forbidden_strategy_families:
+      - mean_reversion
+      - market_making
+      - do_not_trade
+    risk_modifiers:
+      max_position_size_scale: 0.6
+      trade_cooldown_minutes: 15
+    rationale:
+      - Trend confirmed by ADX(14) >= 25.
+      - High volatility requires smaller sizing.
+  - regime_id: LOW_VOL_TREND
+    description: Trending market with subdued volatility.
+    priority: 80
+    conditions:
+      all:
+        - gte: { adx_14: 25 }
+        - lte: { atr_pct: 0.01 }
+        - lte: { realized_vol_20: 0.015 }
+    allowed_strategy_families:
+      - trend_following
+      - breakout
+    forbidden_strategy_families:
+      - mean_reversion
+      - market_making
+      - do_not_trade
+    risk_modifiers:
+      max_position_size_scale: 1.0
+      trade_cooldown_minutes: 5
+    rationale:
+      - Trend confirmed by ADX(14) >= 25.
+      - Low volatility allows normal sizing.
+  - regime_id: HIGH_VOL_RANGE
+    description: Range-bound market with elevated volatility.
+    priority: 70
+    conditions:
+      all:
+        - lte: { adx_14: 20 }
+        - any:
+            - gte: { realized_vol_20: 0.03 }
+            - gte: { atr_pct: 0.02 }
+    allowed_strategy_families:
+      - mean_reversion
+    forbidden_strategy_families:
+      - trend_following
+      - breakout
+      - market_making
+      - do_not_trade
+    risk_modifiers:
+      max_position_size_scale: 0.4
+      trade_cooldown_minutes: 20
+    rationale:
+      - Range regime indicated by ADX(14) <= 20.
+      - High volatility favors reduced exposure.
+  - regime_id: LOW_VOL_RANGE
+    description: Range-bound market with low volatility.
+    priority: 60
+    conditions:
+      all:
+        - lte: { adx_14: 20 }
+        - lte: { atr_pct: 0.01 }
+        - lte: { realized_vol_20: 0.015 }
+        - not:
+            any:
+              - lte: { rsi_14: 30 }
+              - gte: { rsi_14: 70 }
+    allowed_strategy_families:
+      - mean_reversion
+      - market_making
+    forbidden_strategy_families:
+      - trend_following
+      - breakout
+      - do_not_trade
+    risk_modifiers:
+      max_position_size_scale: 0.8
+      trade_cooldown_minutes: 5
+    rationale:
+      - Range regime indicated by ADX(14) <= 20.
+      - RSI avoids extreme mean-reversion triggers.
+  - regime_id: MEAN_REVERSION_BIAS
+    description: Range with RSI extremes favoring mean reversion setups.
+    priority: 50
+    conditions:
+      all:
+        - lte: { adx_14: 20 }
+        - lte: { atr_pct: 0.015 }
+        - lte: { realized_vol_20: 0.02 }
+        - any:
+            - lte: { rsi_14: 30 }
+            - gte: { rsi_14: 70 }
+        - not:
+            abs_gt: { rsi_slope_14_5: 2.0 }
+        - not:
+            abs_gt: { ema_spread_20_50: 0.5 }
+        - gt: { vwap_typical_daily: 0 }
+        - gt: { bb_upper_20_2: 0 }
+        - gt: { bb_lower_20_2: 0 }
+    allowed_strategy_families:
+      - mean_reversion
+    forbidden_strategy_families:
+      - trend_following
+      - breakout
+      - market_making
+      - do_not_trade
+    risk_modifiers:
+      max_position_size_scale: 0.7
+      trade_cooldown_minutes: 10
+    rationale:
+      - RSI extremes with muted slope indicate overshoot.
+      - VWAP/Bollinger levels must be available.
+  - regime_id: NEUTRAL
+    description: No specific regime match; default permissions.
+    priority: 0
+    allowed_strategy_families:
+      - trend_following
+      - breakout
+      - mean_reversion
+      - market_making
+    forbidden_strategy_families:
+      - do_not_trade
+    risk_modifiers:
+      max_position_size_scale: 1.0
+      trade_cooldown_minutes: 0

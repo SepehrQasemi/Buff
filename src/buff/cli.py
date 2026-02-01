@@ -9,11 +9,14 @@ from pathlib import Path
 import sys
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
+from buff.data.contracts import validate_ohlcv
 from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
+from buff.regimes import evaluate_regime, load_regime_config
 from audit.bundle import BundleError, build_bundle
 from audit.run import AuditRunError, run_audit
 from audit.verify import verify_bundle
@@ -66,6 +69,62 @@ def _normalize_timestamp_column(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _detect_format(path: Path, explicit: str) -> str:
+    if explicit != "auto":
+        return explicit
+    return _detect_input_format(path)
+
+
+def _compute_realized_vol(close: pd.Series, window: int) -> pd.Series:
+    close = close.astype(float)
+    close = close.mask(close <= 0)
+    log_returns = np.log(close).diff()
+    return log_returns.rolling(window=window, min_periods=window).std(ddof=0)
+
+
+def _build_regime_frame(df: pd.DataFrame) -> pd.DataFrame:
+    normalized = _normalize_timestamp_column(df)
+    ohlcv_cols = {"open", "high", "low", "close", "volume"}
+    if not ohlcv_cols.issubset(normalized.columns):
+        return normalized
+
+    ohlcv = validate_ohlcv(normalized)
+    features = run_features(normalized)
+    merged = ohlcv.copy()
+    for col in features.columns:
+        merged[col] = features[col]
+
+    if "atr_pct" not in merged.columns and "atr_14" in merged.columns:
+        merged["atr_pct"] = merged["atr_14"] / merged["close"]
+    if "realized_vol_20" not in merged.columns:
+        merged["realized_vol_20"] = _compute_realized_vol(merged["close"], 20)
+    return merged
+
+
+def _select_regime_row(df: pd.DataFrame, at: str | None) -> pd.Series:
+    if at is None or at.lower() == "last":
+        return df.iloc[-1]
+
+    target = _parse_utc(at)
+    if isinstance(df.index, pd.DatetimeIndex):
+        matches = df.index == target
+        if not matches.any():
+            raise ValueError("timestamp_not_found")
+        return df.loc[matches].iloc[0]
+
+    if "timestamp" in df.columns:
+        series = pd.to_datetime(df["timestamp"], errors="coerce", utc=True)
+    elif "ts" in df.columns:
+        series = pd.to_datetime(df["ts"], errors="coerce", utc=True)
+    else:
+        raise ValueError("timestamp_column_missing")
+
+    matches = series == target
+    if not matches.any():
+        raise ValueError("timestamp_not_found")
+    return df.loc[matches].iloc[0]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="buff")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -93,6 +152,25 @@ def main() -> None:
     idempo_export = idempotency_sub.add_parser("export", help="Export idempotency records")
     idempo_export.add_argument("--db-path", dest="db_path", type=str, default=None)
     idempo_export.add_argument("--out", dest="out_path", type=str, default=None)
+
+    regimes_parser = subparsers.add_parser("regimes", help="Regime classification tools")
+    regimes_sub = regimes_parser.add_subparsers(dest="regime_cmd", required=True)
+    regimes_classify = regimes_sub.add_parser("classify", help="Classify market regime")
+    regimes_classify.add_argument("--input", dest="input_path", required=True)
+    regimes_classify.add_argument("--at", dest="at", default="last")
+    regimes_classify.add_argument(
+        "--schema",
+        dest="schema_path",
+        default="knowledge/regimes.yaml",
+        help="Path to regimes.yaml",
+    )
+    regimes_classify.add_argument(
+        "--format",
+        dest="input_format",
+        choices=["auto", "csv", "parquet"],
+        default="auto",
+    )
+    regimes_classify.add_argument("--json", dest="json_out", action="store_true")
 
     audit_parser = subparsers.add_parser("audit", help="Audit tools")
     audit_sub = audit_parser.add_subparsers(dest="audit_cmd", required=True)
@@ -122,6 +200,9 @@ def main() -> None:
     audit_run.add_argument("--json", dest="json_out", action="store_true")
 
     args = parser.parse_args()
+    if args.command == "regimes":
+        _run_regimes(args)
+        return
     if args.command == "idempotency":
         _run_idempotency(args)
         return
@@ -304,6 +385,46 @@ def _cmd_idempotency_export(path: Path, out_path: str | None) -> None:
         out.write_text(payload, encoding="utf-8")
         return
     print(payload, end="")
+
+
+def _run_regimes(args: argparse.Namespace) -> None:
+    if args.regime_cmd == "classify":
+        _cmd_regimes_classify(args)
+        return
+    raise SystemExit(2)
+
+
+def _cmd_regimes_classify(args: argparse.Namespace) -> None:
+    input_path = Path(args.input_path)
+    input_format = _detect_format(input_path, args.input_format)
+    df = _read_input(input_path, input_format)
+    frame = _build_regime_frame(df)
+    row = _select_regime_row(frame, args.at)
+
+    config = load_regime_config(Path(args.schema_path))
+    decision = evaluate_regime(row.to_dict(), config)
+
+    if args.json_out:
+        print(
+            json.dumps(
+                {
+                    "regime_id": decision.regime_id,
+                    "allowed_strategy_families": list(decision.allowed_strategy_families),
+                    "forbidden_strategy_families": list(decision.forbidden_strategy_families),
+                    "risk_modifiers": decision.risk_modifiers,
+                    "matched_conditions_summary": decision.matched_conditions_summary,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=False,
+            )
+        )
+        return
+
+    print(f"regime_id: {decision.regime_id}")
+    print(f"allowed_strategy_families: {','.join(decision.allowed_strategy_families)}")
+    print(f"forbidden_strategy_families: {','.join(decision.forbidden_strategy_families)}")
+    print(f"matched_conditions_summary: {decision.matched_conditions_summary}")
 
 
 def _run_audit(args: argparse.Namespace) -> None:
