@@ -1,7 +1,7 @@
 ﻿# M7 Verification Report
 
 Branch: m6-invariant-guardrails
-Commit: dec5b6e6f63774c5e3c0f1e9b4937a9a3a6d4b1f
+Commit: e0d4ec7e6f6817512f55fb2ace8f2f8d0640cb5c
 Date: 2026-02-01
 
 ## Command Outputs
@@ -63,7 +63,7 @@ From https://github.com/Buff-Trading-AI/Buff
   m6-idempotency-keying                       898f871 [origin/m6-idempotency-keying: gone] M6: add idempotency keying and dedupe protection
   m6-idempotency-persistence                  c72e522 [origin/m6-idempotency-persistence: gone] M6: add persistent idempotency store (sqlite)
   m6-idempotency-recovery                     527cde4 [origin/m6-idempotency-recovery: gone] M6: add inflight recovery policy
-* m6-invariant-guardrails                     dec5b6e [origin/m6-invariant-guardrails: gone] M7: replay/repro + migration + verification report
+* m6-invariant-guardrails                     e0d4ec7 [origin/m6-invariant-guardrails: gone] Update verification report
   m6-order-intent-model                       7969c47 [origin/m6-order-intent-model: gone] M6: add paper order intent model
   main                                        fdaf08e [origin/main: behind 1] M6: End-to-end audit run orchestration (paper run → bundle → verify) (#66)
   pr/m4-risk-gate-hardening                   2e05f90 [origin/pr/m4-risk-gate-hardening: gone] tests: harden safety invariants
@@ -117,7 +117,7 @@ A	tests/test_snapshot_roundtrip.py
  README.md                                          |  23 +-
  docs/DECISION_RECORD.md                            | 116 ++++++
  docs/REPLAY.md                                     |  81 +++++
- reports/m7_verification_report.md                  |  93 +++++
+ reports/m7_verification_report.md                  | 187 ++++++++++
  src/audit/__init__.py                              |  23 +-
  src/audit/canonical_json.py                        |  64 +++
  src/audit/cli_make_snapshot.py                     |  26 ++
@@ -129,7 +129,7 @@ A	tests/test_snapshot_roundtrip.py
  src/audit/record_decision.py                       |   7 +
  src/audit/replay.py                                | 390 +++++++++++++++++++++
  src/audit/self_check.py                            |  52 +++
- src/audit/snapshot.py                              | 147 +++++++
+ src/audit/snapshot.py                              | 147 ++++++++
  tests/fixtures/decision_payload.json               |  38 ++
  .../legacy_computed_missing_config.json            |  30 ++
  .../legacy_computed_with_snapshot.json             |  32 ++
@@ -149,7 +149,7 @@ A	tests/test_snapshot_roundtrip.py
  tests/test_replay_strictness.py                    | 176 +++++++++
  tests/test_self_check.py                           |  16 +
  tests/test_snapshot_roundtrip.py                   |  47 +++
- 36 files changed, 3126 insertions(+), 26 deletions(-)
+ 36 files changed, 3220 insertions(+), 26 deletions(-)
 ```
 
 ### ruff check .
@@ -174,7 +174,7 @@ tests/test_audit_verify.py::test_tamper_zip_checksums
     return self._open_to_write(zinfo, force_zip64=force_zip64)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-307 passed, 1 skipped, 2 warnings in 24.22s
+307 passed, 1 skipped, 2 warnings in 22.16s
 ```
 
 ## Consistency Checks
