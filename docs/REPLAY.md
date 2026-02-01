@@ -16,9 +16,12 @@ Snapshots capture the minimal inputs required to replay a decision:
 - config: dict | null (includes risk_config used to evaluate risk_inputs)
 - selector_inputs: dict | null (inputs used by selector)
 - snapshot_hash: str (SHA256 of canonical JSON with snapshot_hash empty)
+  <!-- NOTE (underspecified): Whether digest is computed with snapshot_hash omitted or set to empty string is not specified. -->
 
 The snapshot artifact path is content-addressed as:
 `artifacts/snapshots/snapshot_<hash>.json`
+
+<!-- NOTE (underspecified): Format of <hash> (e.g. hex only, with/without "sha256:" prefix) is not specified. -->
 
 ## Replay equivalence
 
@@ -54,6 +57,8 @@ Create a snapshot:
 python -m src.audit.make_snapshot --input tests/fixtures/snapshot_payload.json --out artifacts/snapshots
 ```
 
+<!-- NOTE (underspecified): Whether --out is a directory or a full file path is not specified. -->
+
 The command prints the created snapshot path (single line) to stdout.
 
 Replay a decision:
@@ -73,9 +78,11 @@ Expected outputs:
 Replay records are written to:
 `artifacts/replays/replay_<decision_id>.json` unless `--out` is provided.
 
+<!-- NOTE (underspecified): Whether replay --out is a file path or a directory is not specified. -->
+
 Use `--strict-full` to require full payload equality. Use `--json <path>` to write diffs
 to a file on mismatch.
 
-If `snapshot.risk_inputs` are provided, replay requires
-`inputs.config.risk_config` and/or `snapshot.config.risk_config`.
-If both are present they must be canonically identical.
+When `snapshot.risk_inputs` is present, replay requires at least one of
+`inputs.config.risk_config` or `snapshot.config.risk_config`. When both are present, they must
+be canonically identical.
