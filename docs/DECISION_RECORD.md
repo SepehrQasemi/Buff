@@ -48,21 +48,16 @@ All decision record JSON must be serialized using the canonical encoder in `src/
 - UTF-8 encoding.
 - Sorted keys for all dicts.
 - No whitespace outside string literals.
-- Stable float formatting: floats are quantized to 8 decimal places (ROUND_HALF_UP) and emitted
-  using fixed-point notation.
+- Stable float formatting: floats quantized to 8 dp (ROUND_HALF_UP), fixed-point; ints remain integers.
 - Non-finite floats/decimals (NaN/Infinity) are rejected with a ValueError that includes the JSON path.
-- Numeric policy: ints remain integers; floats are always emitted with 8 decimal places.
 - Lists preserve order (no re-sorting).
 
 ## Hashing rules
 
 - `inputs_hash` = SHA256 of canonical JSON bytes of the `inputs` section.
-- `core_hash` = SHA256 of canonical JSON bytes of the core payload:
-  - decision_id, symbol, timeframe
-  - artifacts.snapshot_ref, artifacts.features_ref
-  - inputs
-  - selection
-  - outcome
+- `core_hash` = SHA256 of the canonical JSON bytes of the core payload object (the subset
+  object: decision_id, symbol, timeframe, artifacts.snapshot_ref, artifacts.features_ref,
+  inputs, selection, outcome).
 - `content_hash` = SHA256 of canonical JSON bytes of the full payload:
   - decision_id, ts_utc, symbol, timeframe
   - code_version (including dirty)
@@ -81,9 +76,11 @@ This avoids self-referential hashing and ensures stable digests.
 Notes:
 - Use `selection.selected=false`, `selection.strategy_id=null`, and `selection.status="no_selection"`
   when no strategy is selected.
-- `reasons` and `rules_fired` are sorted lexicographically before hashing/serialization.
+- For decision records, `reasons` and `rules_fired` must be sorted lexicographically by the
+  producer before canonical serialization; the canonical encoder does not re-sort lists.
 - If risk evaluation is replayed from `snapshot.risk_inputs`, the corresponding
   `inputs.config.risk_config` must be present and is included in the core hash.
+  <!-- NOTE (underspecified): "snapshot" here refers to the snapshot artifact used as replay input; exact wording may be ambiguous. -->
 
 ## Risk replay semantics
 
@@ -104,6 +101,8 @@ Do not infer business logic. Only map fields structurally:
 
 If the legacy record contains no explicit blocked indicator, do not set `status="blocked"`.
 
+<!-- NOTE (underspecified): Treatment of strategy_id="" (empty string) for migration is not defined. -->
+
 ### CLI migration helper
 
 ```
@@ -113,4 +112,4 @@ python -m src.audit.migrate_records --in tests/fixtures/legacy_records --out art
 Migration rules (structural only):
 - Add `selection.selected` + `selection.status` based on presence of `selection.strategy_id`.
 - Add `inputs.risk_mode` ("computed" if snapshot risk_inputs exist, else "fact").
-- Recompute hashes using the current contract.
+- Recompute hashes per the hashing rules in this document.
