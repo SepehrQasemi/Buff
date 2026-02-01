@@ -66,7 +66,7 @@ def test_parquet_has_utc_timestamps(tmp_path):
     loaded = load_parquet(str(parquet_path))
 
     assert "ts" in loaded.columns
-    assert pd.api.types.is_datetime64tz_dtype(loaded["ts"])
+    assert isinstance(loaded["ts"].dtype, pd.DatetimeTZDtype)
     assert loaded["ts"].is_monotonic_increasing
 
 

@@ -107,7 +107,13 @@ def test_strict_ordering_failures(tmp_path: Path) -> None:
 
 def test_tamper_zip_checksums(tmp_path: Path) -> None:
     bundle_path = _setup_bundle(tmp_path, "zip")
-    with zipfile.ZipFile(bundle_path, "a") as zf:
-        zf.writestr("checksums.txt", "deadbeef  metadata.json\n")
+    tampered_zip = tmp_path / "bundle_tampered.zip"
+    with zipfile.ZipFile(bundle_path, "r") as src, zipfile.ZipFile(tampered_zip, "w") as dst:
+        for info in src.infolist():
+            data = src.read(info.filename)
+            if info.filename == "checksums.txt":
+                data = b"deadbeef  metadata.json\n"
+            dst.writestr(info, data)
+    bundle_path = tampered_zip
     report = verify_bundle(path=bundle_path, fmt="zip")
     assert not report["ok"]
