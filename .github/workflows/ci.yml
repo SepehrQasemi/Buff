@@ -1,6 +1,5 @@
-﻿name: ci
+name: ci
 permissions:
-  statuses: write
   contents: read
 on:
   push:
@@ -19,50 +18,22 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
-      - name: Install dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install -U pip
-
-          install_deps() {
-            if [ -f requirements-dev.txt ]; then
-              python -m pip install -r requirements-dev.txt
-              return 0
-            fi
-            if [ -f requirements.txt ]; then
-              python -m pip install -r requirements.txt
-              python -m pip install ruff pytest
-              return 0
-            fi
-            python -m pip install ruff pytest
-            return 0
-          }
-
-          if [ -f pyproject.toml ]; then
-            python -m pip install -e ".[dev]" || true
-            if python -m ruff --version >/dev/null 2>&1; then
-              exit 0
-            fi
-            install_deps
-            exit 0
-          fi
-
-          install_deps
+      - name: Upgrade pip
+        run: python -m pip install -U pip
+      - name: Install dev dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Format check
+        if: success()
+        run: ruff format --check .
       - name: Lint
-        run: |
-          ruff format --check .
-          ruff check .
-      - name: Install package
-        run: python -m pip install -e .
+        if: success()
+        run: ruff check .
       - name: Test
+        if: success()
         run: pytest -q
-      - name: Publish legacy status
-        env:
-          STATUS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - name: Diagnostics (on failure)
+        if: failure()
         run: |
-          curl -sS -X POST \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
-            -d "{\"state\":\"success\",\"context\":\"ci\",\"description\":\"ci passed\",\"target_url\":\"${STATUS_URL}\"}"
+          python --version
+          python -m pip --version
+          python -m pip freeze
