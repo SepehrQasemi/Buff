@@ -8,7 +8,6 @@ from audit.bundle import BundleError, build_bundle
 from audit.verify import verify_bundle
 from execution.idempotency_sqlite import default_idempotency_db_path
 from paper.paper_runner import PaperRunConfig, run_paper_smoke
-import audit.decision_records as decision_records
 
 
 class AuditRunError(RuntimeError):
@@ -59,15 +58,10 @@ def run_audit(
     run_id = _run_id(seed)
     config = PaperRunConfig(run_id=run_id, out_dir=str(run_dir))
 
-    fixed_ts = as_of_utc or "1970-01-01T00:00:00Z"
-    original_ts = decision_records._utc_timestamp
-    decision_records._utc_timestamp = lambda: fixed_ts
     try:
         summary = run_paper_smoke(config)
     except RuntimeError as exc:
         raise AuditRunError("paper_run_failed") from exc
-    finally:
-        decision_records._utc_timestamp = original_ts
 
     records_path = Path(summary["records_path"])
     idempotency_db = db_path or default_idempotency_db_path()

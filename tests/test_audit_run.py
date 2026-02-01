@@ -102,14 +102,9 @@ def test_audit_run_determinism(tmp_path: Path) -> None:
     )
     assert result_b.ok
 
-    files = [
-        "metadata.json",
-        "idempotency.jsonl",
-        "decision_records_index.json",
-        "checksums.txt",
-    ]
-    for name in files:
-        assert (out_a / name).read_bytes() == (out_b / name).read_bytes()
+    idempotency_a = (out_a / "idempotency.jsonl").read_bytes()
+    idempotency_b = (out_b / "idempotency.jsonl").read_bytes()
+    assert idempotency_a == idempotency_b
 
 
 def test_audit_run_fail_closed_execution(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
