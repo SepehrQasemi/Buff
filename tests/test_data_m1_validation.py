@@ -65,6 +65,14 @@ def test_validate_fails_on_zero_volume() -> None:
     start_ms = ALIGNED_START_MS
     df = _make_df(start_ms, 3)
     df.loc[1, "volume"] = 0.0
+    stats = validate_1m(df, "BTCUSDT", start_ms, start_ms + 3 * MS)
+    assert stats["zero_volume_rows"] == 1
+
+
+def test_validate_fails_on_negative_volume() -> None:
+    start_ms = ALIGNED_START_MS
+    df = _make_df(start_ms, 3)
+    df.loc[1, "volume"] = -1.0
     with pytest.raises(DataValidationError):
         validate_1m(df, "BTCUSDT", start_ms, start_ms + 3 * MS)
 
