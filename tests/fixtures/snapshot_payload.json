@@ -1,0 +1,44 @@
+{
+  "snapshot_version": 1,
+  "decision_id": "dec-001",
+  "symbol": "BTCUSDT",
+  "timeframe": "1m",
+  "market_data": [
+    {
+      "ts": "2026-02-01T00:00:00Z",
+      "open": 100.0,
+      "high": 101.0,
+      "low": 99.5,
+      "close": 100.5,
+      "volume": 10.0
+    }
+  ],
+  "features": {
+    "trend_state": "up",
+    "volatility_regime": "low",
+    "structure_state": "breakout"
+  },
+  "risk_inputs": {
+    "symbol": "BTCUSDT",
+    "timeframe": "1m",
+    "as_of": "2026-02-01T00:00:00Z",
+    "atr_pct": 0.005,
+    "realized_vol": 0.005,
+    "missing_fraction": 0.0,
+    "timestamps_valid": true,
+    "latest_metrics_valid": true,
+    "invalid_index": false,
+    "invalid_close": false
+  },
+  "config": {
+    "risk_config": {
+      "missing_red": 0.2,
+      "atr_yellow": 0.01,
+      "atr_red": 0.02,
+      "rvol_yellow": 0.01,
+      "rvol_red": 0.02,
+      "no_metrics_state": "YELLOW"
+    }
+  },
+  "selector_inputs": {"selector_version": 1}
+}

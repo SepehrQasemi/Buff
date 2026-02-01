@@ -1,0 +1,32 @@
+{
+  "decision_id": "legacy-2",
+  "ts_utc": "2026-02-01T00:00:00Z",
+  "symbol": "BTCUSDT",
+  "timeframe": "1m",
+  "code_version": {"git_commit": "deadbeef", "dirty": false},
+  "run_context": {"seed": 1, "python": "3.11.9", "platform": "linux"},
+  "artifacts": {"snapshot_ref": null, "features_ref": null},
+  "inputs": {
+    "market_features": {"trend_state": "up"},
+    "risk_state": "GREEN",
+    "selector_inputs": {},
+    "config": {"risk_config": {"missing_red": 0.2}}
+  },
+  "selection": {"strategy_id": "TREND_FOLLOW", "score": null, "reasons": [], "rules_fired": []},
+  "outcome": {"decision": "SELECT", "allowed": true, "notes": null},
+  "snapshot": {
+    "risk_inputs": {
+      "symbol": "BTCUSDT",
+      "timeframe": "1m",
+      "as_of": "2026-02-01T00:00:00Z",
+      "atr_pct": 0.005,
+      "realized_vol": 0.004,
+      "missing_fraction": 0.0,
+      "timestamps_valid": true,
+      "latest_metrics_valid": true,
+      "invalid_index": false,
+      "invalid_close": false
+    },
+    "config": {"risk_config": {"missing_red": 0.2}}
+  }
+}
