@@ -1,0 +1,16 @@
+{
+  "decision_id": "legacy-1",
+  "ts_utc": "2026-02-01T00:00:00Z",
+  "symbol": "BTCUSDT",
+  "timeframe": "1m",
+  "code_version": {"git_commit": "deadbeef", "dirty": false},
+  "run_context": {"seed": 1, "python": "3.11.9", "platform": "linux"},
+  "artifacts": {"snapshot_ref": null, "features_ref": null},
+  "inputs": {
+    "market_features": {"trend_state": "up"},
+    "risk_state": "GREEN",
+    "selector_inputs": {}
+  },
+  "selection": {"strategy_id": null, "score": null, "reasons": [], "rules_fired": []},
+  "outcome": {"decision": "SKIP", "allowed": true, "notes": null}
+}

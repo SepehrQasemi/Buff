@@ -66,6 +66,28 @@ risk_status, execution_status, reason (for BLOCKED/ERROR), inputs_digest, artifa
 run_id is sanitized to `[A-Za-z0-9_-]` and records are fail-closed if validation fails.
 Control state loading defaults to DISARMED if the state file is missing or corrupt.
 
+## Replay & Reproducibility (M7)
+
+Deterministic decision records and snapshots enable full replay in isolation from mutable state.
+
+Commands:
+
+```bash
+python -m src.audit.record_decision --input tests/fixtures/decision_payload.json --out artifacts/decisions
+python -m src.audit.make_snapshot --input tests/fixtures/snapshot_payload.json --out artifacts/snapshots
+python -m src.audit.replay --decision <decision_path.json> --snapshot <snapshot_path.json> --strict
+```
+
+Expected outputs:
+
+- `REPLAY_OK strict-core` on success
+- `REPLAY_MISMATCH` with a structured diff on mismatch
+
+Legacy decision records can be migrated with:
+`python -m src.audit.migrate_records --in <path> --out artifacts/migrated`
+
+- Verification report: `reports/m7_verification_report.md`
+
 ## End-to-End Flow
 
 Data -> Features -> Risk -> Strategy Selection -> Execution
@@ -162,4 +184,3 @@ Commands:
 python -m src.chatbot.cli list-runs
 python -m src.chatbot.cli show-run --run-id <id>
 ```
-

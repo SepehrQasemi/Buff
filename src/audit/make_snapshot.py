@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from audit.replay import main
+from audit.cli_make_snapshot import main
 
 
 if __name__ == "__main__":

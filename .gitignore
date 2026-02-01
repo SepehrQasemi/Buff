@@ -36,6 +36,9 @@ htmlcov/
 # Manual workspaces
 /workspaces/
 
+# Replay artifacts
+/artifacts/
+
 # Temp report artifacts
 /.tmp_report/
 # Allow golden fixtures
