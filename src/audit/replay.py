@@ -6,7 +6,14 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from audit.canonical_json import canonical_json, canonical_json_bytes
-from audit.decision_record import CodeVersion, DecisionRecord, Inputs, Outcome, RunContext, Selection
+from audit.decision_record import (
+    CodeVersion,
+    DecisionRecord,
+    Inputs,
+    Outcome,
+    RunContext,
+    Selection,
+)
 from audit.decision_records import compute_market_state_hash, parse_json_line
 from audit.snapshot import Snapshot
 from risk.contracts import RiskInputs as RiskInputsContract
@@ -341,9 +348,7 @@ class ReplayRunner:
                 replay_record._full_payload(),
                 exclude_paths=config.exclude_paths,
             )
-            return ReplayReport(
-                matched=not diffs, diffs=diffs, replay_record=replay_record
-            )
+            return ReplayReport(matched=not diffs, diffs=diffs, replay_record=replay_record)
 
         if strict_core:
             diffs = replay_equivalence(
@@ -351,9 +356,7 @@ class ReplayRunner:
                 replay_record._core_payload(),
                 exclude_paths=config.exclude_paths,
             )
-            return ReplayReport(
-                matched=not diffs, diffs=diffs, replay_record=replay_record
-            )
+            return ReplayReport(matched=not diffs, diffs=diffs, replay_record=replay_record)
 
         excluded = config.exclude_paths or {"hashes"}
         expected_core = record._core_payload()
@@ -370,8 +373,7 @@ class ReplayRunner:
 
 def diff_to_json(diffs: list[ReplayDiff]) -> str:
     payload = [
-        {"path": diff.path, "expected": diff.expected, "actual": diff.actual}
-        for diff in diffs
+        {"path": diff.path, "expected": diff.expected, "actual": diff.actual} for diff in diffs
     ]
     return canonical_json(payload)
 
@@ -457,9 +459,7 @@ def main() -> None:
 
     snapshot = None
     if args.snapshot:
-        snapshot = Snapshot.from_dict(
-            json.loads(Path(args.snapshot).read_text(encoding="utf-8"))
-        )
+        snapshot = Snapshot.from_dict(json.loads(Path(args.snapshot).read_text(encoding="utf-8")))
 
     runner = ReplayRunner()
     try:

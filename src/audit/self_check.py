@@ -38,9 +38,7 @@ def main() -> None:
     print("SELF_CHECK strict-full OK")
 
     print("SELF_CHECK mode=strict-full (metadata override ignored)")
-    runner_diff = ReplayRunner(
-        config=ReplayConfig(ts_utc_override="2026-02-01T01:00:00Z")
-    )
+    runner_diff = ReplayRunner(config=ReplayConfig(ts_utc_override="2026-02-01T01:00:00Z"))
     report_full_diff = runner_diff.replay(record, snapshot, strict_full=True)
     if not report_full_diff.matched:
         print("SELF_CHECK strict-full-diff FAILED")

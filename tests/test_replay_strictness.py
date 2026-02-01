@@ -80,9 +80,7 @@ def test_strict_core_passes_with_new_ts_and_platform() -> None:
 
 def test_strict_full_fails_if_ts_changes_unless_preserved() -> None:
     record, snapshot = _record_and_snapshot()
-    runner = ReplayRunner(
-        config=ReplayConfig(ts_utc_override="2026-02-01T01:00:00Z")
-    )
+    runner = ReplayRunner(config=ReplayConfig(ts_utc_override="2026-02-01T01:00:00Z"))
     report = runner.replay(record, snapshot, strict_full=True)
     assert report.matched
 

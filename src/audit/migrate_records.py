@@ -179,9 +179,7 @@ def migrate_file(
                     target = path_out / rel
                 target.parent.mkdir(parents=True, exist_ok=True)
                 temp_path = target.with_suffix(target.suffix + ".tmp")
-                temp_path.write_text(
-                    json.dumps(migrated_out, ensure_ascii=False), encoding="utf-8"
-                )
+                temp_path.write_text(json.dumps(migrated_out, ensure_ascii=False), encoding="utf-8")
                 os.replace(temp_path, target)
 
             entries.append(
