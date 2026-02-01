@@ -15,6 +15,7 @@ from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
 from audit.bundle import BundleError, build_bundle
+from audit.run import AuditRunError, run_audit
 from audit.verify import verify_bundle
 from execution.idempotency_inspect import (
     IdempotencyInspectError,
@@ -108,6 +109,17 @@ def main() -> None:
     audit_verify.add_argument("--strict", action="store_true")
     audit_verify.add_argument("--json", dest="json_out", action="store_true")
     audit_verify.add_argument("--as-of-utc", dest="as_of_utc", type=str, default=None)
+    audit_run = audit_sub.add_parser("run", help="Run end-to-end audit")
+    audit_run.add_argument("--out", required=True)
+    audit_run.add_argument("--seed", type=int, required=True)
+    audit_run.add_argument("--as-of-utc", dest="as_of_utc", type=str, default=None)
+    audit_run.add_argument("--config", dest="config_path", type=str, default=None)
+    audit_run.add_argument(
+        "--decision-records-dir", dest="decision_records_dir", type=str, default=None
+    )
+    audit_run.add_argument("--format", choices=["zip", "dir"], default="zip")
+    audit_run.add_argument("--no-verify", dest="no_verify", action="store_true")
+    audit_run.add_argument("--json", dest="json_out", action="store_true")
 
     args = parser.parse_args()
     if args.command == "idempotency":
@@ -303,6 +315,43 @@ def _run_audit(args: argparse.Namespace) -> None:
                 print(f"warning: {item['code']} {item.get('path', '')}".strip(), file=sys.stderr)
         raise SystemExit(0 if report["ok"] else 1)
 
+    if args.audit_cmd == "run":
+        out_path = Path(args.out)
+        config_path = Path(args.config_path) if args.config_path else None
+        decision_records_dir = (
+            Path(args.decision_records_dir) if args.decision_records_dir else None
+        )
+        try:
+            result = run_audit(
+                seed=args.seed,
+                out_path=out_path,
+                as_of_utc=args.as_of_utc,
+                config_path=config_path,
+                decision_records_dir=decision_records_dir,
+                fmt=args.format,
+                verify=not args.no_verify,
+            )
+        except AuditRunError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            raise SystemExit(1) from exc
+        if args.json_out:
+            print(
+                json.dumps(
+                    {
+                        "ok": result.ok,
+                        "artifact": str(result.artifact),
+                        "verified": result.verified,
+                        "seed": result.seed,
+                        "as_of_utc": result.as_of_utc,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(f"audit_run: ok {result.artifact}")
+        raise SystemExit(0)
     if args.audit_cmd != "bundle":
         raise SystemExit(2)
     db_path = _resolve_db_path(args.db_path)
