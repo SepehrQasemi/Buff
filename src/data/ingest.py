@@ -1,32 +1,27 @@
-"""1m OHLCV ingestion from Binance USDT-M Futures klines."""
+"""Binance Futures 1m OHLCV ingestion (UTC, deterministic)."""
 
 from __future__ import annotations
 
-import argparse
 import json
-import logging
-import sys
 import time
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any
+from typing import Sequence
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import pandas as pd
 
-from .store import write_parquet_1m
-from .validate import DataValidationError, validate_1m
-
 BINANCE_FUTURES_BASE_URL = "https://fapi.binance.com"
 KLINES_ENDPOINT = "/fapi/v1/klines"
 INTERVAL_1M = "1m"
 KLINES_LIMIT = 1500
 MS_PER_MINUTE = 60_000
-RATE_LIMIT_SLEEP = 0.1
+DEFAULT_RATE_LIMIT_SLEEP = 0.1
+DEFAULT_TIMEOUT_SECONDS = 30
+DEFAULT_MAX_RETRIES = 5
 
-LOGGER = logging.getLogger(__name__)
+OUTPUT_COLUMNS = ["timestamp", "open", "high", "low", "close", "volume", "symbol"]
 
 
 def _normalize_symbol(symbol: str) -> str:
@@ -36,29 +31,51 @@ def _normalize_symbol(symbol: str) -> str:
     return cleaned
 
 
-def _parse_iso8601_to_ms(value: str) -> int:
-    if value.endswith("Z"):
-        value = value[:-1] + "+00:00"
-    dt = datetime.fromisoformat(value)
-    if dt.tzinfo is None:
-        raise ValueError("Timestamp must be timezone-aware (use Z).")
-    return int(dt.astimezone(timezone.utc).timestamp() * 1000)
+def _floor_ms_to_minute(ms: int) -> int:
+    return (ms // MS_PER_MINUTE) * MS_PER_MINUTE
 
 
-def _ms_to_iso8601(ms: int) -> str:
-    dt = datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
-    return dt.isoformat().replace("+00:00", "Z")
+def _ceil_ms_to_minute(ms: int) -> int:
+    if ms % MS_PER_MINUTE == 0:
+        return ms
+    return ((ms // MS_PER_MINUTE) + 1) * MS_PER_MINUTE
 
 
-def _utc_now_floor_minute_ms() -> int:
-    now = datetime.now(timezone.utc)
-    floored = now.replace(second=0, microsecond=0)
-    return int(floored.timestamp() * 1000)
+def _parse_time_to_utc_ms(value: str | datetime | int, *, rounding: str) -> int:
+    """Parse ISO-8601 string, datetime, or ms to UTC ms and align to minute.
+
+    Naive datetimes or date-only strings are assumed to be UTC.
+    Rounding must be 'floor' (start) or 'ceil' (exclusive end).
+    """
+    if isinstance(value, int):
+        ms = value
+    else:
+        if isinstance(value, datetime):
+            dt = value
+        else:
+            text = value.strip()
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            dt = datetime.fromisoformat(text)
+
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            dt = dt.astimezone(timezone.utc)
+
+        ms = int(dt.timestamp() * 1000)
+
+    if rounding == "floor":
+        return _floor_ms_to_minute(ms)
+    if rounding == "ceil":
+        return _ceil_ms_to_minute(ms)
+    raise ValueError(f"Invalid rounding mode: {rounding}")
 
 
-def _request_json(url: str, timeout_seconds: int, max_retries: int) -> Any:
+def _request_json(url: str, *, timeout_seconds: int, max_retries: int) -> list:
     backoff = 1.0
     last_error: Exception | None = None
+
     for attempt in range(max_retries):
         try:
             request = Request(url, headers={"User-Agent": "buff-m1-ingest"})
@@ -73,12 +90,13 @@ def _request_json(url: str, timeout_seconds: int, max_retries: int) -> Any:
                 break
             time.sleep(backoff)
             backoff *= 2
-    if last_error:
+
+    if last_error is not None:
         raise last_error
-    raise RuntimeError("Failed to fetch JSON payload.")
+    raise RuntimeError("Failed to fetch klines payload.")
 
 
-def _build_klines_url(symbol: str, start_ms: int, end_ms: int, limit: int = KLINES_LIMIT) -> str:
+def _build_klines_url(symbol: str, start_ms: int, end_ms: int, limit: int) -> str:
     params = [
         ("symbol", symbol),
         ("interval", INTERVAL_1M),
@@ -94,41 +112,48 @@ def fetch_klines_1m(
     start_ms: int,
     end_ms: int,
     *,
-    max_retries: int = 5,
-    timeout_seconds: int = 30,
+    rate_limit_sleep: float = DEFAULT_RATE_LIMIT_SLEEP,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
 ) -> pd.DataFrame:
-    """Fetch 1m klines for a symbol from Binance Futures.
+    """Fetch 1m klines for a single symbol from Binance Futures.
 
     Args:
         symbol: Binance symbol (e.g., "BTCUSDT").
-        start_ms: Inclusive start timestamp in ms.
-        end_ms: Exclusive end timestamp in ms.
+        start_ms: Inclusive start timestamp (UTC ms, minute-aligned).
+        end_ms: Exclusive end timestamp (UTC ms, minute-aligned).
+        rate_limit_sleep: Sleep seconds between requests.
         max_retries: Max HTTP retries per request.
         timeout_seconds: HTTP timeout in seconds.
 
     Returns:
         DataFrame with columns: timestamp, open, high, low, close, volume.
     """
+    if not symbol:
+        raise ValueError("symbol is required")
     if end_ms <= start_ms:
-        return pd.DataFrame(columns=["timestamp", "open", "high", "low", "close", "volume"])
+        return pd.DataFrame(columns=OUTPUT_COLUMNS[:-1])
 
-    rows: list[list[float | int]] = []
+    rows: list[list[int | float]] = []
     pointer = start_ms
+
     while pointer < end_ms:
         chunk_end = min(end_ms - 1, pointer + (KLINES_LIMIT * MS_PER_MINUTE) - 1)
         url = _build_klines_url(symbol, pointer, chunk_end, KLINES_LIMIT)
         payload = _request_json(url, timeout_seconds=timeout_seconds, max_retries=max_retries)
+
         if not isinstance(payload, list):
-            raise RuntimeError(f"Unexpected response for {symbol}: {payload}")
+            raise RuntimeError(f"Unexpected response payload for {symbol}: {payload}")
         if not payload:
             break
+
         for entry in payload:
             open_time = int(entry[0])
             if open_time < start_ms or open_time >= end_ms:
                 continue
             rows.append(
                 [
-                    open_time,
+                    _floor_ms_to_minute(open_time),
                     float(entry[1]),
                     float(entry[2]),
                     float(entry[3]),
@@ -136,205 +161,81 @@ def fetch_klines_1m(
                     float(entry[5]),
                 ]
             )
+
         last_open = int(payload[-1][0])
         next_pointer = last_open + MS_PER_MINUTE
         if next_pointer <= pointer:
             break
         pointer = next_pointer
-        time.sleep(RATE_LIMIT_SLEEP)
+        time.sleep(rate_limit_sleep)
 
-    df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+    df = pd.DataFrame(rows, columns=OUTPUT_COLUMNS[:-1])
     return df
 
 
-def _write_report(path: Path, report: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(report, handle, sort_keys=True, indent=2)
-        handle.write("\n")
-
-
-def ingest(
-    symbols: list[str],
-    since: str,
-    end: str | None,
-    out_dir: Path,
-    report_path: Path | None,
+def download_ohlcv_1m(
+    symbols: Sequence[str],
+    start_time: str | datetime | int,
+    end_time: str | datetime | int,
     *,
-    timeframe: str = INTERVAL_1M,
-    max_retries: int = 5,
-    timeout_seconds: int = 30,
-) -> None:
-    """Ingest 1m OHLCV data for symbols and write parquet + report."""
-    if timeframe != INTERVAL_1M:
-        raise ValueError("Only timeframe=1m is supported for M1.")
+    rate_limit_sleep: float = DEFAULT_RATE_LIMIT_SLEEP,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+    timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS,
+) -> pd.DataFrame:
+    """Download 1m OHLCV data for multiple symbols.
 
-    normalized = []
-    seen = set()
+    Args:
+        symbols: Iterable of Binance symbols.
+        start_time: Inclusive UTC start time (ISO-8601, datetime, or ms int).
+        end_time: Exclusive UTC end time (ISO-8601, datetime, or ms int).
+        rate_limit_sleep: Sleep seconds between requests.
+        max_retries: Max HTTP retries per request.
+        timeout_seconds: HTTP timeout in seconds.
+
+    Returns:
+        DataFrame with columns: timestamp, open, high, low, close, volume, symbol.
+    """
+    normalized: list[str] = []
+    seen: set[str] = set()
     for symbol in symbols:
         cleaned = _normalize_symbol(symbol)
         if cleaned and cleaned not in seen:
             normalized.append(cleaned)
             seen.add(cleaned)
+
     if not normalized:
         raise ValueError("At least one symbol is required.")
 
-    start_ms = _parse_iso8601_to_ms(since)
-    end_ms = _parse_iso8601_to_ms(end) if end else _utc_now_floor_minute_ms()
+    start_ms = _parse_time_to_utc_ms(start_time, rounding="floor")
+    end_ms = _parse_time_to_utc_ms(end_time, rounding="ceil")
 
-    if start_ms % MS_PER_MINUTE != 0 or end_ms % MS_PER_MINUTE != 0:
-        raise ValueError("since/end must be aligned to exact minute boundaries.")
     if end_ms <= start_ms:
-        raise ValueError("end must be after since.")
+        raise ValueError("end_time must be after start_time.")
 
-    expected_rows = (end_ms - start_ms) // MS_PER_MINUTE
-    by_symbol: dict[str, dict[str, Any]] = {}
-    parquet_files: list[str] = []
-    errors: list[str] = []
-
+    frames: list[pd.DataFrame] = []
     for symbol in normalized:
-        try:
-            LOGGER.info(
-                "Fetching %s %s -> %s", symbol, _ms_to_iso8601(start_ms), _ms_to_iso8601(end_ms)
-            )
-            df = fetch_klines_1m(
-                symbol, start_ms, end_ms, max_retries=max_retries, timeout_seconds=timeout_seconds
-            )
-            df.insert(0, "symbol", symbol)
-            stats = validate_1m(df, symbol, start_ms, end_ms)
-            out_path = write_parquet_1m(df, out_dir, symbol)
-            parquet_files.append(str(out_path))
-            by_symbol[symbol] = {
-                "rows": stats["rows"],
-                "expected_rows": expected_rows,
-                "missing_ratio": stats["missing_ratio"],
-                "duplicates": stats["duplicates_count"],
-                "gaps": stats["gaps_count"],
-                "zero_volume_rows": stats["zero_volume_rows"],
-                "misaligned_rows": stats["misaligned_rows"],
-                "integrity_violations_count": stats["integrity_violations_count"],
-                "start_timestamp": stats["start_timestamp"],
-                "end_timestamp": stats["end_timestamp"],
-                "validated": True,
-            }
-        except DataValidationError as exc:
-            errors.append(f"{symbol}: {exc}")
-            stats = exc.stats or {}
-            by_symbol[symbol] = {
-                "rows": stats.get("rows", 0),
-                "expected_rows": expected_rows,
-                "missing_ratio": stats.get("missing_ratio", 1.0),
-                "duplicates": stats.get("duplicates_count", 0),
-                "gaps": stats.get("gaps_count", expected_rows),
-                "zero_volume_rows": stats.get("zero_volume_rows", 0),
-                "misaligned_rows": stats.get("misaligned_rows", 0),
-                "integrity_violations_count": stats.get("integrity_violations_count", 0),
-                "start_timestamp": stats.get("start_timestamp"),
-                "end_timestamp": stats.get("end_timestamp"),
-                "validated": False,
-                "error": str(exc),
-            }
-        except Exception as exc:  # noqa: BLE001
-            errors.append(f"{symbol}: {exc}")
-            by_symbol[symbol] = {
-                "rows": 0,
-                "expected_rows": expected_rows,
-                "missing_ratio": 1.0 if expected_rows else 0.0,
-                "duplicates": 0,
-                "gaps": expected_rows,
-                "zero_volume_rows": 0,
-                "misaligned_rows": 0,
-                "integrity_violations_count": 0,
-                "start_timestamp": None,
-                "end_timestamp": None,
-                "validated": False,
-                "error": str(exc),
-            }
-
-    overall_rows = sum(entry["rows"] for entry in by_symbol.values())
-    overall_duplicates = sum(entry.get("duplicates", 0) for entry in by_symbol.values())
-    overall_gaps = sum(entry.get("gaps", 0) for entry in by_symbol.values())
-    total_expected = expected_rows * len(normalized)
-    overall_missing_ratio = (overall_gaps / total_expected) if total_expected else 0.0
-    validated_all = not errors
-
-    report = {
-        "timeframe": INTERVAL_1M,
-        "since": _ms_to_iso8601(start_ms),
-        "end": _ms_to_iso8601(end_ms),
-        "symbols": normalized,
-        "overall": {
-            "rows": overall_rows,
-            "expected_rows": total_expected,
-            "missing_ratio": overall_missing_ratio,
-            "duplicates": overall_duplicates,
-            "gaps": overall_gaps,
-            "validated": validated_all,
-        },
-        "by_symbol": by_symbol,
-        "artifacts": {
-            "out_dir": str(out_dir),
-            "parquet_files": sorted(parquet_files),
-        },
-    }
-
-    if errors:
-        report["overall"]["error"] = "; ".join(errors)
-
-    if report_path:
-        _write_report(report_path, report)
-
-    if errors:
-        summary = "; ".join(errors)
-        raise DataValidationError(f"Validation failed for symbols: {summary}")
-
-
-def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Ingest Binance Futures 1m OHLCV data.")
-    parser.add_argument(
-        "--symbols", nargs="+", required=True, help="Symbols (e.g., BTCUSDT ETHUSDT)."
-    )
-    parser.add_argument(
-        "--since", required=True, help="ISO-8601 start (inclusive), e.g. 2024-01-01T00:00:00Z"
-    )
-    parser.add_argument(
-        "--end", default=None, help="ISO-8601 end (exclusive), e.g. 2024-01-02T00:00:00Z"
-    )
-    parser.add_argument("--timeframe", default=INTERVAL_1M, help="Only 1m is supported.")
-    parser.add_argument("--out", default="data", help="Output directory (default: data).")
-    parser.add_argument(
-        "--report",
-        default=".tmp_report/data_quality.json",
-        help="Report output path (default: .tmp_report/data_quality.json).",
-    )
-    parser.add_argument("--max-retries", type=int, default=5, help="HTTP max retries (default: 5).")
-    parser.add_argument(
-        "--timeout-seconds", type=int, default=30, help="HTTP timeout seconds (default: 30)."
-    )
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = _parse_args()
-    report_path = Path(args.report) if args.report else None
-    try:
-        ingest(
-            symbols=args.symbols,
-            since=args.since,
-            end=args.end,
-            out_dir=Path(args.out),
-            report_path=report_path,
-            timeframe=args.timeframe,
-            max_retries=args.max_retries,
-            timeout_seconds=args.timeout_seconds,
+        df = fetch_klines_1m(
+            symbol,
+            start_ms,
+            end_ms,
+            rate_limit_sleep=rate_limit_sleep,
+            max_retries=max_retries,
+            timeout_seconds=timeout_seconds,
         )
-    except DataValidationError as exc:
-        LOGGER.error(str(exc))
-        sys.exit(1)
-    except Exception as exc:  # noqa: BLE001
-        LOGGER.error("Ingest failed: %s", exc)
-        sys.exit(1)
+        df["symbol"] = symbol
+        frames.append(df)
 
+    if frames:
+        combined = pd.concat(frames, ignore_index=True)
+    else:
+        combined = pd.DataFrame(columns=OUTPUT_COLUMNS)
 
-if __name__ == "__main__":
-    main()
+    combined = combined[OUTPUT_COLUMNS]
+    if not combined.empty:
+        combined["timestamp"] = combined["timestamp"].astype("int64")
+        for col in ["open", "high", "low", "close", "volume"]:
+            combined[col] = combined[col].astype("float64")
+        combined["symbol"] = combined["symbol"].astype("string")
+        combined = combined.sort_values(["symbol", "timestamp"]).reset_index(drop=True)
+
+    return combined
