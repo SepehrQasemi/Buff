@@ -304,8 +304,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--out", default="data", help="Output directory (default: data).")
     parser.add_argument(
         "--report",
-        default="reports/data_quality.json",
-        help="Report output path (default: reports/data_quality.json).",
+        default=".tmp_report/data_quality.json",
+        help="Report output path (default: .tmp_report/data_quality.json).",
     )
     parser.add_argument("--max-retries", type=int, default=5, help="HTTP max retries (default: 5).")
     parser.add_argument(

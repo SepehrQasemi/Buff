@@ -5,13 +5,13 @@ This milestone builds a canonical, deterministic 1m OHLCV dataset for Binance US
 ## Run
 
 ```bash
-python -m src.data.ingest --symbols BTCUSDT ETHUSDT --since 2024-01-01T00:00:00Z --end 2024-01-03T00:00:00Z --out data --report reports/data_quality.json
+python -m src.data.ingest --symbols BTCUSDT ETHUSDT --since 2024-01-01T00:00:00Z --end 2024-01-03T00:00:00Z --out data --report .tmp_report/data_quality.json
 ```
 
 ## Artifacts
 
 - Parquet: `data/ohlcv_1m/{SYMBOL}.parquet`
-- Report: `reports/data_quality.json`
+- Report: `.tmp_report/data_quality.json`
 
 ## Invariants
 
