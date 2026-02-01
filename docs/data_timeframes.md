@@ -60,7 +60,9 @@ Evidence: `src/data/ingest.py`, `src/data/validate.py`, `src/buff/data/report.py
   Evidence: `src/data/store.py`, `tests/test_data_m1_reproducibility.py`.
 
 ## Implementation References
-- Resampling entrypoint: `src/buff/data/resample.py` (`resample_ohlcv`, `resample_fixed`, `resample_calendar`).
-- Multi-timeframe ingest runner: `src/buff/data/run_ingest.py` (enforces base_timeframe=1m).
+- Resampling entrypoints: `src/buff/data/resample.py` (`resample_ohlcv`, `resample_fixed`, `resample_calendar`).
+- OHLCV aggregation function: `src/buff/data/resample.py` (`_aggregate_ohlcv`).
+- Fixed/calendar window setup: `src/buff/data/resample.py` (`frame.resample(..., label=\"left\", closed=\"left\")`).
+- Multi-timeframe ingest runner: `src/buff/data/run_ingest.py` (enforces `base_timeframe=1m`).
 - Canonical 1m ingest: `src/data/ingest.py` + `src/data/validate.py` + `src/data/store.py`.
 - Data quality reporting: `src/buff/data/report.py`, `schemas/data_quality.schema.json`.

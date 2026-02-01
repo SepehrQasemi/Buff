@@ -19,7 +19,7 @@ All DONE statements cite file paths as evidence. PLANNED items are explicitly la
 - Deterministic 1m parquet ordering and schema for canonical ingest.
   Evidence: `src/data/store.py`, `tests/test_data_m1_reproducibility.py`.
 - Deterministic resampling outputs and stable windowing from 1m.
-  Evidence: `src/buff/data/resample.py`, `tests/test_resample.py`.
+  Evidence: `src/buff/data/resample.py` (`resample_ohlcv`, `resample_fixed`, `resample_calendar`), `tests/test_resample.py`.
 - Stable reason codes for execution gating and risk locks (fail-closed semantics).
   Evidence: `src/execution/engine.py`, `src/execution/locks.py`.
 
@@ -40,6 +40,8 @@ All DONE statements cite file paths as evidence. PLANNED items are explicitly la
   Evidence: `src/data/ingest.py`, `src/data/validate.py`, `src/data/store.py`, `tests/test_data_m1_validation.py`.
 - **Multi-timeframe pipeline**: enforces 1m base timeframe and derives fixed + calendar timeframes by deterministic resampling; stores partitioned parquet under `data/ohlcv/timeframe=...`.
   Evidence: `src/buff/data/run_ingest.py`, `src/buff/data/resample.py`, `src/buff/data/store.py`.
+- **Resampling implementation**: deterministic OHLCV aggregation and windowing.
+  Evidence: `src/buff/data/resample.py` (`_aggregate_ohlcv`, `resample_ohlcv`, `resample_fixed`, `resample_calendar`).
 - **Data quality reporting**: deterministic report generation and schema validation for OHLCV datasets.
   Evidence: `src/buff/data/report.py`, `schemas/data_quality.schema.json`, `tests/test_report_schema.py`.
 - **Feature engine**: deterministic indicator computation with registry-defined outputs and metadata.

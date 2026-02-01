@@ -19,6 +19,11 @@ registered, approved strategies through a controlled pipeline.
 - Full audit trail for every decision and order action.
 - Canonical market data timeframe is 1m; all higher timeframes are deterministic resamples.
 
+## Data Timeframe Canonicalization
+
+- Ingest/base timeframe is **1m**; higher timeframes are derived deterministically.
+- See `docs/data_timeframes.md` and `docs/PROJECT_SPEC.md` for the authoritative rules.
+
 ## Documentation
 
 - `docs/PROJECT_SPEC.md` (single source of truth)
