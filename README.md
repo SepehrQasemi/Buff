@@ -17,6 +17,20 @@ registered, approved strategies through a controlled pipeline.
 - UI and chatbot are read-only for execution and cannot place orders.
 - Execution runs independently from UI and requires explicit arming in the control plane.
 - Full audit trail for every decision and order action.
+- Canonical market data timeframe is 1m; all higher timeframes are deterministic resamples.
+
+## Data Timeframe Canonicalization
+
+- Ingest/base timeframe is **1m**; higher timeframes are derived deterministically.
+- See `docs/data_timeframes.md` and `docs/PROJECT_SPEC.md` for the authoritative rules.
+
+## Documentation
+
+- `docs/PROJECT_SPEC.md` (single source of truth)
+- `docs/data_timeframes.md` (canonical 1m + resampling rules)
+- `ARCHITECTURE.md`
+- `PROJECT_SCOPE.md`
+- `EXECUTION_SAFETY.md`
 
 ## Quickstart
 
@@ -122,7 +136,7 @@ Legacy decision records can be migrated with:
 
 Data -> Features -> Risk -> Strategy Selection -> Execution
 
-- Data: deterministic OHLCV ingest and quality reports
+- Data: canonical 1m ingest; higher timeframes derived deterministically; quality reports
 - Features: preset indicators and user-approved indicators
 - Risk: permission layer (GREEN/YELLOW/RED)
 - Strategy Selection: picks only from registered strategies
@@ -141,7 +155,7 @@ Manual mode is a sandbox with no effect on the system. It writes only to workspa
 Example:
 
 ```bash
-python -m src.manual.run_manual --workspace demo --symbol BTCUSDT --timeframe 1h
+python -m src.manual.run_manual --workspace demo --symbol BTCUSDT --timeframe 1m
 ```
 
 ## Architecture

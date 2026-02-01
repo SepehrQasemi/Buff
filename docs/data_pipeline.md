@@ -2,6 +2,9 @@
 
 This milestone builds a canonical, deterministic 1m OHLCV dataset for Binance USDT-M Futures.
 
+For derived timeframes, see `docs/data_timeframes.md`. The multi-timeframe runner
+(`src/buff/data/run_ingest.py`) resamples from 1m and writes partitioned outputs.
+
 ## Run
 
 ```bash

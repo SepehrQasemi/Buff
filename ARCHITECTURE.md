@@ -3,7 +3,7 @@
 ## Planes
 
 A) Core/Data Plane
-- data: ingest/validate/store
+- data: ingest/validate/store (canonical 1m base; derived timeframes via deterministic resampling)
 - features: indicators, feature sets
 - risk: permission layer (green/yellow/red)
 - selector: selects from registered strategies
@@ -30,3 +30,7 @@ C) Interface Plane
 - Risk -> Selector: risk_state
 - Selector -> Execution: strategy_id + intent (LONG/SHORT/FLAT)
 - Control Plane -> Execution: arming, limits, kill switch
+
+## References
+- `docs/PROJECT_SPEC.md`
+- `docs/data_timeframes.md`

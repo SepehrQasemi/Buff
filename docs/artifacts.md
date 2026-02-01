@@ -15,12 +15,14 @@ Each parquet file contains raw OHLCV candles with these columns:
 
 - Partitioned by timeframe and symbol directories.
 - One file per (symbol, timeframe).
+- M1 canonical 1m pipeline writes a single timeframe dataset under `data/ohlcv_1m/`.
 
 ## Naming Conventions
 
 Directory layout:
 
 ```
+data/ohlcv_1m/BTCUSDT.parquet
 data/ohlcv/timeframe=1m/symbol=BTCUSDT/ohlcv.parquet
 data/ohlcv/timeframe=1h/symbol=BTCUSDT/ohlcv.parquet
 ```
@@ -33,6 +35,7 @@ Symbols are stored in CCXT format (`BTC/USDT`) and converted to partition names 
 - Derived timeframes are deterministic resamples of `1m`:
   - Fixed-duration: `5m, 15m, 30m, 1h, 2h, 4h, 1d, 1w, 2w`
   - Calendar-based: `1M, 3M, 6M, 1Y`
+- See `docs/data_timeframes.md` for exact aggregation rules and edge cases.
 
 ## Guarantees (M1)
 
@@ -50,4 +53,4 @@ Symbols are stored in CCXT format (`BTC/USDT`) and converted to partition names 
 - No indicators or features
 - No strategy logic or ML
 - No trading decisions
-- No derived datasets
+- No derived datasets in the M1 ingest pipeline (derived timeframes are produced by the multi-timeframe runner)
