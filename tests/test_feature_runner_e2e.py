@@ -23,6 +23,15 @@ def test_feature_runner_e2e() -> None:
         "macd_12_26_9",
         "macd_signal_12_26_9",
         "macd_hist_12_26_9",
+        "ema_50",
+        "ema_spread_20_50",
+        "rsi_slope_14_5",
+        "roc_12",
+        "vwap_typical_daily",
+        "obv",
+        "plus_di_14",
+        "minus_di_14",
+        "adx_14",
     ]
 
     expected = df.set_index(pd.to_datetime(df["timestamp"], utc=True))
@@ -102,6 +111,69 @@ def test_feature_runner_e2e() -> None:
     np.testing.assert_allclose(
         out["macd_hist_12_26_9"].to_numpy(),
         expected["macd_hist_12_26_9"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["ema_50"].to_numpy(),
+        expected["ema_50"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["ema_spread_20_50"].to_numpy(),
+        expected["ema_spread_20_50"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["rsi_slope_14_5"].to_numpy(),
+        expected["rsi_slope_14_5"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["roc_12"].to_numpy(),
+        expected["roc_12"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["vwap_typical_daily"].to_numpy(),
+        expected["vwap_typical_daily"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["obv"].to_numpy(),
+        expected["obv"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["plus_di_14"].to_numpy(),
+        expected["plus_di_14"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["minus_di_14"].to_numpy(),
+        expected["minus_di_14"].to_numpy(),
+        rtol=1e-6,
+        atol=1e-6,
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        out["adx_14"].to_numpy(),
+        expected["adx_14"].to_numpy(),
         rtol=1e-6,
         atol=1e-6,
         equal_nan=True,

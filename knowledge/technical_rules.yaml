@@ -1,6 +1,6 @@
 [
   {
-    "id": "rsi_wilder",
+    "id": "rsi_14",
     "name": "RSI",
     "category": "momentum",
     "description": "Relative Strength Index (Wilder). Bounded oscillator in [0,100] computed from Wilder-smoothed average gains and losses.",
@@ -14,8 +14,8 @@
         "constraints": "period >= 2"
       }
     },
-    "formula": "Let Δ_t = close_t - close_{t-1}. gain_t=max(Δ_t,0), loss_t=max(-Δ_t,0). Seed at t=period with avg_gain=mean(gain_1..gain_period), avg_loss=mean(loss_1..loss_period). For t>period: avg_gain_t=((avg_gain_{t-1}*(period-1))+gain_t)/period; avg_loss_t=((avg_loss_{t-1}*(period-1))+loss_t)/period. RS_t=avg_gain_t/avg_loss_t. RSI_t = 100 - 100/(1+RS_t). Edge cases: if avg_loss_t=0 then RSI_t=100; if avg_gain_t=0 then RSI_t=0.",
-    "output": "rsi",
+    "formula": "Let \u0394_t = close_t - close_{t-1}. gain_t=max(\u0394_t,0), loss_t=max(-\u0394_t,0). Seed at t=period with avg_gain=mean(gain_1..gain_period), avg_loss=mean(loss_1..loss_period). For t>period: avg_gain_t=((avg_gain_{t-1}*(period-1))+gain_t)/period; avg_loss_t=((avg_loss_{t-1}*(period-1))+loss_t)/period. RS_t=avg_gain_t/avg_loss_t. RSI_t = 100 - 100/(1+RS_t). Edge cases: if avg_loss_t=0 then RSI_t=100; if avg_gain_t=0 then RSI_t=0.",
+    "output": "rsi_14",
     "warmup": {
       "candles": 15,
       "output_valid_from": 15
@@ -34,7 +34,7 @@
     ]
   },
   {
-    "id": "ema",
+    "id": "ema_20",
     "name": "EMA",
     "category": "trend",
     "description": "Exponential Moving Average with alpha=2/(period+1) and SMA seed.",
@@ -49,7 +49,7 @@
       }
     },
     "formula": "alpha=2/(period+1). Seed: ema_{period-1}=SMA(close_0..close_{period-1}). For t>=period: ema_t=alpha*close_t+(1-alpha)*ema_{t-1}.",
-    "output": "ema",
+    "output": "ema_20",
     "warmup": {
       "candles": 20,
       "output_valid_from": 20
@@ -67,7 +67,40 @@
     ]
   },
   {
-    "id": "atr_wilder",
+    "id": "ema_50",
+    "name": "EMA",
+    "category": "trend",
+    "description": "Exponential Moving Average with alpha=2/(period+1) and SMA seed.",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "period": {
+        "type": "int",
+        "default": 50,
+        "constraints": "period >= 2"
+      }
+    },
+    "formula": "alpha=2/(period+1). Seed: ema_{period-1}=SMA(close_0..close_{period-1}). For t>=period: ema_t=alpha*close_t+(1-alpha)*ema_{t-1}.",
+    "output": "ema_50",
+    "warmup": {
+      "candles": 50,
+      "output_valid_from": 50
+    },
+    "nan_policy": {
+      "before_warmup": "NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:exponential_moving_average",
+      "https://ta-lib.org/function.html#ema"
+    ]
+  },
+  {
+    "id": "atr_14",
     "name": "ATR",
     "category": "volatility",
     "description": "Average True Range (Wilder). Non-directional volatility in price units.",
@@ -84,7 +117,7 @@
       }
     },
     "formula": "TR_t = max(high_t-low_t, abs(high_t-close_{t-1}), abs(low_t-close_{t-1})) for t>=1. Seed: atr_period = mean(TR_1..TR_period). For t>period: atr_t=((atr_{t-1}*(period-1))+TR_t)/period.",
-    "output": "atr",
+    "output": "atr_14",
     "warmup": {
       "candles": 15,
       "output_valid_from": 15
@@ -102,10 +135,10 @@
     ]
   },
   {
-    "id": "bollinger_bands",
+    "id": "bbands_20_2",
     "name": "BollingerBands",
     "category": "volatility",
-    "description": "Bollinger Bands: middle=SMA(period), upper/lower = middle ± k*stddev(period).",
+    "description": "Bollinger Bands: middle=SMA(period), upper/lower = middle \u00b1 k*stddev(period).",
     "inputs": [
       "close"
     ],
@@ -119,13 +152,18 @@
         "type": "float",
         "default": 2.0,
         "constraints": "k > 0"
+      },
+      "ddof": {
+        "type": "int",
+        "default": 0,
+        "constraints": "ddof >= 0"
       }
     },
     "formula": "middle_t = SMA(close_{t-period+1}..close_t). std_t = population_stddev(close_{t-period+1}..close_t). upper_t = middle_t + k*std_t; lower_t = middle_t - k*std_t. Population stddev: sqrt(mean((x-mean(x))^2)).",
     "output": {
-      "upper": "bb_upper",
-      "middle": "bb_middle",
-      "lower": "bb_lower"
+      "upper": "bb_upper_20_2",
+      "middle": "bb_mid_20_2",
+      "lower": "bb_lower_20_2"
     },
     "warmup": {
       "candles": 20,
@@ -144,7 +182,7 @@
     ]
   },
   {
-    "id": "macd",
+    "id": "macd_12_26_9",
     "name": "MACD",
     "category": "momentum",
     "description": "MACD: difference of fast and slow EMAs; signal is EMA of MACD; histogram=MACD-signal.",
@@ -170,9 +208,9 @@
     },
     "formula": "ema_fast = EMA(close, fast_period); ema_slow = EMA(close, slow_period). macd_t = ema_fast_t - ema_slow_t. signal_t = EMA(macd, signal_period). hist_t = macd_t - signal_t.",
     "output": {
-      "macd": "macd",
-      "signal": "macd_signal",
-      "hist": "macd_hist"
+      "macd": "macd_12_26_9",
+      "signal": "macd_signal_12_26_9",
+      "hist": "macd_hist_12_26_9"
     },
     "warmup": {
       "candles": 35,
@@ -191,7 +229,7 @@
     ]
   },
   {
-    "id": "adx_wilder",
+    "id": "adx_14",
     "name": "ADX",
     "category": "trend",
     "description": "Average Directional Index (Wilder). Measures trend strength using +DI and -DI derived from directional movement.",
@@ -209,9 +247,9 @@
     },
     "formula": "Compute UpMove=high_t-high_{t-1}, DownMove=low_{t-1}-low_t. +DM_t = (UpMove>DownMove and UpMove>0) ? UpMove : 0. -DM_t = (DownMove>UpMove and DownMove>0) ? DownMove : 0. TR_t as in ATR. Wilder smooth TR, +DM, -DM over period: smoothed_x_t = smoothed_x_{t-1} - (smoothed_x_{t-1}/period) + x_t (equivalently ((prev*(period-1))+x_t)/period). +DI_t = 100*(smoothed_+DM_t / smoothed_TR_t); -DI_t = 100*(smoothed_-DM_t / smoothed_TR_t). DX_t = 100*abs(+DI_t - -DI_t)/(+DI_t + -DI_t). ADX is Wilder smoothing of DX (seed as mean of first period DX values).",
     "output": {
-      "adx": "adx",
-      "plus_di": "plus_di",
-      "minus_di": "minus_di"
+      "adx": "adx_14",
+      "plus_di": "plus_di_14",
+      "minus_di": "minus_di_14"
     },
     "warmup": {
       "candles": "~2*period + 1",
@@ -231,56 +269,40 @@
     ]
   },
   {
-    "id": "stoch",
-    "name": "StochasticOscillator",
+    "id": "roc_12",
+    "name": "ROC",
     "category": "momentum",
-    "description": "Stochastic Oscillator: %K compares close to the recent high-low range; %D is a moving average of %K.",
+    "description": "Rate of Change: percent change of close compared to n periods ago.",
     "inputs": [
-      "high",
-      "low",
       "close"
     ],
     "parameters": {
-      "k_period": {
+      "period": {
         "type": "int",
-        "default": 14,
-        "constraints": "k_period >= 2"
-      },
-      "d_period": {
-        "type": "int",
-        "default": 3,
-        "constraints": "d_period >= 1"
-      },
-      "slowing": {
-        "type": "int",
-        "default": 3,
-        "constraints": "slowing >= 1"
+        "default": 12,
+        "constraints": "period >= 1"
       }
     },
-    "formula": "%K_raw_t = 100*(close_t - lowest(low_{t-k_period+1}..low_t)) / (highest(high_{t-k_period+1}..high_t) - lowest(low_{t-k_period+1}..low_t)). If denominator=0 then %K_raw_t = 0. %K_t = SMA(%K_raw, slowing). %D_t = SMA(%K, d_period).",
-    "output": {
-      "k": "stoch_k",
-      "d": "stoch_d"
-    },
+    "formula": "roc_t = ((close_t - close_{t-period}) / close_{t-period}) * 100 for t>=period; undefined otherwise.",
+    "output": "roc_12",
     "warmup": {
-      "candles": "k_period + slowing + d_period",
-      "output_valid_from": "k_period + slowing + d_period"
+      "candles": 13,
+      "output_valid_from": 13
     },
     "nan_policy": {
       "before_warmup": "NaN",
-      "division_by_zero": "range==0 => %K_raw=0"
+      "division_by_zero": "close_{t-period}==0 => NaN"
     },
     "resample_policy": {
       "rule": "compute after resampling"
     },
     "lookahead_policy": false,
     "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:stochastic_oscillator_fast_slow_and_full",
-      "https://ta-lib.org/function.html#stoch"
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:rate_of_change_roc_and_momentum"
     ]
   },
   {
-    "id": "vwap",
+    "id": "vwap_typical_daily",
     "name": "VWAP",
     "category": "volume",
     "description": "Volume-Weighted Average Price for an intraday session: cumulative(sum(typical_price*volume))/cumulative(sum(volume)). Resets per session.",
@@ -302,8 +324,8 @@
         "constraints": "session_reset in {'daily','none'}"
       }
     },
-    "formula": "Define price_t = (high_t+low_t+close_t)/3 if price_mode='typical' else close_t. cum_pv_t = Σ_{i=session_start..t}(price_i*volume_i); cum_v_t = Σ_{i=session_start..t}(volume_i). vwap_t = cum_pv_t / cum_v_t; undefined if cum_v_t=0. Reset cumulators at each session boundary if session_reset='daily'.",
-    "output": "vwap",
+    "formula": "Define price_t = (high_t+low_t+close_t)/3 if price_mode='typical' else close_t. cum_pv_t = \u03a3_{i=session_start..t}(price_i*volume_i); cum_v_t = \u03a3_{i=session_start..t}(volume_i). vwap_t = cum_pv_t / cum_v_t; undefined if cum_v_t=0. Reset cumulators at each session boundary if session_reset='daily'.",
+    "output": "vwap_typical_daily",
     "warmup": {
       "candles": 1,
       "output_valid_from": 1
@@ -320,77 +342,89 @@
     ]
   },
   {
-    "id": "roc",
-    "name": "ROC",
-    "category": "momentum",
-    "description": "Rate of Change: percent change of close compared to n periods ago.",
+    "id": "obv",
+    "name": "OBV",
+    "category": "volume",
+    "description": "On-Balance Volume: cumulative volume adjusted by close direction.",
     "inputs": [
-      "close"
+      "close",
+      "volume"
     ],
-    "parameters": {
-      "period": {
-        "type": "int",
-        "default": 12,
-        "constraints": "period >= 1"
-      }
-    },
-    "formula": "roc_t = ((close_t - close_{t-period}) / close_{t-period}) * 100 for t>=period; undefined otherwise.",
-    "output": "roc",
+    "parameters": {},
+    "formula": "If close_t > close_{t-1}: obv_t = obv_{t-1} + volume_t; if close_t < close_{t-1}: obv_t = obv_{t-1} - volume_t; else obv_t = obv_{t-1}. Seed obv_0 = 0.",
+    "output": "obv",
     "warmup": {
-      "candles": 13,
-      "output_valid_from": 13
+      "candles": 1,
+      "output_valid_from": 1
     },
     "nan_policy": {
-      "before_warmup": "NaN",
-      "division_by_zero": "close_{t-period}==0 => NaN"
+      "before_warmup": "NaN"
     },
     "resample_policy": {
       "rule": "compute after resampling"
     },
     "lookahead_policy": false,
     "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:rate_of_change_roc_and_momentum"
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:on_balance_volume_obv",
+      "https://ta-lib.org/function.html#obv"
     ]
   },
   {
-    "id": "cci",
-    "name": "CCI",
-    "category": "momentum",
-    "description": "Commodity Channel Index: normalized deviation of typical price from its SMA using mean absolute deviation and constant 0.015.",
+    "id": "ema_spread_20_50",
+    "name": "EMA Spread",
+    "category": "trend",
+    "description": "EMA(20) - EMA(50) spread.",
     "inputs": [
-      "high",
-      "low",
       "close"
     ],
     "parameters": {
-      "period": {
-        "type": "int",
-        "default": 20,
-        "constraints": "period >= 2"
-      },
-      "constant": {
-        "type": "float",
-        "default": 0.015,
-        "constraints": "constant > 0"
-      }
+      "fast_period": 20,
+      "slow_period": 50
     },
-    "formula": "tp_t=(high_t+low_t+close_t)/3. sma_tp_t=SMA(tp_{t-period+1}..tp_t). mean_dev_t = mean(|tp_i - sma_tp_t| for i in t-period+1..t). cci_t = (tp_t - sma_tp_t) / (constant * mean_dev_t). If mean_dev_t=0 then cci_t=0.",
-    "output": "cci",
+    "formula": "ema_spread_t = EMA(close, 20) - EMA(close, 50).",
+    "output": "ema_spread_20_50",
     "warmup": {
-      "candles": 20,
-      "output_valid_from": 20
+      "candles": 50,
+      "output_valid_from": 50
     },
     "nan_policy": {
-      "before_warmup": "NaN",
-      "division_by_zero": "mean_dev==0 => 0"
+      "before_warmup": "NaN"
     },
     "resample_policy": {
       "rule": "compute after resampling"
     },
     "lookahead_policy": false,
     "references": [
-      "https://school.stockcharts.com/doku.php?id=technical_indicators:commodity_channel_index_cci",
-      "https://ta-lib.org/function.html#cci"
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:exponential_moving_average"
+    ]
+  },
+  {
+    "id": "rsi_slope_14_5",
+    "name": "RSI Slope",
+    "category": "momentum",
+    "description": "Average 5-bar slope of RSI(14).",
+    "inputs": [
+      "close"
+    ],
+    "parameters": {
+      "period": 14,
+      "slope": 5
+    },
+    "formula": "rsi_slope_t = (RSI(close,14)_t - RSI(close,14)_{t-5}) / 5.",
+    "output": "rsi_slope_14_5",
+    "warmup": {
+      "candles": 19,
+      "output_valid_from": 19
+    },
+    "nan_policy": {
+      "before_warmup": "NaN"
+    },
+    "resample_policy": {
+      "rule": "compute after resampling"
+    },
+    "lookahead_policy": false,
+    "references": [
+      "https://school.stockcharts.com/doku.php?id=technical_indicators:relative_strength_index_rsi"
     ]
   }
 ]

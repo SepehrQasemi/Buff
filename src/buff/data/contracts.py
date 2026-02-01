@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 
-REQUIRED_COLUMNS = ["timestamp", "open", "high", "low", "close"]
+REQUIRED_COLUMNS = ["timestamp", "open", "high", "low", "close", "volume"]
 
 
 def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
@@ -23,7 +23,7 @@ def validate_ohlcv(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Timestamps must be monotonic increasing")
     data["timestamp"] = timestamps
 
-    for col in ["open", "high", "low", "close"]:
+    for col in ["open", "high", "low", "close", "volume"]:
         numeric = pd.to_numeric(data[col], errors="coerce")
         if numeric.isna().any():
             raise ValueError(f"Non-numeric or NaN values found in '{col}'")

@@ -1,17 +1,17 @@
 [
   {
-    "id": "state.1m.trend.ema30",
-    "name": "TrendState EMA30 (1m)",
+    "id": "state.1m.trend.ema20",
+    "name": "TrendState EMA20 (1m)",
     "category": "market_state",
     "timeframe": "1m",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -21,9 +21,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -50,7 +50,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -79,7 +79,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -108,22 +108,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.5m.trend.ema30",
-    "name": "TrendState EMA30 (5m)",
+    "id": "state.5m.trend.ema20",
+    "name": "TrendState EMA20 (5m)",
     "category": "market_state",
     "timeframe": "5m",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -133,9 +133,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -162,7 +162,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -191,7 +191,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -220,22 +220,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.15m.trend.ema30",
-    "name": "TrendState EMA30 (15m)",
+    "id": "state.15m.trend.ema20",
+    "name": "TrendState EMA20 (15m)",
     "category": "market_state",
     "timeframe": "15m",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -245,9 +245,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -274,7 +274,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -303,7 +303,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -332,22 +332,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.30m.trend.ema30",
-    "name": "TrendState EMA30 (30m)",
+    "id": "state.30m.trend.ema20",
+    "name": "TrendState EMA20 (30m)",
     "category": "market_state",
     "timeframe": "30m",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -357,9 +357,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -386,7 +386,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -415,7 +415,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -444,22 +444,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.1h.trend.ema30",
-    "name": "TrendState EMA30 (1h)",
+    "id": "state.1h.trend.ema20",
+    "name": "TrendState EMA20 (1h)",
     "category": "market_state",
     "timeframe": "1h",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -469,9 +469,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -498,7 +498,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -527,7 +527,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -556,22 +556,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.2h.trend.ema30",
-    "name": "TrendState EMA30 (2h)",
+    "id": "state.2h.trend.ema20",
+    "name": "TrendState EMA20 (2h)",
     "category": "market_state",
     "timeframe": "2h",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -581,9 +581,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -610,7 +610,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -639,7 +639,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -668,22 +668,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.4h.trend.ema30",
-    "name": "TrendState EMA30 (4h)",
+    "id": "state.4h.trend.ema20",
+    "name": "TrendState EMA20 (4h)",
     "category": "market_state",
     "timeframe": "4h",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -693,9 +693,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -722,7 +722,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -751,7 +751,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -780,22 +780,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.1d.trend.ema30",
-    "name": "TrendState EMA30 (1d)",
+    "id": "state.1d.trend.ema20",
+    "name": "TrendState EMA20 (1d)",
     "category": "market_state",
     "timeframe": "1d",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -805,9 +805,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -834,7 +834,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -863,7 +863,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -892,22 +892,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.1w.trend.ema30",
-    "name": "TrendState EMA30 (1w)",
+    "id": "state.1w.trend.ema20",
+    "name": "TrendState EMA20 (1w)",
     "category": "market_state",
     "timeframe": "1w",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -917,9 +917,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -946,7 +946,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -975,7 +975,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -1004,22 +1004,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.2w.trend.ema30",
-    "name": "TrendState EMA30 (2w)",
+    "id": "state.2w.trend.ema20",
+    "name": "TrendState EMA20 (2w)",
     "category": "market_state",
     "timeframe": "2w",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -1029,9 +1029,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -1058,7 +1058,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -1087,7 +1087,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -1116,22 +1116,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.1M.trend.ema30",
-    "name": "TrendState EMA30 (1M)",
+    "id": "state.1M.trend.ema20",
+    "name": "TrendState EMA20 (1M)",
     "category": "market_state",
     "timeframe": "1M",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -1141,9 +1141,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -1170,7 +1170,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -1199,7 +1199,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -1228,22 +1228,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.3M.trend.ema30",
-    "name": "TrendState EMA30 (3M)",
+    "id": "state.3M.trend.ema20",
+    "name": "TrendState EMA20 (3M)",
     "category": "market_state",
     "timeframe": "3M",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -1253,9 +1253,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -1282,7 +1282,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -1311,7 +1311,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -1340,22 +1340,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.6M.trend.ema30",
-    "name": "TrendState EMA30 (6M)",
+    "id": "state.6M.trend.ema20",
+    "name": "TrendState EMA20 (6M)",
     "category": "market_state",
     "timeframe": "6M",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -1365,9 +1365,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -1394,7 +1394,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -1423,7 +1423,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -1452,22 +1452,22 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   },
   {
-    "id": "state.1Y.trend.ema30",
-    "name": "TrendState EMA30 (1Y)",
+    "id": "state.1Y.trend.ema20",
+    "name": "TrendState EMA20 (1Y)",
     "category": "market_state",
     "timeframe": "1Y",
-    "description": "Trend state using EMA(30) slope and close position.",
+    "description": "Trend state using EMA(20) slope and close position.",
     "inputs": [
       "close"
     ],
     "parameters": {
-      "ema_period": 30
+      "ema_period": 20
     },
-    "formula": "Compute ema30 on the same timeframe. up if close>ema30 and ema30>ema30_prev; down if close<ema30 and ema30<ema30_prev; else flat.",
+    "formula": "Compute ema20 on the same timeframe. up if close>ema20 and ema20>ema20_prev; down if close<ema20 and ema20<ema20_prev; else flat.",
     "output": {
       "type": "enum",
       "values": [
@@ -1477,9 +1477,9 @@
       ],
       "default": "flat"
     },
-    "constraints": "Requires ema30 and ema30_prev on the same timeframe.",
+    "constraints": "Requires ema20 and ema20_prev on the same timeframe.",
     "references": [
-      "indicator.ema"
+      "indicator.ema_20"
     ]
   },
   {
@@ -1506,7 +1506,7 @@
     },
     "constraints": "Requires rsi14 on the same timeframe.",
     "references": [
-      "indicator.rsi"
+      "indicator.rsi_14"
     ]
   },
   {
@@ -1535,7 +1535,7 @@
     },
     "constraints": "Requires atr14, close>0, and at least 200 atr_pct values for percentiles; otherwise undefined.",
     "references": [
-      "indicator.atr"
+      "indicator.atr_14"
     ]
   },
   {
@@ -1564,7 +1564,7 @@
     },
     "constraints": "Requires adx14 on the same timeframe.",
     "references": [
-      "indicator.adx"
+      "indicator.adx_14"
     ]
   }
 ]
