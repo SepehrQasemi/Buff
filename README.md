@@ -27,6 +27,31 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
+## Dependency Locking
+
+Install uv (Linux/macOS):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+Regenerate lockfile:
+
+bash
+Copy code
+uv lock --upgrade
+Frozen install (CI-compatible):
+
+bash
+Copy code
+uv sync --frozen --extra dev
+Run gates locally:
+
+bash
+Copy code
+uv run ruff format --check .
+uv run ruff check .
+uv run pytest -q
+Copy code
+
 ## Quality Gates
 
 ```bash
