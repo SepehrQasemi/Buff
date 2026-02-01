@@ -21,6 +21,11 @@ def test_goldens_sanity() -> None:
     macd = df["macd_12_26_9"]
     macd_signal = df["macd_signal_12_26_9"]
     macd_hist = df["macd_hist_12_26_9"]
+    ema_50 = df["ema_50"]
+    vwap = df["vwap_typical_daily"]
+    plus_di = df["plus_di_14"]
+    minus_di = df["minus_di_14"]
+    adx = df["adx_14"]
     std_valid = df["std_20"].first_valid_index()
 
     assert ema.dropna().shape[0] > 0
@@ -31,6 +36,11 @@ def test_goldens_sanity() -> None:
     assert macd.dropna().shape[0] > 0
     assert macd_signal.dropna().shape[0] > 0
     assert macd_hist.dropna().shape[0] > 0
+    assert ema_50.dropna().shape[0] > 0
+    assert (vwap.dropna() > 0).all()
+    assert (plus_di.dropna() >= 0).all()
+    assert (minus_di.dropna() >= 0).all()
+    assert (adx.dropna() >= 0).all()
 
     warmup = 34
     for column in ["macd_12_26_9", "macd_signal_12_26_9", "macd_hist_12_26_9"]:

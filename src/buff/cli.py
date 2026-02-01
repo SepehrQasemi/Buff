@@ -155,6 +155,18 @@ def main() -> None:
             params["_valid_from"] = params["period"]
         elif kind == "macd":
             params["_valid_from"] = params["slow"] + params["signal"] - 2
+        elif kind == "ema_spread":
+            params["_valid_from"] = params["slow"] - 1
+        elif kind == "rsi_slope":
+            params["_valid_from"] = (params["period"] - 1) + params["slope"]
+        elif kind == "roc":
+            params["_valid_from"] = params["period"]
+        elif kind == "vwap":
+            params["_valid_from"] = 0
+        elif kind == "obv":
+            params["_valid_from"] = 0
+        elif kind == "adx":
+            params["_valid_from"] = params["period"] * 2
         else:
             raise ValueError(f"Unknown feature kind: {kind}")
         feature_params[name] = params

@@ -12,7 +12,7 @@ def test_valid_input_passes() -> None:
     df = pd.read_csv("tests/goldens/expected.csv")
     out = validate_ohlcv(df)
     assert out.index.is_monotonic_increasing
-    assert list(out.columns) == ["open", "high", "low", "close"]
+    assert list(out.columns) == ["open", "high", "low", "close", "volume"]
 
 
 def test_missing_column_fails() -> None:
