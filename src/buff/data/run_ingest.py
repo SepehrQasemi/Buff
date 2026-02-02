@@ -14,6 +14,7 @@ from buff.data.report import build_report, write_report
 from buff.data.resample import resample_ohlcv
 from buff.data.store import ohlcv_parquet_path, save_parquet, symbol_to_filename
 from buff.data.validate import compute_quality
+from buff.data.quality_report import build_quality_report, write_quality_report
 
 
 DEFAULT_SYMBOLS = [
@@ -157,6 +158,7 @@ def main() -> None:
         exchange = make_exchange(cfg)
 
     saved_symbols = []
+    workspace_report: dict[str, object] | None = None
     for symbol in symbols:
         print(f"\nFetching base {base_timeframe} for {symbol}...")
         try:
@@ -177,6 +179,7 @@ def main() -> None:
                 run_dir.mkdir(parents=True, exist_ok=True)
                 snapshot_path = run_dir / "ohlcv_1m.parquet"
                 save_parquet(base_df, str(snapshot_path))
+                workspace_report = build_quality_report(base_df, symbol, base_timeframe)
 
             for tf in timeframes:
                 if tf == base_timeframe:
@@ -201,6 +204,11 @@ def main() -> None:
         write_report(report, report_path)
     else:
         report_path.write_text("{}", encoding="utf-8")
+
+    if args.run_id and workspace_report is not None:
+        workspaces_dir = Path(os.getenv("BUFF_WORKSPACES_DIR", "workspaces"))
+        run_dir = workspaces_dir / args.run_id
+        write_quality_report(run_dir / "data_quality.json", workspace_report)
 
     print(f"\n{'=' * 60}")
     print(f"Saved report to {report_path}")

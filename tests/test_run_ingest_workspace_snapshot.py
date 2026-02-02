@@ -49,10 +49,52 @@ def test_run_ingest_writes_workspace_snapshot(tmp_path: Path) -> None:
     run_dir = workspaces_dir / run_id
     snapshot_path = run_dir / "ohlcv_1m.parquet"
     assert snapshot_path.exists()
+    quality_path = run_dir / "data_quality.json"
+    assert quality_path.exists()
+    payload = json.loads(quality_path.read_text(encoding="utf-8"))
+    assert payload.get("schema_version") == 1
 
     manifest_path = create_workspace_manifest(run_dir)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     entries = {entry["path"] for entry in manifest["entries"]}
     assert f"{run_id}/ohlcv_1m.parquet" in entries
+    assert f"{run_id}/data_quality.json" in entries
 
     verify_workspace_manifest(manifest_path)
+
+
+def test_quality_report_not_written_without_run_id(tmp_path: Path) -> None:
+    workspaces_dir = tmp_path / "workspaces"
+    data_dir = tmp_path / "data" / "ohlcv"
+    reports_dir = tmp_path / "reports"
+
+    argv = [
+        "run_ingest",
+        "--symbols",
+        "BTC/USDT",
+        "--base_timeframe",
+        "1m",
+        "--timeframes",
+        "1m",
+        "--offline",
+        "--fixtures_dir",
+        "tests/fixtures/ohlcv",
+        "--data_dir",
+        str(data_dir),
+        "--reports_dir",
+        str(reports_dir),
+    ]
+    original_argv = sys.argv
+    original_workspaces = os.environ.get("BUFF_WORKSPACES_DIR")
+    try:
+        os.environ["BUFF_WORKSPACES_DIR"] = str(workspaces_dir)
+        sys.argv = argv
+        run_ingest_main()
+    finally:
+        sys.argv = original_argv
+        if original_workspaces is None:
+            os.environ.pop("BUFF_WORKSPACES_DIR", None)
+        else:
+            os.environ["BUFF_WORKSPACES_DIR"] = original_workspaces
+
+    assert not (workspaces_dir / "run-1" / "data_quality.json").exists()

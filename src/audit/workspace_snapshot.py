@@ -14,6 +14,7 @@ _ALLOWED_FILENAMES = {
     "report_summary.json",
     "report.md",
     "ohlcv_1m.parquet",
+    "data_quality.json",
 }
 _ALLOWED_JSONL_PREFIX = "decision_records_"
 
