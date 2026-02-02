@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from pathlib import Path
 
+from risk.cli import build_parser
 from risk.risk_state import (
     HIGH_COOLDOWN,
     SIZE_MULTIPLIER_GREEN,
@@ -42,6 +43,19 @@ def test_determinism_timeline_and_json(tmp_path: Path) -> None:
     write_risk_timeline_json(out_a, timeline_a)
     write_risk_timeline_json(out_b, timeline_b)
     assert out_a.read_text(encoding="utf-8") == out_b.read_text(encoding="utf-8")
+
+
+def test_cli_default_output_path() -> None:
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--start",
+            "2026-01-10T08:00:00Z",
+            "--end",
+            "2026-01-10T20:00:00Z",
+        ]
+    )
+    assert Path(args.out) == Path("reports") / "risk_timeline.json"
 
 
 def test_explainability_reasons_and_event_ids() -> None:
