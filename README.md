@@ -19,6 +19,24 @@ registered, approved strategies through a controlled pipeline.
 - Full audit trail for every decision and order action.
 - Canonical market data timeframe is 1m; all higher timeframes are deterministic resamples.
 
+## Invariants & Non-goals
+
+Invariants:
+- Deterministic outputs for a given snapshot and configuration.
+- UTC time basis for timestamps.
+- Stable ordering for records and deterministic aggregation.
+- No hidden state mutation; inputs are explicit and versioned.
+- Reproducible outputs across reruns.
+
+Non-goals:
+- Price prediction / forecasting ("no prediction").
+- Signal selling or trading advice.
+- Live trading.
+- Guaranteed profit claims.
+
+Boundary:
+- UI and chatbot are strictly read-only; no execution is triggered from UI/chatbot.
+
 ## Data Timeframe Canonicalization
 
 - Ingest/base timeframe is **1m**; higher timeframes are derived deterministically.
@@ -122,6 +140,9 @@ reason (for BLOCKED/ERROR), inputs_digest, artifact_paths.
 
 run_id is sanitized to `[A-Za-z0-9_-]` and records are fail-closed if validation fails.
 Control plane state loading defaults to DISARMED if the state file is missing or corrupt.
+
+See `docs/DECISION_RECORD.md` for the full schema, replay semantics, and schema versioning &
+compatibility rules.
 
 ## Replay & Reproducibility (M7)
 

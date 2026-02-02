@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from audit.decision_records import DecisionRecordWriter, canonical_json, ensure_run_dir, sha256_hex
 from risk.types import RiskState
 from selector.records import selection_to_record
@@ -100,3 +102,16 @@ def test_selector_logs_when_writer_provided(tmp_path: Path) -> None:
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record["selection"]["strategy_id"] == result.strategy_id
+
+
+def test_writer_rejects_invalid_schema(tmp_path: Path) -> None:
+    out_path = tmp_path / "decision_records.jsonl"
+    writer = DecisionRecordWriter(out_path=str(out_path), run_id="test_run")
+    with pytest.raises(ValueError, match="invalid_market_state"):
+        writer.append(
+            timeframe="1m",
+            risk_state="GREEN",
+            market_state=["not", "a", "dict"],
+            selection={"strategy_id": "TEST", "rule_id": "R1", "reason": "invalid"},
+        )
+    writer.close()
