@@ -49,7 +49,7 @@ def resample_ohlcv(df: pd.DataFrame, timeframe_seconds: int) -> pd.DataFrame:
 
     # Use floor on tz-aware timestamps to avoid dependence on internal time unit
     # (pandas 3.0 defaults can change datetime64 resolution).
-    frame["_bucket"] = frame["ts"].dt.floor(f"{timeframe_seconds}s")
+    frame["_bucket"] = frame["ts"].dt.floor(f"{timeframe_seconds}s").astype("datetime64[ns, UTC]")
 
     grouped = frame.groupby("_bucket", sort=True, observed=True)
     aggregated = grouped.agg(

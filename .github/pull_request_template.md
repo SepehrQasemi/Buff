@@ -10,6 +10,7 @@
 
 ## Red-line checks
 - [ ] No direct push to main
+- [ ] ruff + pytest run locally
 - [ ] No price prediction
 - [ ] No buy/sell signals
 - [ ] No strategy invention/optimization

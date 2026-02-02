@@ -32,3 +32,12 @@ On Feb 2, 2026, commit `cc01ee6` was pushed directly to `main`, bypassing PR rev
 ## Implementation status
 - Ruleset applied via API on Feb 2, 2026 (ruleset id: 12378749)
 - Verification: `gh api /repos/Buff-Trading-AI/Buff/rulesets`
+
+## Verification checklist
+- Read back rulesets: `gh api /repos/Buff-Trading-AI/Buff/rulesets`
+- Confirm ruleset targeting `refs/heads/main` is `active`
+- Confirm rules include:
+  - `pull_request` with `required_approving_review_count: 1`
+  - `required_status_checks` with `context: "ci"` and `strict_required_status_checks_policy: true`
+  - `non_fast_forward` and `deletion`
+- Required check name: `ci`
