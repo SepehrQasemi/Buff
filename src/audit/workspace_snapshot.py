@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
+import shutil
 
 
 _MANIFEST_NAME = "snapshot_manifest.json"
@@ -32,6 +34,9 @@ class WorkspaceSnapshotError(RuntimeError):
         self.reason = reason
 
 
+_LINK_MODES = {"symlink", "hardlink", "copy"}
+
+
 def _utc_now_z() -> str:
     ts = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return ts.replace("+00:00", "Z")
@@ -43,6 +48,21 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _link_file(src: Path, dest: Path) -> str:
+    if dest.exists():
+        raise WorkspaceSnapshotError("snapshot_target_exists")
+    try:
+        os.symlink(src, dest)
+        return "symlink"
+    except (OSError, NotImplementedError):
+        try:
+            os.link(src, dest)
+            return "hardlink"
+        except (OSError, NotImplementedError):
+            shutil.copy2(src, dest)
+            return "copy"
 
 
 def _is_included(name: str) -> bool:
@@ -75,20 +95,31 @@ def _entries_from_files(run_dir: Path, workspace_dir: Path) -> list[ManifestEntr
     return sorted(entries, key=lambda entry: entry.path)
 
 
-def create_workspace_manifest(run_dir: Path) -> Path:
+def create_workspace_manifest(run_dir: Path, *, link_modes: dict[str, str] | None = None) -> Path:
     run_dir = run_dir.resolve()
     workspace_dir = run_dir.parent
     run_id = run_dir.name
 
     entries = _entries_from_files(run_dir, workspace_dir)
+    entries_payload: list[dict[str, object]] = []
+    for entry in entries:
+        record: dict[str, object] = {
+            "path": entry.path,
+            "size_bytes": entry.size_bytes,
+            "sha256": entry.sha256,
+        }
+        if link_modes is not None:
+            mode = link_modes.get(entry.path)
+            if mode not in _LINK_MODES:
+                raise WorkspaceSnapshotError("invalid_link_mode")
+            record["link_mode"] = mode
+        entries_payload.append(record)
+
     payload = {
         "run_id": run_id,
         "created_at": _utc_now_z(),
         "snapshot_version": _MANIFEST_VERSION,
-        "entries": [
-            {"path": entry.path, "size_bytes": entry.size_bytes, "sha256": entry.sha256}
-            for entry in entries
-        ],
+        "entries": entries_payload,
     }
 
     manifest_path = run_dir / _MANIFEST_NAME
@@ -97,6 +128,28 @@ def create_workspace_manifest(run_dir: Path) -> Path:
         encoding="utf-8",
     )
     return manifest_path
+
+
+def materialize_workspace_snapshot(run_dir: Path, out_dir: Path) -> Path:
+    run_dir = run_dir.resolve()
+    out_dir = out_dir.resolve()
+    if not run_dir.exists():
+        raise WorkspaceSnapshotError("run_dir_missing")
+
+    snapshot_run_dir = out_dir / run_dir.name
+    if snapshot_run_dir.exists():
+        raise WorkspaceSnapshotError("snapshot_exists")
+    snapshot_run_dir.mkdir(parents=True, exist_ok=False)
+
+    link_modes: dict[str, str] = {}
+    for file_path in _iter_workspace_files(run_dir):
+        target = snapshot_run_dir / file_path.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        mode = _link_file(file_path, target)
+        rel = target.relative_to(out_dir).as_posix()
+        link_modes[rel] = mode
+
+    return create_workspace_manifest(snapshot_run_dir, link_modes=link_modes)
 
 
 def verify_workspace_manifest(manifest_path: Path) -> None:
