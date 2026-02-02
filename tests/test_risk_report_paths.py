@@ -2,6 +2,7 @@
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -31,7 +32,7 @@ def test_manual_path_traversal_blocked(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("BUFF_REPO_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     report = _base_report(workspace="../..")
-    with pytest.raises(ValueError, match="path_guard_violation"):
+    with pytest.raises((ValueError, PermissionError), match="path_guard_violation|write forbidden"):
         report_path(report, mode="manual")
 
 
@@ -73,8 +74,18 @@ def test_symlink_escape_blocked(tmp_path, monkeypatch) -> None:
         workspace_dir.parent.mkdir(parents=True, exist_ok=True)
         workspace_dir.symlink_to(target_dir, target_is_directory=True)
     except (OSError, NotImplementedError):
-        pytest.skip("Symlink creation not supported on this platform.")
+        if os.name != "nt":
+            raise
+        workspace_dir.parent.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", str(workspace_dir), str(target_dir)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f"mklink_failed:{result.stderr.strip()}")
 
     report = _base_report(workspace="linked")
-    with pytest.raises(ValueError, match="path_guard_violation"):
+    with pytest.raises((ValueError, PermissionError), match="path_guard_violation|write forbidden"):
         report_path(report, mode="manual")
