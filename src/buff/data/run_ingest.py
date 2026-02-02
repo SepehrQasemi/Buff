@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -117,6 +118,7 @@ def main() -> None:
     parser.add_argument("--exchange", type=str, default="binance", help="Exchange name")
     parser.add_argument("--market_type", type=str, default="future", help="Market type")
     parser.add_argument("--limit", type=int, default=1000, help="Fetch limit per request")
+    parser.add_argument("--run_id", type=str, default="", help="Workspace run id for snapshot")
 
     args = parser.parse_args()
 
@@ -125,6 +127,9 @@ def main() -> None:
 
     if base_timeframe != "1m":
         raise ValueError("Base timeframe must be 1m")
+
+    if args.run_id and len(symbols) != 1:
+        raise ValueError("run_id requires exactly one symbol")
 
     if args.timeframes:
         timeframes = _parse_timeframes(args.timeframes)
@@ -165,6 +170,13 @@ def main() -> None:
             base_df = base_df.sort_values("ts").reset_index(drop=True)
             base_path = ohlcv_parquet_path(data_dir, symbol, base_timeframe)
             save_parquet(base_df, str(base_path))
+
+            if args.run_id:
+                workspaces_dir = Path(os.getenv("BUFF_WORKSPACES_DIR", "workspaces"))
+                run_dir = workspaces_dir / args.run_id
+                run_dir.mkdir(parents=True, exist_ok=True)
+                snapshot_path = run_dir / "ohlcv_1m.parquet"
+                save_parquet(base_df, str(snapshot_path))
 
             for tf in timeframes:
                 if tf == base_timeframe:
