@@ -119,3 +119,41 @@ def test_unapproved_strategy_blocked_even_if_armed(tmp_path: Path) -> None:
     )
     assert decision.action == "blocked"
     assert decision.reason == "strategy_not_approved"
+
+
+def test_kill_switch_blocks_paper_run(tmp_path: Path) -> None:
+    registry = StrategyRegistry()
+    registry.register(
+        StrategySpec(
+            strategy_id="strat-1",
+            version=1,
+            name="Demo",
+            description="test",
+            tests_passed=True,
+            changelog="init",
+        )
+    )
+    control = ControlPlane(
+        ControlPlaneState(armed=True, approved_strategies={"strat-1"}, kill_switch=True)
+    )
+    ctx = UIContext(control, registry)
+
+    decision_path = tmp_path / "decisions.jsonl"
+    decision = run_paper(
+        ctx,
+        intent=_intent(),
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="strat-1",
+        decision_path=decision_path,
+    )
+    assert decision.action == "blocked"
+    assert decision.reason == "kill_switch"
+    assert not decision_path.exists()
