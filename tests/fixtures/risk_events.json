@@ -1,0 +1,26 @@
+[
+  {
+    "event_id": "evt_high_20260110_1200",
+    "ts_utc": "2026-01-10T12:00:00+00:00",
+    "kind": "macro",
+    "severity": "high",
+    "source": "calendar",
+    "title": "Macro release"
+  },
+  {
+    "event_id": "evt_med_20260110_1500",
+    "ts_utc": "2026-01-10T15:00:00+00:00",
+    "kind": "earnings",
+    "severity": "medium",
+    "source": "calendar",
+    "title": "Earnings update"
+  },
+  {
+    "event_id": "evt_low_20260110_1800",
+    "ts_utc": "2026-01-10T18:00:00+00:00",
+    "kind": "geo",
+    "severity": "low",
+    "source": "headlines",
+    "title": "Low severity note"
+  }
+]
