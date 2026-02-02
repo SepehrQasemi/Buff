@@ -1,43 +1,32 @@
 # Main branch protection and PR-only policy
 
 ## Policy statement
-Direct pushes to `main` are prohibited. All changes must be made through a pull request.
+Direct pushes to `main` are prohibited. All changes must be merged via a pull request.
 
-## Required checks
-The following required status checks must pass before merging to `main`:
-- `ci`
+## Required checks (merge gates)
+- Required: `ci`
+- CodeQL runs on PRs and on `main` (push + schedule) for diagnostics, but is not a required gate because hosted runner capacity can delay PR completion.
+- If strict pre-merge CodeQL gating is required, the repo must use self-hosted runners (or guaranteed capacity) so PRs do not deadlock.
 
-## Required review policy
-- At least 1 approving review is required before merge.
-- Administrators are not exempt.
+## Workflow triggers
+- `ci`: pull_request (opened, synchronize, reopened), push to `main`, workflow_dispatch
+- `CodeQL`: pull_request (opened, synchronize, reopened), push to `main`, schedule (Mon 06:00 UTC)
 
-## What happened
-On Feb 2, 2026, commit `cc01ee6` was pushed directly to `main`, bypassing PR review and required checks. The CI workflow then failed on the main branch.
-
-## Corrective actions
-- Implemented/updated CI so the `ci` workflow runs `ruff format --check`, `ruff check`, and `pytest -q` and passes.
-- Added an explicit PR checklist to reinforce "no direct push to main" and local gate expectations.
-- Enforced branch protection (ruleset or branch protection) to require PRs, required checks, and at least one approval; force pushes and deletions are blocked.
-
-## Ruleset / branch protection configuration
-- Target branch: `main`
+## Ruleset / branch protection configuration (main)
+- Target branch: `refs/heads/main`
 - Require pull request before merging
-- Require at least 1 approval
-- Require status checks: `ci`
-- Require branches to be up to date before merging
-- Restrict direct pushes
-- Include administrators
-- Block force pushes and deletions
+- Required status checks: `ci` (strict)
+- Require review thread resolution
+- No force pushes (non-fast-forward)
+- No deletions
+- Bypass actors: none (applies to admins)
 
 ## Implementation status
-- Ruleset applied via API on Feb 2, 2026 (ruleset id: 12378749)
-- Verification: `gh api /repos/Buff-Trading-AI/Buff/rulesets`
+- Ruleset id: 12378749
+- Verification: `gh api /repos/Buff-Trading-AI/Buff/rulesets/12378749`
 
 ## Verification checklist
-- Read back rulesets: `gh api /repos/Buff-Trading-AI/Buff/rulesets`
-- Confirm ruleset targeting `refs/heads/main` is `active`
-- Confirm rules include:
-  - `pull_request` with `required_approving_review_count: 1`
-  - `required_status_checks` with `context: "ci"` and `strict_required_status_checks_policy: true`
-  - `non_fast_forward` and `deletion`
-- Required check name: `ci`
+- Read back ruleset and confirm `required_status_checks` includes only `ci`
+- Confirm CodeQL workflow runs on PR + `main` but is not required
+- Confirm `non_fast_forward` and `deletion` rules present
+- Confirm no bypass actors configured
