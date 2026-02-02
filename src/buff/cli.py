@@ -14,6 +14,11 @@ import numpy as np
 import pandas as pd
 
 from buff.data.contracts import validate_ohlcv
+from buff.features.contract import (
+    build_feature_specs_from_registry,
+    build_manifest_entries,
+    sort_specs,
+)
 from buff.features.metadata import build_metadata, sha256_file, write_json
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
@@ -33,50 +38,10 @@ from risk.report import write_risk_report
 from risk.types import RiskContext
 
 
-def _feature_lookback(spec: dict[str, Any]) -> int:
-    kind = spec.get("kind")
-    params = dict(spec.get("params", {}))
-    if kind in {"ema", "sma", "std", "bbands"}:
-        return max(0, int(params.get("period", 0)) - 1)
-    if kind in {"rsi", "atr"}:
-        return max(0, int(params.get("period", 0)))
-    if kind == "macd":
-        return max(0, int(params.get("slow", 0)) + int(params.get("signal", 0)) - 2)
-    if kind == "ema_spread":
-        return max(0, int(params.get("slow", 0)) - 1)
-    if kind == "rsi_slope":
-        return max(0, (int(params.get("period", 0)) - 1) + int(params.get("slope", 0)))
-    if kind == "roc":
-        return max(0, int(params.get("period", 0)))
-    if kind in {"vwap", "obv"}:
-        return 0
-    if kind == "adx":
-        return max(0, int(params.get("period", 0)) * 2)
-    return 0
-
-
 def _build_feature_manifest(run_id: str, features: dict[str, Any]) -> dict[str, Any]:
-    entries = []
-    for name in sorted(features.keys()):
-        spec = features[name]
-        params = dict(spec.get("params", {}))
-        dependencies = sorted(list(spec.get("requires", [])))
-        outputs = sorted(list(spec.get("outputs", [])))
-        entries.append(
-            {
-                "name": name,
-                "version": 1,
-                "params": params,
-                "lookback": _feature_lookback(spec),
-                "dependencies": dependencies,
-                "outputs": outputs,
-            }
-        )
-    return {
-        "schema_version": 1,
-        "run_id": run_id,
-        "features": entries,
-    }
+    specs = build_feature_specs_from_registry(features)
+    entries = build_manifest_entries(specs)
+    return {"schema_version": 1, "run_id": run_id, "features": [e.to_dict() for e in entries]}
 
 
 def _detect_input_format(path: Path) -> str:
@@ -299,6 +264,7 @@ def main() -> None:
             raise ValueError(f"Unknown feature kind: {kind}")
         feature_params[name] = params
 
+    ordered_specs = sort_specs(build_feature_specs_from_registry(FEATURES))
     metadata = build_metadata(
         input_path=str(input_path),
         input_format=input_format,
@@ -307,7 +273,7 @@ def main() -> None:
         output_sha256=output_sha256,
         row_count=int(out.shape[0]),
         columns=list(out.columns),
-        features=list(FEATURES.keys()),
+        features=[spec.feature_id for spec in ordered_specs],
         feature_params=feature_params,
     )
     write_json(meta_path, metadata)

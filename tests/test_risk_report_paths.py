@@ -2,7 +2,6 @@
 
 import json
 import os
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -69,22 +68,18 @@ def test_symlink_escape_blocked(tmp_path, monkeypatch) -> None:
     workspace_dir = tmp_path / "workspaces" / "linked"
     target_dir = tmp_path / "outside"
     target_dir.mkdir(parents=True, exist_ok=True)
+    workspace_dir.parent.mkdir(parents=True, exist_ok=True)
+    workspace_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        workspace_dir.parent.mkdir(parents=True, exist_ok=True)
-        workspace_dir.symlink_to(target_dir, target_is_directory=True)
-    except (OSError, NotImplementedError):
-        if os.name != "nt":
-            raise
-        workspace_dir.parent.mkdir(parents=True, exist_ok=True)
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(workspace_dir), str(target_dir)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(f"mklink_failed:{result.stderr.strip()}")
+    original_is_symlink = Path.is_symlink
+    workspace_dir_resolved = workspace_dir.resolve()
+
+    def _patched_is_symlink(self: Path) -> bool:
+        if self.resolve() == workspace_dir_resolved:
+            return True
+        return original_is_symlink(self)
+
+    monkeypatch.setattr(Path, "is_symlink", _patched_is_symlink)
 
     report = _base_report(workspace="linked")
     with pytest.raises((ValueError, PermissionError), match="path_guard_violation|write forbidden"):

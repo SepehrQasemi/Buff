@@ -19,6 +19,20 @@ def _frame(start: str, periods: int) -> pd.DataFrame:
     )
 
 
+def _frame_from_ts(ts: pd.Series) -> pd.DataFrame:
+    periods = len(ts)
+    return pd.DataFrame(
+        {
+            "ts": ts,
+            "open": list(range(periods)),
+            "high": [v + 1 for v in range(periods)],
+            "low": [v - 1 for v in range(periods)],
+            "close": [v + 0.5 for v in range(periods)],
+            "volume": [1.0] * periods,
+        }
+    )
+
+
 def test_basic_aggregation_correctness() -> None:
     df = _frame("2023-01-01T00:00:00Z", 5)
     out = resample_ohlcv(df, 300)
@@ -71,3 +85,21 @@ def test_behavior_on_out_of_order_or_duplicate_input() -> None:
         assert False, "expected duplicate_timestamps"
     except ValueError as exc:
         assert str(exc) == "duplicate_timestamps"
+
+
+def test_resample_same_output_for_ns_and_us_datetime_units() -> None:
+    base = pd.date_range("2023-01-01T00:00:00Z", periods=10, freq="1min", tz="UTC")
+    ts_ns = pd.Series(base.tz_convert(None).to_numpy(dtype="datetime64[ns]"))
+    ts_us = pd.Series(base.tz_convert(None).to_numpy(dtype="datetime64[us]"))
+
+    out_ns = resample_ohlcv(_frame_from_ts(ts_ns), 300)
+    out_us = resample_ohlcv(_frame_from_ts(ts_us), 300)
+
+    pd.testing.assert_frame_equal(out_ns.reset_index(drop=True), out_us.reset_index(drop=True))
+
+
+def test_resample_never_produces_1970_buckets_for_fixture() -> None:
+    df = _frame("2023-01-01T00:00:00Z", 5)
+    out = resample_ohlcv(df, 300)
+    assert not out.empty
+    assert out["ts"].min().year >= 2000
