@@ -26,6 +26,35 @@ class StrategyRegistry:
             raise ValueError("strategy_version_not_incremented")
         self.strategies[spec.strategy_id] = spec
 
+    def list(self) -> list[StrategySpec]:
+        return sorted(
+            self.strategies.values(),
+            key=lambda spec: (spec.strategy_id, spec.version),
+        )
+
+    def validate(self) -> None:
+        specs = list(self.strategies.values())
+        seen: set[tuple[str, int]] = set()
+        for spec in sorted(specs, key=lambda item: (item.strategy_id, item.version)):
+            if not isinstance(spec.strategy_id, str) or not spec.strategy_id:
+                raise ValueError("invalid_strategy_id")
+            if not isinstance(spec.version, int) or isinstance(spec.version, bool):
+                raise ValueError("invalid_strategy_version")
+            if not isinstance(spec.name, str) or not spec.name:
+                raise ValueError("invalid_strategy_name")
+            if not isinstance(spec.description, str):
+                raise ValueError("invalid_strategy_description")
+            if not isinstance(spec.tests_passed, bool):
+                raise ValueError("invalid_tests_passed")
+            if not spec.tests_passed:
+                raise ValueError("tests_not_passed")
+            if not isinstance(spec.changelog, str):
+                raise ValueError("invalid_changelog")
+            key = (spec.strategy_id, spec.version)
+            if key in seen:
+                raise ValueError("duplicate_strategy_version")
+            seen.add(key)
+
     def is_registered(self, strategy_id: str) -> bool:
         return strategy_id in self.strategies
 
