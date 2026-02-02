@@ -4,9 +4,13 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    branches: ["main"]
+    types: [opened, synchronize, reopened]
   schedule:
     - cron: "0 6 * * 1"
+
+concurrency:
+  group: codeql-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   analyze:

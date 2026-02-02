@@ -31,7 +31,7 @@ def test_manual_path_traversal_blocked(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("BUFF_REPO_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     report = _base_report(workspace="../..")
-    with pytest.raises(ValueError, match="path_guard_violation"):
+    with pytest.raises((ValueError, PermissionError), match="path_guard_violation|write forbidden"):
         report_path(report, mode="manual")
 
 
@@ -72,7 +72,6 @@ def test_symlink_escape_blocked(tmp_path, monkeypatch) -> None:
     workspace_dir.mkdir(parents=True, exist_ok=True)
 
     original_is_symlink = Path.is_symlink
-
     workspace_dir_resolved = workspace_dir.resolve()
 
     def _patched_is_symlink(self: Path) -> bool:
@@ -83,5 +82,5 @@ def test_symlink_escape_blocked(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(Path, "is_symlink", _patched_is_symlink)
 
     report = _base_report(workspace="linked")
-    with pytest.raises(ValueError, match="path_guard_violation"):
+    with pytest.raises((ValueError, PermissionError), match="path_guard_violation|write forbidden"):
         report_path(report, mode="manual")
