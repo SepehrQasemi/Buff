@@ -18,6 +18,15 @@ def _write_fixture_parquet(tmp_path: Path) -> Path:
     fixture_path = repo_root / "tests" / "fixtures" / "ohlcv" / "BTC_USDT_1h.csv"
     df = pd.read_csv(fixture_path)
     df["ts"] = pd.to_datetime(df["ts"], utc=True)
+    if len(df) < 60:
+        last = df.iloc[-1].copy()
+        extra_rows = []
+        base_ts = df["ts"].iloc[-1]
+        for offset in range(1, 60 - len(df) + 1):
+            row = last.copy()
+            row["ts"] = base_ts + pd.Timedelta(hours=offset)
+            extra_rows.append(row)
+        df = pd.concat([df, pd.DataFrame(extra_rows)], ignore_index=True)
     data_dir = tmp_path / "data" / "ohlcv"
     parquet_path = ohlcv_parquet_path(data_dir, "BTC/USDT", "1h")
     save_parquet(df, str(parquet_path))

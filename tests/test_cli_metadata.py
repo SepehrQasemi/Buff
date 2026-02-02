@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 
 from buff import cli
+from buff.features.canonical import canonical_json_str
 from buff.features.registry import FEATURES
 
 
@@ -51,8 +52,8 @@ def test_cli_metadata(tmp_path: Path) -> None:
 
     payload = json.loads(meta_path.read_text(encoding="utf-8"))
     assert payload["schema_version"] == "1.0"
-    expected_features = list(FEATURES.keys())
-    expected_columns = [col for spec in FEATURES.values() for col in spec["outputs"]]
+    expected_features = sorted(FEATURES.keys())
+    expected_columns = [col for name in expected_features for col in FEATURES[name]["outputs"]]
     assert payload["features"] == expected_features
 
     output_df = pd.read_parquet(output_path, engine="pyarrow")
@@ -75,16 +76,20 @@ def test_cli_metadata(tmp_path: Path) -> None:
     assert manifest["schema_version"] == 1
     assert manifest["run_id"] == run_id
     features = manifest["features"]
-    names = [entry["name"] for entry in features]
-    assert names == sorted(names)
+    names = [entry["feature_id"] for entry in features]
+    assert names == expected_features
     for entry in features:
         assert set(entry.keys()) == {
-            "name",
+            "schema_version",
+            "feature_id",
             "version",
-            "params",
+            "params_canonical_json",
             "lookback",
-            "dependencies",
+            "requires",
             "outputs",
         }
-        assert entry["dependencies"] == sorted(entry["dependencies"])
-        assert entry["outputs"] == sorted(entry["outputs"])
+        assert entry["schema_version"] == 1
+        feature_id = entry["feature_id"]
+        assert entry["requires"] == list(FEATURES[feature_id]["requires"])
+        assert entry["outputs"] == list(FEATURES[feature_id]["outputs"])
+        assert entry["params_canonical_json"] == canonical_json_str(FEATURES[feature_id]["params"])
