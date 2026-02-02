@@ -1,0 +1,125 @@
+[
+  {
+    "event_ids": [],
+    "reasons": [],
+    "risk_state": "green",
+    "size_multiplier": 1.0,
+    "ts_utc": "2026-01-10T08:00:00+00:00"
+  },
+  {
+    "event_ids": [],
+    "reasons": [],
+    "risk_state": "green",
+    "size_multiplier": 1.0,
+    "ts_utc": "2026-01-10T09:00:00+00:00"
+  },
+  {
+    "event_ids": [
+      "evt_high_20260110_1200"
+    ],
+    "reasons": [
+      "high severity event within window: evt_high_20260110_1200"
+    ],
+    "risk_state": "red",
+    "size_multiplier": 0.0,
+    "ts_utc": "2026-01-10T10:00:00+00:00"
+  },
+  {
+    "event_ids": [
+      "evt_high_20260110_1200"
+    ],
+    "reasons": [
+      "high severity event within window: evt_high_20260110_1200"
+    ],
+    "risk_state": "red",
+    "size_multiplier": 0.0,
+    "ts_utc": "2026-01-10T11:00:00+00:00"
+  },
+  {
+    "event_ids": [
+      "evt_high_20260110_1200"
+    ],
+    "reasons": [
+      "high severity event within window: evt_high_20260110_1200"
+    ],
+    "risk_state": "red",
+    "size_multiplier": 0.0,
+    "ts_utc": "2026-01-10T12:00:00+00:00"
+  },
+  {
+    "event_ids": [
+      "evt_high_20260110_1200"
+    ],
+    "reasons": [
+      "high severity event within window: evt_high_20260110_1200"
+    ],
+    "risk_state": "red",
+    "size_multiplier": 0.0,
+    "ts_utc": "2026-01-10T13:00:00+00:00"
+  },
+  {
+    "event_ids": [
+      "evt_high_20260110_1200"
+    ],
+    "reasons": [
+      "high severity event within window: evt_high_20260110_1200"
+    ],
+    "risk_state": "red",
+    "size_multiplier": 0.0,
+    "ts_utc": "2026-01-10T14:00:00+00:00"
+  },
+  {
+    "event_ids": [
+      "evt_high_20260110_1200"
+    ],
+    "reasons": [
+      "high severity cooldown after event: evt_high_20260110_1200"
+    ],
+    "risk_state": "red",
+    "size_multiplier": 0.0,
+    "ts_utc": "2026-01-10T15:00:00+00:00"
+  },
+  {
+    "event_ids": [
+      "evt_high_20260110_1200"
+    ],
+    "reasons": [
+      "high severity cooldown after event: evt_high_20260110_1200"
+    ],
+    "risk_state": "red",
+    "size_multiplier": 0.0,
+    "ts_utc": "2026-01-10T16:00:00+00:00"
+  },
+  {
+    "event_ids": [
+      "evt_med_20260110_1500"
+    ],
+    "reasons": [
+      "medium severity event within window: evt_med_20260110_1500"
+    ],
+    "risk_state": "yellow",
+    "size_multiplier": 0.5,
+    "ts_utc": "2026-01-10T17:00:00+00:00"
+  },
+  {
+    "event_ids": [],
+    "reasons": [],
+    "risk_state": "green",
+    "size_multiplier": 1.0,
+    "ts_utc": "2026-01-10T18:00:00+00:00"
+  },
+  {
+    "event_ids": [],
+    "reasons": [],
+    "risk_state": "green",
+    "size_multiplier": 1.0,
+    "ts_utc": "2026-01-10T19:00:00+00:00"
+  },
+  {
+    "event_ids": [],
+    "reasons": [],
+    "risk_state": "green",
+    "size_multiplier": 1.0,
+    "ts_utc": "2026-01-10T20:00:00+00:00"
+  }
+]
