@@ -71,8 +71,9 @@ def test_invalid_json_line_raises(tmp_path: Path) -> None:
     records_path = run_dir / "decision_records.jsonl"
     records_path.write_text("{bad json\n", encoding="utf-8")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as excinfo:
         write_report(tmp_path, run_id)
+    assert "invalid_json_line" in str(excinfo.value)
 
     assert not (run_dir / "report.md").exists()
     assert not (run_dir / "report_summary.json").exists()

@@ -41,6 +41,25 @@ Top-level:
   - content_hash: str
   - inputs_hash: str | null
 
+## Schema Versioning & Compatibility
+
+Version format: `MAJOR.MINOR.PATCH` (example: `1.0.0`).
+
+Versioning rules:
+- MAJOR: breaking changes (field removals, semantic changes, or incompatible types).
+- MINOR: backward-compatible additive changes (new optional fields, new enum values).
+- PATCH: clarifications or fixes that do not change schema shape.
+
+Compatibility rules:
+- Readers must ignore unknown fields.
+- Required fields must exist and keep their meaning for a given MAJOR version.
+- Writers must emit all required fields for the declared schema version.
+- MINOR additions must be optional and safe to ignore by older readers.
+
+Migration expectations:
+- Any MAJOR bump must provide a documented migration map and tooling (if automated).
+- Records should be migrated before strict replay/verification when a MAJOR changes.
+
 ## Canonical JSON rules
 
 All decision record JSON must be serialized using the canonical encoder in `src/audit/canonical_json.py`:
@@ -81,6 +100,14 @@ Notes:
 - If risk evaluation is replayed from `snapshot.risk_inputs`, the corresponding
   `inputs.config.risk_config` must be present and is included in the core hash.
   <!-- NOTE (underspecified): "snapshot" here refers to the snapshot artifact used as replay input; exact wording may be ambiguous. -->
+
+## Corruption Handling
+
+- Report generation (`src.reports.decision_report`) fails closed on invalid JSON lines and
+  raises `invalid_json_line:<line_no>` for corrupted or truncated JSONL records.
+- Replay loading (`src.audit.replay.load_decision_records`) skips invalid lines and tracks
+  an error count; any non-zero error count should be treated as data corruption.
+- If corruption is detected, regenerate artifacts from source inputs or discard the run.
 
 ## Risk replay semantics
 

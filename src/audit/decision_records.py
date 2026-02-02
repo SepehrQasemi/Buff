@@ -25,6 +25,33 @@ def compute_market_state_hash(market_state: dict) -> str:
     return sha256_hex(canonical_json(market_state))
 
 
+def _is_utc_iso8601(ts: object) -> bool:
+    if not isinstance(ts, str):
+        return False
+    return ts.endswith("Z") or ts.endswith("+00:00")
+
+
+def validate_decision_record_v1(record: dict) -> None:
+    if record.get("schema_version") != "dr.v1":
+        raise ValueError("invalid_schema_version")
+    if not isinstance(record.get("run_id"), str) or not record.get("run_id"):
+        raise ValueError("invalid_run_id")
+    if not isinstance(record.get("seq"), int):
+        raise ValueError("invalid_seq")
+    if not _is_utc_iso8601(record.get("ts_utc")):
+        raise ValueError("invalid_ts_utc")
+    if not isinstance(record.get("timeframe"), str) or not record.get("timeframe"):
+        raise ValueError("invalid_timeframe")
+    if not isinstance(record.get("risk_state"), str) or not record.get("risk_state"):
+        raise ValueError("invalid_risk_state")
+    if not isinstance(record.get("market_state"), dict):
+        raise ValueError("invalid_market_state")
+    if not isinstance(record.get("market_state_hash"), str) or not record.get("market_state_hash"):
+        raise ValueError("invalid_market_state_hash")
+    if not isinstance(record.get("selection"), dict):
+        raise ValueError("invalid_selection")
+
+
 @dataclass(frozen=True)
 class DecisionRecordV1:
     schema_version: str
@@ -125,6 +152,7 @@ class DecisionRecordWriter:
             market_state_hash=market_state_hash,
             selection=selection,
         )
+        validate_decision_record_v1(asdict(record))
         self._file.write(record.to_json_line())
         self._file.flush()
         os.fsync(self._file.fileno())
