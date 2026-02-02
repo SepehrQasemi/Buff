@@ -288,3 +288,30 @@ def test_reserve_failure_blocks_before_submit(
     assert broker.submitted == []
     assert decision.action == "blocked"
     assert decision.reason == "idempotency_persist_error"
+
+
+def test_invalid_decision_blocks_fail_closed(tmp_path: Path) -> None:
+    db_path = tmp_path / "idem.sqlite"
+    broker = PaperBroker()
+    engine = _engine(tmp_path, broker, db_path)
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
+
+    decision = engine.handle_intent(
+        intent=_intent("evt-7"),
+        risk_state=RiskState.GREEN,
+        permission=Permission.ALLOW,
+        risk_inputs=_risk_inputs(),
+        risk_config=_risk_config(),
+        locks=_locks(),
+        current_exposure=0.0,
+        trades_today=0,
+        data_snapshot_hash="data",
+        feature_snapshot_hash="features",
+        strategy_id="",
+        clock=clock,
+        inflight_ttl_seconds=600,
+    )
+
+    assert broker.submitted == []
+    assert decision.action == "blocked"
+    assert "invalid_decision_schema" in decision.reason

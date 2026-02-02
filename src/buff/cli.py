@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 import sys
 from typing import Any
@@ -30,6 +31,52 @@ from execution.idempotency_sqlite import default_idempotency_db_path
 from risk.evaluator import evaluate_risk_report
 from risk.report import write_risk_report
 from risk.types import RiskContext
+
+
+def _feature_lookback(spec: dict[str, Any]) -> int:
+    kind = spec.get("kind")
+    params = dict(spec.get("params", {}))
+    if kind in {"ema", "sma", "std", "bbands"}:
+        return max(0, int(params.get("period", 0)) - 1)
+    if kind in {"rsi", "atr"}:
+        return max(0, int(params.get("period", 0)))
+    if kind == "macd":
+        return max(0, int(params.get("slow", 0)) + int(params.get("signal", 0)) - 2)
+    if kind == "ema_spread":
+        return max(0, int(params.get("slow", 0)) - 1)
+    if kind == "rsi_slope":
+        return max(0, (int(params.get("period", 0)) - 1) + int(params.get("slope", 0)))
+    if kind == "roc":
+        return max(0, int(params.get("period", 0)))
+    if kind in {"vwap", "obv"}:
+        return 0
+    if kind == "adx":
+        return max(0, int(params.get("period", 0)) * 2)
+    return 0
+
+
+def _build_feature_manifest(run_id: str, features: dict[str, Any]) -> dict[str, Any]:
+    entries = []
+    for name in sorted(features.keys()):
+        spec = features[name]
+        params = dict(spec.get("params", {}))
+        dependencies = sorted(list(spec.get("requires", [])))
+        outputs = sorted(list(spec.get("outputs", [])))
+        entries.append(
+            {
+                "name": name,
+                "version": 1,
+                "params": params,
+                "lookback": _feature_lookback(spec),
+                "dependencies": dependencies,
+                "outputs": outputs,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "run_id": run_id,
+        "features": entries,
+    }
 
 
 def _detect_input_format(path: Path) -> str:
@@ -264,6 +311,13 @@ def main() -> None:
         feature_params=feature_params,
     )
     write_json(meta_path, metadata)
+
+    if args.run_id:
+        workspaces_dir = Path(os.getenv("BUFF_WORKSPACES_DIR", "workspaces"))
+        run_id = str(args.run_id)
+        manifest = _build_feature_manifest(run_id, FEATURES)
+        manifest_path = workspaces_dir / run_id / "feature_manifest.json"
+        write_json(manifest_path, manifest)
 
     report = evaluate_risk_report(
         out,

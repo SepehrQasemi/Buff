@@ -24,6 +24,7 @@ from .idempotency import (
 from .locks import RiskLocks, evaluate_locks
 from .types import ExecutionDecision, IntentSide, OrderIntent, PositionState
 from .clock import Clock, SystemClock, format_utc, parse_utc
+from .decision_contract import DecisionValidationError, build_decision_payload
 
 from control_plane.state import ControlState, SystemState
 from decision_records import inputs_digest
@@ -474,6 +475,48 @@ class ExecutionEngine:
         order_intent = intent
         if applied_multiplier != 1.0:
             order_intent = replace(intent, quantity=float(intent.quantity) * applied_multiplier)
+
+        try:
+            side = "buy" if order_intent.side == IntentSide.LONG else "sell"
+            if order_intent.side == IntentSide.FLAT:
+                side = "sell" if self.position_qty > 0 else "buy"
+            strategy_version = order_intent.metadata.get("strategy_version", 1)
+            inputs_payload = {
+                "strategy_id": strategy_id,
+                "strategy_version": strategy_version,
+                "step_id": intent.event_id,
+                "data_snapshot_hash": data_snapshot_hash,
+                "feature_snapshot_hash": feature_snapshot_hash,
+                "risk_state": risk_state.value,
+                "permission": permission.value,
+                "current_exposure": current_exposure,
+                "trades_today": trades_today,
+            }
+            build_decision_payload(
+                action="allow",
+                reason="ok",
+                strategy_id=strategy_id,
+                strategy_version=int(strategy_version),
+                step_id=intent.event_id,
+                inputs_payload=inputs_payload,
+                orders=[
+                    {
+                        "symbol": order_intent.symbol,
+                        "side": side,
+                        "qty": float(order_intent.quantity),
+                        "order_type": "market",
+                        "limit_price": None,
+                    }
+                ],
+            )
+        except (ValueError, TypeError, DecisionValidationError) as exc:
+            return ExecutionDecision(
+                risk_state=risk_state,
+                permission=Permission.BLOCK,
+                action="blocked",
+                reason=f"invalid_decision_schema:{exc}",
+                status="blocked",
+            )
 
         order_result = self._submit_order(order_intent)
         self._advance_state(order_intent, order_result)
