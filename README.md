@@ -41,6 +41,20 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
+## Generate local artifacts
+
+Generate the M3 market state artifact:
+
+```bash
+python -m src.features.cli --input data/clean/BTC_USDT_1h.parquet --output features/market_state.parquet
+```
+
+Generate the M4 risk timeline artifact:
+
+```bash
+python -m src.risk.cli --events tests/fixtures/risk_events.json --start 2026-01-10T08:00:00Z --end 2026-01-10T20:00:00Z --out reports/risk_timeline.json
+```
+
 ## Dependency Locking
 
 Install uv (Linux/macOS):
