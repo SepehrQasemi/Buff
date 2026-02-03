@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from buff.features.canonical import canonical_json_bytes
+
 
 def sha256_file(path: str | Path) -> str:
     """Compute sha256 for a file in 1MB chunks."""
@@ -45,6 +47,15 @@ def write_json(path: str | Path, obj: dict[str, Any]) -> None:
     with out_path.open("w", encoding="utf-8") as handle:
         json.dump(obj, handle, indent=2, sort_keys=True)
         handle.write("\n")
+
+
+def build_source_fingerprint(
+    *,
+    file_hashes: dict[str, str],
+    schema: dict[str, object],
+) -> str:
+    payload = {"files": dict(sorted(file_hashes.items())), "schema": schema}
+    return hashlib.sha256(canonical_json_bytes(payload)).hexdigest()
 
 
 def build_metadata(

@@ -14,12 +14,17 @@ import numpy as np
 import pandas as pd
 
 from buff.data.contracts import validate_ohlcv
+from buff.features.bundle import compute_features, write_feature_bundle
 from buff.features.contract import (
     build_feature_specs_from_registry,
     build_manifest_entries,
-    sort_specs,
 )
-from buff.features.metadata import build_metadata, sha256_file, write_json
+from buff.features.metadata import (
+    build_source_fingerprint,
+    get_git_sha,
+    sha256_file,
+    write_json,
+)
 from buff.features.registry import FEATURES
 from buff.features.runner import run_features
 from buff.regimes import evaluate_regime, load_regime_config
@@ -41,7 +46,7 @@ from risk.types import RiskContext
 def _build_feature_manifest(run_id: str, features: dict[str, Any]) -> dict[str, Any]:
     specs = build_feature_specs_from_registry(features)
     entries = build_manifest_entries(specs)
-    return {"schema_version": 1, "run_id": run_id, "features": [e.to_dict() for e in entries]}
+    return {"schema_version": 2, "run_id": run_id, "features": [e.to_dict() for e in entries]}
 
 
 def _detect_input_format(path: Path) -> str:
@@ -226,57 +231,33 @@ def main() -> None:
 
     input_path = Path(args.input_path)
     output_path = Path(args.output_path)
-    meta_path = Path(args.meta_path) if args.meta_path else Path(f"{output_path}.meta.json")
 
     input_format = _detect_input_format(input_path)
     input_sha256 = sha256_file(input_path)
     df = _read_input(input_path, input_format)
     feature_input = _normalize_timestamp_column(df)
 
-    out = run_features(feature_input)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    out.to_parquet(output_path, engine="pyarrow")
-
-    output_sha256 = sha256_file(output_path)
-    feature_params = {}
-    for name, spec in FEATURES.items():
-        params = dict(spec["params"])
-        kind = spec["kind"]
-        if kind in {"ema", "sma", "std", "bbands"}:
-            params["_valid_from"] = params["period"] - 1
-        elif kind in {"rsi", "atr"}:
-            params["_valid_from"] = params["period"]
-        elif kind == "macd":
-            params["_valid_from"] = params["slow"] + params["signal"] - 2
-        elif kind == "ema_spread":
-            params["_valid_from"] = params["slow"] - 1
-        elif kind == "rsi_slope":
-            params["_valid_from"] = (params["period"] - 1) + params["slope"]
-        elif kind == "roc":
-            params["_valid_from"] = params["period"]
-        elif kind == "vwap":
-            params["_valid_from"] = 0
-        elif kind == "obv":
-            params["_valid_from"] = 0
-        elif kind == "adx":
-            params["_valid_from"] = params["period"] * 2
-        else:
-            raise ValueError(f"Unknown feature kind: {kind}")
-        feature_params[name] = params
-
-    ordered_specs = sort_specs(build_feature_specs_from_registry(FEATURES))
-    metadata = build_metadata(
-        input_path=str(input_path),
-        input_format=input_format,
-        input_sha256=input_sha256,
-        output_path=str(output_path),
-        output_sha256=output_sha256,
-        row_count=int(out.shape[0]),
-        columns=list(out.columns),
-        features=[spec.feature_id for spec in ordered_specs],
-        feature_params=feature_params,
+    specs = build_feature_specs_from_registry(FEATURES)
+    file_hashes = {str(input_path): input_sha256}
+    schema_payload = {
+        "columns": [str(col) for col in feature_input.columns],
+        "dtypes": {col: str(feature_input[col].dtype) for col in feature_input.columns},
+    }
+    source_fingerprint = build_source_fingerprint(
+        file_hashes=file_hashes,
+        schema=schema_payload,
     )
-    write_json(meta_path, metadata)
+
+    feature_input.attrs["source_paths"] = [str(input_path)]
+    feature_input.attrs["source_fingerprint"] = source_fingerprint
+    feature_input.attrs["code_fingerprint"] = get_git_sha() or "unknown"
+    if args.run_id:
+        feature_input.attrs["run_id"] = str(args.run_id)
+
+    features_frame, metadata = compute_features(feature_input, specs)
+    _, default_meta_path = write_feature_bundle(output_path, features_frame, metadata)
+    if args.meta_path and Path(args.meta_path) != default_meta_path:
+        write_json(Path(args.meta_path), metadata.to_dict())
 
     if args.run_id:
         workspaces_dir = Path(os.getenv("BUFF_WORKSPACES_DIR", "workspaces"))
@@ -286,7 +267,7 @@ def main() -> None:
         write_json(manifest_path, manifest)
 
     report = evaluate_risk_report(
-        out,
+        features_frame,
         feature_input,
         context=RiskContext(
             run_id=args.run_id,
