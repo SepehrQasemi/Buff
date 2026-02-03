@@ -13,21 +13,27 @@
 Fields:
 - feature_id: stable string identifier
 - version: int or string (default 1)
+- description: human-readable description
 - params: JSON-serializable mapping
 - lookback: int bars required
+- lookback_timedelta: optional string duration (e.g., \"5m\")
 - requires: list of input columns required by the feature
+- dependencies: list of feature dependencies (name + version)
 - outputs: list of output column names (stable order)
-- input_timeframe: optional string (if applicable)
+- output_dtypes: mapping of output column -> dtype
+- input_timeframe: string (default \"1m\")
 
 Example:
 ```
 FeatureSpec(
     feature_id="ema_20",
     version=1,
+    description="ema_20 feature",
     params={"period": 20},
     lookback=19,
     requires=["close"],
     outputs=["ema_20"],
+    output_dtypes={"ema_20": "float64"},
 )
 ```
 
@@ -40,16 +46,32 @@ FeatureSpec(
 - Output columns are grouped by spec order, then by spec.outputs order.
 - Manifest entries follow the same sorted spec order.
 
-## Feature manifest (schema_version=1)
+## Feature manifest (schema_version=2)
 Each manifest entry contains:
-- schema_version: 1
+- schema_version: 2
 - feature_id
 - version
+- description
 - params_canonical_json
 - lookback
+- lookback_timedelta
 - requires
+- dependencies
 - outputs
+- output_dtypes
 - input_timeframe (only when set)
+
+## Feature bundle metadata (schema_version=1)
+Generated artifacts include deterministic metadata:
+- schema_version
+- run_id / created_at_utc
+- source_fingerprint + source_schema + source_paths
+- time_bounds: start/end inclusive + as_of_utc
+- features: fully resolved FeatureSpec list
+- dependency_graph (feature_id@version -> dependencies)
+- code_fingerprint
+- bundle_fingerprint
+- Stored next to the parquet as `market_state.meta.json`.
 
 ## Error semantics (deterministic codes)
 - feature_input_invalid: OHLCV contract failure (timestamp, types, monotonicity)
