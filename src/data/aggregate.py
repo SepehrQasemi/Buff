@@ -69,7 +69,9 @@ def aggregate_ohlcv(df: pd.DataFrame, timeframe: str) -> pd.DataFrame:
             continue
 
         resampled = resampled.reset_index().rename(columns={"index": "timestamp"})
-        resampled["timestamp"] = (resampled["timestamp"].view("int64") // 1_000_000).astype("int64")
+        ts = pd.to_datetime(resampled["timestamp"], utc=True)
+        ns = ts.to_numpy(dtype="datetime64[ns]")
+        resampled["timestamp"] = (ns.astype("int64") // 1_000_000).astype("int64")
         resampled["symbol"] = symbol
 
         resampled = resampled[CANONICAL_COLUMNS]

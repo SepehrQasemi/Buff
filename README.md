@@ -66,6 +66,27 @@ Generate the M3 market state artifact:
 python -m src.features.cli --input data/clean/BTC_USDT_1h.parquet --output features/market_state.parquet
 ```
 
+## MVP Smoke Test (M1 + M3)
+
+Runs deterministic ingest -> validation -> reproducibility check -> feature build (no execution logic).
+
+Fixed time window (recommended for reproducibility):
+
+```bash
+python -m src.tools.mvp_smoke --symbols BTCUSDT ETHUSDT --timeframe 1h --since 2023-01-01 --until 2023-02-01
+```
+
+Rolling end time (defaults to last completed bar):
+
+```bash
+python -m src.tools.mvp_smoke --symbols BTCUSDT ETHUSDT --timeframe 1h --since 2023-01-01
+```
+
+Guarantees:
+- Canonical 1m ingest, then deterministic resample to the requested timeframe.
+- Reproducibility is guaranteed for the same fixed time window; without --until, the end time is derived from the last completed bar.
+- Deterministic M3 feature bundle build for BTCUSDT.
+
 Generate the M4 risk timeline artifact:
 
 ```bash
@@ -78,24 +99,27 @@ Install uv (Linux/macOS):
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
 Regenerate lockfile:
 
-bash
-Copy code
+```bash
 uv lock --upgrade
+```
+
 Frozen install (CI-compatible):
 
-bash
-Copy code
+```bash
 uv sync --frozen --extra dev
+```
+
 Run gates locally:
 
-bash
-Copy code
+```bash
 uv run ruff format --check .
 uv run ruff check .
 uv run pytest -q
-Copy code
+```
 
 ## Quality Gates
 

@@ -1,137 +1,15 @@
 name: clouding-sweep
-# DISABLED: self-hosted/Clouding backup CI is currently not in use. Kept for future re-enable.
+# DISABLED: self-hosted/Clouding sweep is out of service.
 
-on:
-  workflow_dispatch:
-    inputs:
-      confirm:
-        description: "Type DISABLE_OVERRIDE to run"
-        required: true
+on: []
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  sweep:
-    if: ${{ github.event.inputs.confirm == 'DISABLE_OVERRIDE' }}
+  disabled:
+    if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - name: Check server status
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          CLOUDING_APIKEY: ${{ secrets.CLOUDING_APIKEY }}
-          SERVER_ID: ${{ secrets.SERVER_ID }}
-        run: |
-          set -euo pipefail
-          if [ -z "${SERVER_ID}" ] || [ -z "${CLOUDING_APIKEY}" ]; then
-            echo "Missing SERVER_ID or CLOUDING_APIKEY; skipping sweep."
-            exit 0
-          fi
-          echo "Checking for in-progress ci-backup runs on default branch..."
-          runs=$(curl -sS -w "\n%{http_code}" \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/ci-backup.yml/runs?branch=${{ github.event.repository.default_branch }}&status=in_progress")
-          runs_code=$(echo "${runs}" | tail -n 1)
-          runs_body=$(echo "${runs}" | sed '$d')
-          if [ "${runs_code}" != "200" ]; then
-            echo "Failed to query workflow runs (HTTP ${runs_code}); skipping sweep."
-            exit 0
-          fi
-          in_progress=$(RUNS_JSON="${runs_body}" python - <<'PY'
-import json, os
-data = json.loads(os.environ["RUNS_JSON"])
-count = len(data.get("workflow_runs", []))
-print("yes" if count > 0 else "no")
-PY
-)
-          if [ "${in_progress}" = "yes" ]; then
-            echo "ci-backup is running; skipping archive."
-            exit 0
-          fi
-          response=$(curl -sS -w "\n%{http_code}" \
-            -H "Accept: application/json" \
-            -H "X-API-KEY: ${CLOUDING_APIKEY}" \
-            "https://api.clouding.io/v1/servers")
-          http_code=$(echo "${response}" | tail -n 1)
-          body=$(echo "${response}" | sed '$d')
-          if [ "${http_code}" = "401" ] || [ "${http_code}" = "403" ]; then
-            echo "Authorization failed while listing servers."
-            exit 1
-          fi
-          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
-            echo "List servers returned HTTP ${http_code}. Continuing best-effort."
-          fi
-          status=$(CLOUDING_RESPONSE="${body}" SERVER_ID="${SERVER_ID}" python - <<'PY'
-import json, os, sys
-
-raw = os.environ.get("CLOUDING_RESPONSE", "")
-server_id = str(os.environ.get("SERVER_ID", ""))
-try:
-    data = json.loads(raw)
-except Exception:
-    print("unknown")
-    sys.exit(0)
-
-if isinstance(data, list):
-    servers = data
-elif isinstance(data, dict) and "servers" in data:
-    servers = data.get("servers", [])
-elif isinstance(data, dict) and isinstance(data.get("data"), list):
-    servers = data.get("data", [])
-else:
-    servers = []
-
-for s in servers:
-    sid = str(s.get("id", ""))
-    if sid == server_id:
-        status = str(s.get("status", "")).lower()
-        print(status)
-        keys = ", ".join(sorted(s.keys()))
-        print(f"matched_server_keys={keys}", file=sys.stderr)
-        sys.exit(0)
-print("missing")
-PY
-)
-          echo "server_id=${SERVER_ID}"
-          echo "server_status=${status}"
-          if [ "${status}" = "missing" ] || [ "${status}" = "unknown" ]; then
-            echo "Server not found or status unknown; skipping archive."
-            exit 0
-          fi
-          if [ "${status}" = "archived" ] || [ "${status}" = "archiving" ]; then
-            echo "Server already archived or archiving; nothing to do."
-            exit 0
-          fi
-          if [ "${status}" != "running" ] && [ "${status}" != "unarchived" ] && [ "${status}" != "active" ]; then
-            echo "Unknown server status '${status}'; skipping archive."
-            exit 0
-          fi
-          echo "Server not archived; requesting archive..."
-          archive=$(curl -sS -w "\n%{http_code}" -X POST "https://api.clouding.io/v1/servers/${SERVER_ID}/archive" \
-            -H "Content-Type: application/json" \
-            -H "X-API-KEY: ${CLOUDING_APIKEY}")
-          archive_code=$(echo "${archive}" | tail -n 1)
-          archive_body=$(echo "${archive}" | sed '$d')
-          echo "archive http=${archive_code}"
-          echo "archive response (first 200 chars):"
-          echo "${archive_body}" | head -c 200
-          echo ""
-          if [ "${archive_code}" = "401" ] || [ "${archive_code}" = "403" ]; then
-            echo "Authorization failed while archiving."
-            exit 1
-          fi
-          if [ "${archive_code}" = "404" ]; then
-            echo "Server not found (SERVER_ID invalid)."
-            exit 1
-          fi
-          if [ "${archive_code}" -ge 500 ] && [ "${archive_code}" -lt 600 ]; then
-            echo "Clouding service error while archiving."
-            exit 1
-          fi
-          if [ "${archive_code}" -ge 200 ] && [ "${archive_code}" -lt 300 ]; then
-            echo "Archive request accepted."
-            exit 0
-          fi
-          echo "Archive request returned non-2xx; treating as idempotent/ignored."
+      - name: Clouding sweep disabled
+        run: echo "clouding-sweep is disabled."
