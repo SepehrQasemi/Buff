@@ -10,6 +10,10 @@ from typing import Iterable
 
 import pandas as pd
 
+from buff.features.bundle import compute_features, write_feature_bundle
+from buff.features.contract import build_feature_specs_from_registry
+from buff.features.metadata import build_source_fingerprint, get_git_sha, sha256_file
+from buff.features.registry import FEATURES
 from .aggregate import aggregate_ohlcv
 from .ingest import (
     DEFAULT_MAX_RETRIES,
@@ -264,6 +268,39 @@ def _run_ingest(args: argparse.Namespace) -> None:
     _write_report(Path(args.report), report)
 
 
+def _run_features(args: argparse.Namespace) -> None:
+    input_path = Path(args.input_path)
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input not found: {input_path}")
+
+    df = pd.read_parquet(input_path, engine="pyarrow")
+    file_hashes = {str(input_path): sha256_file(input_path)}
+    schema_payload = {
+        "columns": [str(col) for col in df.columns],
+        "dtypes": {col: str(df[col].dtype) for col in df.columns},
+    }
+    source_fingerprint = build_source_fingerprint(file_hashes=file_hashes, schema=schema_payload)
+
+    df.attrs["source_paths"] = [str(input_path)]
+    df.attrs["source_fingerprint"] = source_fingerprint
+    df.attrs["code_fingerprint"] = get_git_sha() or "unknown"
+    if args.run_id:
+        df.attrs["run_id"] = str(args.run_id)
+    if args.as_of_utc:
+        df.attrs["as_of_utc"] = str(args.as_of_utc)
+
+    specs = build_feature_specs_from_registry(FEATURES)
+    features_frame, metadata = compute_features(df, specs)
+    write_feature_bundle(args.out, features_frame, metadata)
+    if args.meta_path:
+        meta_path = Path(args.meta_path)
+        meta_path.parent.mkdir(parents=True, exist_ok=True)
+        meta_path.write_text(
+            json.dumps(metadata.to_dict(), sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Deterministic Binance Futures data pipeline.")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -299,6 +336,13 @@ def _parse_args() -> argparse.Namespace:
         help="Fail if any zero-volume rows are present (default: False).",
     )
 
+    features = sub.add_parser("features", help="Compute feature bundle from 1m OHLCV parquet.")
+    features.add_argument("--input", "--in", dest="input_path", required=True)
+    features.add_argument("--out", required=True, help="Output directory or parquet path.")
+    features.add_argument("--meta", dest="meta_path", default=None, help="Optional metadata path.")
+    features.add_argument("--run-id", dest="run_id", default=None)
+    features.add_argument("--as-of-utc", dest="as_of_utc", default=None)
+
     return parser.parse_args()
 
 
@@ -306,6 +350,10 @@ def main() -> None:
     args = _parse_args()
     if args.command == "ingest":
         _run_ingest(args)
+        return
+    if args.command == "features":
+        _run_features(args)
+        return
 
 
 if __name__ == "__main__":

@@ -22,6 +22,8 @@ All DONE statements cite file paths as evidence. PLANNED items are explicitly la
   Evidence: `src/buff/data/resample.py` (`resample_ohlcv`, `resample_fixed`, `resample_calendar`), `tests/test_resample.py`.
 - Stable reason codes for execution gating and risk locks (fail-closed semantics).
   Evidence: `src/execution/engine.py`, `src/execution/locks.py`.
+- Engine invariants: deterministic, fail-closed validation, no LLM mutation inside core execution.
+  Evidence: `src/buff/features/bundle.py`, `src/strategy_registry/execution.py`, `tests/test_invariants_no_engine_mutation.py`.
 
 ## Safety & Governance Model (DONE)
 - Control plane arming is required for execution; missing/invalid state fails closed.
@@ -46,6 +48,8 @@ All DONE statements cite file paths as evidence. PLANNED items are explicitly la
   Evidence: `src/buff/data/report.py`, `schemas/data_quality.schema.json`, `tests/test_report_schema.py`.
 - **Feature engine**: deterministic indicator computation with registry-defined outputs and metadata.
   Evidence: `src/buff/features/registry.py`, `src/buff/features/runner.py`, `tests/test_feature_runner_e2e.py`.
+- **Feature bundle contract (M3)**: pure compute + deterministic bundle metadata, schema versioning, and validation.
+  Evidence: `src/buff/features/bundle.py`, `docs/feature-contract.md`, `schemas/feature_bundle.schema.json`, `tests/test_feature_bundle_contract.py`.
 - **Risk permission layer**: computes RED/YELLOW/GREEN, emits risk reports, and enforces vetoes.
   Evidence: `src/risk/evaluator.py`, `src/risk/policy.py`, `schemas/risk_report.schema.json`.
 - **Fundamental risk engine**: rule-based evaluator with offline snapshot provider; optionally integrated into execution.
@@ -56,6 +60,10 @@ All DONE statements cite file paths as evidence. PLANNED items are explicitly la
   Evidence: `src/strategies/registry.py`, `src/control_plane/core.py`.
 - **Strategy metadata registry (auxiliary)**: deterministic ordering for registered strategy specs.
   Evidence: `src/strategy_registry/registry.py`, `tests/strategy_registry/test_registry.py`.
+- **Strategy decision contract (M5)**: schema-versioned decisions with provenance and execution contract.
+  Evidence: `src/strategy_registry/decision.py`, `src/strategy_registry/execution.py`, `schemas/strategy_decision.schema.json`, `tests/strategy_registry/test_execution.py`.
+- **Strategy selector (M5)**: deterministic selection from explicit config and market regime.
+  Evidence: `src/strategy_registry/selector.py`, `tests/strategy_registry/test_selector.py`.
 - **Execution engine (paper)**: idempotent intent handling, risk gating, lock enforcement, and decision logging.
   Evidence: `src/execution/engine.py`, `src/execution/idempotency_sqlite.py`, `src/execution/audit.py`.
 - **Control plane**: arming/approvals/kill switch gating for paper execution.
@@ -82,3 +90,4 @@ All DONE statements cite file paths as evidence. PLANNED items are explicitly la
 - `docs/REPLAY.md` (replay semantics)
 - `docs/RISK_POLICY.md` (risk policy details)
 - `docs/REGIME_SEMANTICS.md` (regime definitions)
+- `docs/strategy-decision.md` (strategy decision schema)

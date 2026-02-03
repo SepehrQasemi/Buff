@@ -1,0 +1,81 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FeatureBundleMetadata",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "run_id",
+    "created_at_utc",
+    "source_fingerprint",
+    "source_schema",
+    "source_paths",
+    "time_bounds",
+    "features",
+    "dependency_graph",
+    "code_fingerprint",
+    "bundle_fingerprint"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "run_id": { "type": "string" },
+    "created_at_utc": { "type": "string" },
+    "source_fingerprint": { "type": "string" },
+    "source_schema": { "type": "object" },
+    "source_paths": { "type": "array", "items": { "type": "string" } },
+    "time_bounds": {
+      "type": "object",
+      "required": ["start_utc", "end_utc", "start_inclusive", "end_inclusive", "as_of_utc"],
+      "properties": {
+        "start_utc": { "type": ["string", "null"] },
+        "end_utc": { "type": ["string", "null"] },
+        "start_inclusive": { "type": "boolean" },
+        "end_inclusive": { "type": "boolean" },
+        "as_of_utc": { "type": "string" }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "feature_id",
+          "version",
+          "description",
+          "params",
+          "lookback",
+          "requires",
+          "dependencies",
+          "outputs",
+          "output_dtypes",
+          "input_timeframe"
+        ],
+        "properties": {
+          "feature_id": { "type": "string" },
+          "version": {},
+          "description": { "type": "string" },
+          "params": { "type": "object" },
+          "lookback": { "type": "integer", "minimum": 0 },
+          "lookback_timedelta": { "type": ["string", "null"] },
+          "requires": { "type": "array", "items": { "type": "string" } },
+          "dependencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "version"],
+              "properties": {
+                "name": { "type": "string" },
+                "version": {}
+              }
+            }
+          },
+          "outputs": { "type": "array", "items": { "type": "string" } },
+          "output_dtypes": { "type": "object" },
+          "input_timeframe": { "type": "string" }
+        }
+      }
+    },
+    "dependency_graph": { "type": "object" },
+    "code_fingerprint": { "type": "string" },
+    "bundle_fingerprint": { "type": "string" }
+  }
+}
