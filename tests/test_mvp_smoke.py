@@ -11,7 +11,7 @@ from src.data.store import CANONICAL_COLUMNS
 
 
 def _make_hourly_df(symbol: str, start: str, periods: int) -> pd.DataFrame:
-    start_ms = int(pd.Timestamp(start, tz="UTC").timestamp() * 1000)
+    start_ms = pd.Timestamp(start, tz="UTC").value // 1_000_000
     timestamps = [start_ms + i * 3_600_000 for i in range(periods)]
     base = [100.0 + i for i in range(periods)]
     return pd.DataFrame(
