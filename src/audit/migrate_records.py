@@ -60,6 +60,19 @@ def _snapshot_risk_config(record: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _strategy_id_from_strategy_ref(record: dict[str, Any]) -> str | None:
+    strategy = record.get("strategy")
+    if not isinstance(strategy, dict):
+        return None
+    name = strategy.get("name")
+    version = strategy.get("version")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    if not isinstance(version, str) or not version.strip():
+        return None
+    return f"{name}@{version}"
+
+
 def migrate_record_dict(d: dict[str, Any]) -> dict[str, Any]:
     record = json.loads(json.dumps(d))
     inputs = record.get("inputs")
@@ -72,8 +85,17 @@ def migrate_record_dict(d: dict[str, Any]) -> dict[str, Any]:
 
     actions: list[str] = []
 
+    strategy_id = selection.get("strategy_id")
+    if isinstance(strategy_id, str) and not strategy_id.strip():
+        derived = _strategy_id_from_strategy_ref(record)
+        if derived is None:
+            decision_id = record.get("decision_id", "<unknown>")
+            raise ValueError(f"empty_strategy_id_missing_strategy:{decision_id}")
+        selection["strategy_id"] = derived
+        strategy_id = derived
+        actions.append("populate_strategy_id_from_strategy")
+
     if "selected" not in selection or "status" not in selection:
-        strategy_id = selection.get("strategy_id")
         if strategy_id is None:
             selection["selected"] = False
             selection["status"] = "no_selection"
@@ -82,6 +104,11 @@ def migrate_record_dict(d: dict[str, Any]) -> dict[str, Any]:
             selection["selected"] = True
             selection["status"] = "selected"
         actions.append("migrate_selection_schema")
+    elif strategy_id is None:
+        selection["selected"] = False
+        selection["status"] = "no_selection"
+        selection["strategy_id"] = None
+        actions.append("normalize_selection_missing_strategy")
 
     if "config" not in inputs or not isinstance(inputs.get("config"), dict):
         inputs["config"] = {}

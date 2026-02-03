@@ -1,6 +1,7 @@
 # PROJECT_SPEC - Buff
 
-This document is the single source of truth for Buff's current behavior.
+This document summarizes Buff's current behavior and implementation status.
+See `docs/UNIFIED_PROJECT_SPEC.md` for the consolidated, repo-cited spec.
 All DONE statements cite file paths as evidence. PLANNED items are explicitly labeled.
 
 ## Status Legend
