@@ -12,30 +12,31 @@ from src.tools import mvp_smoke
 from src.data.store import CANONICAL_COLUMNS
 
 
-def _make_hourly_df(symbol: str, start: str, periods: int) -> pd.DataFrame:
+def _make_minute_df(symbol: str, start: str, hours: int) -> pd.DataFrame:
     dt = datetime.fromisoformat(start)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     start_ms = calendar.timegm(dt.utctimetuple()) * 1000
-    timestamps = [start_ms + i * 3_600_000 for i in range(periods)]
-    base = [100.0 + i for i in range(periods)]
+    minutes = hours * 60
+    timestamps = [start_ms + i * 60_000 for i in range(minutes)]
+    base = [100.0 + (i / 60.0) for i in range(minutes)]
     return pd.DataFrame(
         {
-            "symbol": [symbol for _ in range(periods)],
+            "symbol": [symbol for _ in range(minutes)],
             "timestamp": list(timestamps),
             "open": base,
             "high": [val + 1.0 for val in base],
             "low": [val - 1.0 for val in base],
             "close": [val + 0.5 for val in base],
-            "volume": [1000.0 for _ in range(periods)],
+            "volume": [1000.0 for _ in range(minutes)],
         }
     )
 
 
 def test_mvp_smoke_fast(tmp_path: Path, monkeypatch) -> None:
-    periods = 72
-    btc = _make_hourly_df("BTCUSDT", "2025-01-01", periods)
-    eth = _make_hourly_df("ETHUSDT", "2025-01-01", periods)
+    hours = 72
+    btc = _make_minute_df("BTCUSDT", "2025-01-01", hours)
+    eth = _make_minute_df("ETHUSDT", "2025-01-01", hours)
     combined = pd.concat([btc, eth], ignore_index=True)
 
     def fake_download(symbols, start_time, end_time, **kwargs):
