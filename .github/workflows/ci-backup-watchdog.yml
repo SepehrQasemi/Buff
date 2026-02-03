@@ -1,10 +1,12 @@
 name: ci-backup-watchdog
-# NOTE: workflow_run matches by workflow NAME, not filename.
+# DISABLED: self-hosted/Clouding backup CI is currently not in use. Kept for future re-enable.
 
 on:
-  workflow_run:
-    workflows: ["ci-backup"] # must match ci-backup.yml name
-    types: [completed]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DISABLE_OVERRIDE to run"
+        required: true
 
 permissions:
   contents: read
@@ -12,6 +14,7 @@ permissions:
 
 jobs:
   archive-backup-server:
+    if: ${{ github.event.inputs.confirm == 'DISABLE_OVERRIDE' }}
     runs-on: ubuntu-latest
     steps:
       - name: Log watchdog context

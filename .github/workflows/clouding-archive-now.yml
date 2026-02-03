@@ -1,13 +1,19 @@
 name: clouding-archive-now
+# DISABLED: self-hosted/Clouding backup CI is currently not in use. Kept for future re-enable.
 
 on:
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DISABLE_OVERRIDE to run"
+        required: true
 
 permissions:
   contents: read
 
 jobs:
   archive-now:
+    if: ${{ github.event.inputs.confirm == 'DISABLE_OVERRIDE' }}
     runs-on: ubuntu-latest
     steps:
       - name: Archive server (immediate)
