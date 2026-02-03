@@ -1,4 +1,5 @@
 STATUS: DISABLED - self-hosted/Clouding backup CI is not used. Files retained for future re-enable.
+Sanity: CI verified on 2026-02-03.
 Do not use unless explicitly re-enabled.
 
 # CI Backup (Plan 2)
