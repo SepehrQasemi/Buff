@@ -120,7 +120,8 @@ def _sha256_file(path: Path) -> str:
 def _timestamp_ms(series: pd.Series) -> pd.Series:
     if is_datetime64_any_dtype(series):
         ts = pd.to_datetime(series, utc=True)
-        values = (ts.array.asi8 // 1_000_000).astype("int64")
+        ns = ts.to_numpy(dtype="datetime64[ns]")
+        values = (ns.astype("int64") // 1_000_000).astype("int64")
         return pd.Series(values, index=series.index, name=series.name, dtype="int64")
     numeric = pd.to_numeric(series, errors="coerce")
     if numeric.isna().any():
