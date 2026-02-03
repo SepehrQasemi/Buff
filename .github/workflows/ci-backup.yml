@@ -1,4 +1,5 @@
 name: ci-backup
+# NOTE: workflow_run references this workflow by NAME (not filename).
 permissions:
   contents: read
   actions: read
@@ -7,6 +8,10 @@ on:
   workflow_run:
     workflows: ["ci"]
     types: [completed]
+
+concurrency:
+  group: backup-ci
+  cancel-in-progress: false
 
 jobs:
   precheck:
