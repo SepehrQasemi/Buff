@@ -11,6 +11,10 @@ class OrderResult:
     status: str
 
 
+class BrokerError(RuntimeError):
+    pass
+
+
 class Broker(Protocol):
     def submit_order(self, symbol: str, side: str, quantity: float) -> OrderResult: ...
 
@@ -18,11 +22,26 @@ class Broker(Protocol):
 
 
 class PaperBroker:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        *,
+        fail_on_submit: bool = False,
+        fail_after: int | None = None,
+        error: Exception | None = None,
+    ) -> None:
         self.submitted: list[OrderResult] = []
         self._next_id = 1
+        self._submit_attempts = 0
+        self._fail_on_submit = fail_on_submit
+        self._fail_after = fail_after
+        self._error = error or BrokerError("broker_failure")
 
     def submit_order(self, symbol: str, side: str, quantity: float) -> OrderResult:
+        self._submit_attempts += 1
+        if self._fail_on_submit:
+            raise self._error
+        if self._fail_after is not None and self._submit_attempts > self._fail_after:
+            raise self._error
         order_id = f"paper-{self._next_id}"
         self._next_id += 1
         result = OrderResult(order_id=order_id, filled_qty=quantity, status="filled")
