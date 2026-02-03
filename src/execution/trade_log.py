@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -63,20 +62,13 @@ def write_trades_parquet(path: Path, trades: Iterable[Mapping[str, object]]) -> 
     normalized.sort(key=lambda item: (item["ts_utc"], item["order_id"], item["symbol"]))
     table = pa.Table.from_pylist(normalized, schema=TRADE_SCHEMA)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(f"{path.name}.tmp")
     pq.write_table(
         table,
-        tmp_path,
+        path,
         compression=PARQUET_COMPRESSION,
         compression_level=PARQUET_COMPRESSION_LEVEL,
         row_group_size=PARQUET_ROW_GROUP_SIZE,
         data_page_size=PARQUET_DATA_PAGE_SIZE,
         write_statistics=PARQUET_WRITE_STATISTICS,
     )
-    try:
-        with tmp_path.open("rb") as handle:
-            os.fsync(handle.fileno())
-    except OSError:
-        pass
-    os.replace(tmp_path, path)
     return path
