@@ -1,1 +1,3 @@
-# Read-only artifact navigation helpers for chatbot tooling.
+from .chatbot import Chatbot, ChatbotConfig
+
+__all__ = ["Chatbot", "ChatbotConfig"]
