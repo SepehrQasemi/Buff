@@ -1,6 +1,9 @@
+STATUS: DISABLED - self-hosted/Clouding backup CI is not used. Files retained for future re-enable.
+Do not use unless explicitly re-enabled.
+
 # CI Backup (Plan 2)
 
-This repo uses a two-stage CI strategy:
+This repo previously used a two-stage CI strategy (now archived):
 1) Normal CI runs on GitHub-hosted runners for every pull request.
 2) If the normal CI concludes with **cancelled** or **failure**, a fallback workflow powers on a Clouding VPS, waits for a self-hosted runner, runs the same CI steps, then powers the server off.
 
@@ -15,10 +18,7 @@ Create these in the repo settings (no values shown here):
 - `SERVER_ID`
 
 ## How to test the fallback
-1) Open a PR to trigger the normal `ci` workflow.
-2) Cancel the running `ci` job from the Actions UI.
-3) If you want the fallback on a cancelled run, add the PR label `use-backup-ci`.
-4) Confirm `ci-backup` starts, powers on the server, waits for the runner, runs tests, and powers off the server.
+Do not use unless explicitly re-enabled.
 
 ## Troubleshooting checklist
 - **Runner offline**
@@ -33,7 +33,7 @@ Create these in the repo settings (no values shown here):
 - **Archive/unarchive fails**
   - Verify `SERVER_ID` is correct in GitHub Secrets.
   - Check Clouding service status and API availability.
-- **Cancelled runs donâ€™t trigger backup**
+- **Cancelled runs don’t trigger backup**
   - By design, cancelled runs require PR label `use-backup-ci` to avoid wasted server cycles.
   - Failures still trigger backup automatically.
 
@@ -42,14 +42,16 @@ Create these in the repo settings (no values shown here):
 - Use the least-privilege Clouding API key required to archive/unarchive the server.
 
 ## Watchdog and sweep
-- `ci-backup-watchdog` runs after every `ci-backup` completion and always attempts to archive the server.
+Archived reference only. Do not use unless explicitly re-enabled.
+- `ci-backup-watchdog` (archived) runs after every `ci-backup` completion and always attempts to archive the server.
   - `workflow_run` matches the workflow **name** (`ci-backup`), not the filename.
-- `clouding-sweep` runs on a schedule (every 6 hours) and archives the server if it is not already archived.
+- `clouding-sweep` (archived) runs on a schedule (every 6 hours) and archives the server if it is not already archived.
   - The sweep skips archiving if a `ci-backup` run is in progress.
   - The sweep queries runs via the workflow file path `ci-backup.yml`; do not rename the file.
-- Use `clouding-archive-now` to immediately archive the server if it is left running.
+- `clouding-archive-now` (archived) can immediately archive the server if it is left running.
 
 ## Operator scripts
+Archived reference only. Do not use unless explicitly re-enabled.
 These scripts help validate Clouding connectivity without touching CI workflows:
 
 ```bash
