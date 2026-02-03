@@ -47,6 +47,7 @@ Create these in the repo settings (no values shown here):
 - `clouding-sweep` runs on a schedule (every 6 hours) and archives the server if it is not already archived.
   - The sweep skips archiving if a `ci-backup` run is in progress.
   - The sweep queries runs via the workflow file path `ci-backup.yml`; do not rename the file.
+- Use `clouding-archive-now` to immediately archive the server if it is left running.
 
 ## Operator scripts
 These scripts help validate Clouding connectivity without touching CI workflows:
