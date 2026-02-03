@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
+from pandas.api.types import is_datetime64_any_dtype
 
 from buff.features.bundle import compute_features, write_feature_bundle
 from buff.features.contract import build_feature_specs_from_registry
@@ -116,6 +117,17 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _timestamp_ms(series: pd.Series) -> pd.Series:
+    if is_datetime64_any_dtype(series):
+        ts = pd.to_datetime(series, utc=True)
+        values = (ts.array.asi8 // 1_000_000).astype("int64")
+        return pd.Series(values, index=series.index, name=series.name, dtype="int64")
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.isna().any():
+        raise ValueError("Invalid timestamp values")
+    return numeric.astype("int64")
+
+
 def _canonical_hash_parquet(path: Path) -> str:
     df = pd.read_parquet(path, engine="pyarrow")
     missing = [col for col in CANONICAL_COLUMNS if col not in df.columns]
@@ -123,7 +135,7 @@ def _canonical_hash_parquet(path: Path) -> str:
         raise ValueError(f"Missing columns for canonical hash: {missing}")
 
     ordered = df[CANONICAL_COLUMNS].copy()
-    ordered["timestamp"] = ordered["timestamp"].astype("int64")
+    ordered["timestamp"] = _timestamp_ms(ordered["timestamp"])
     for col in ["open", "high", "low", "close", "volume"]:
         ordered[col] = ordered[col].astype("float64")
     ordered["symbol"] = ordered["symbol"].astype("string")
@@ -239,6 +251,8 @@ def _validate_files(files: dict[str, Path], timeframe: str) -> tuple[bool, dict[
 
     for symbol, path in sorted(files.items()):
         df = pd.read_parquet(path, engine="pyarrow")
+        df = df.copy()
+        df["timestamp"] = _timestamp_ms(df["timestamp"])
         duplicates = int(df.duplicated(subset=["timestamp"], keep="first").sum())
         zero_volume_rows = int((df["volume"].astype("float64") == 0).sum()) if not df.empty else 0
         misaligned_rows = (
