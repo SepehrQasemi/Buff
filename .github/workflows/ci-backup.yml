@@ -1,0 +1,115 @@
+name: ci-backup
+permissions:
+  contents: read
+  actions: read
+on:
+  workflow_run:
+    workflows: ["ci"]
+    types: [completed]
+
+jobs:
+  start-server:
+    if: ${{ github.event.workflow_run.conclusion == 'cancelled' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Power on backup server
+        env:
+          CLOUDING_APIKEY: ${{ secrets.CLOUDING_APIKEY }}
+          SERVER_ID: ${{ secrets.SERVER_ID }}
+        run: |
+          echo "Requesting Clouding server power on..."
+          curl --fail -sS -X POST "https://api.clouding.io/v1/servers/${SERVER_ID}/unarchive" \
+            -H "Content-Type: application/json" \
+            -H "X-API-KEY: ${CLOUDING_APIKEY}"
+          echo "Clouding power on request sent."
+
+  wait-for-runner:
+    needs: start-server
+    if: ${{ needs.start-server.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Wait for backup runner to be online
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -u -o pipefail
+          echo "Waiting up to 10 minutes for a runner with label 'backup' to be online..."
+          for i in $(seq 1 60); do
+            response=$(curl -sS -w "\n%{http_code}" \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPO}/actions/runners")
+            http_code=$(echo "${response}" | tail -n 1)
+            body=$(echo "${response}" | sed '$d')
+            if [ "${http_code}" != "200" ]; then
+              echo "GitHub API returned HTTP ${http_code} (attempt ${i}/60). Retrying in 10s..."
+              sleep 10
+              continue
+            fi
+            export RUNNERS_JSON="${body}"
+            found=$(python - <<'PY'
+import json, os, sys
+text = os.environ.get("RUNNERS_JSON", "")
+try:
+    data = json.loads(text)
+except Exception:
+    print("error")
+    sys.exit(0)
+for runner in data.get("runners", []):
+    labels = [label.get("name") for label in runner.get("labels", [])]
+    if runner.get("status") == "online" and "backup" in labels:
+        print("yes")
+        break
+else:
+    print("no")
+PY
+)
+            if [ "${found}" = "error" ]; then
+              echo "Failed to parse GitHub API response (attempt ${i}/60). Retrying in 10s..."
+              sleep 10
+              continue
+            fi
+            if [ "${found}" = "yes" ]; then
+              echo "Backup runner is online."
+              exit 0
+            fi
+            echo "Runner not online yet (attempt ${i}/60). Sleeping 10s..."
+            sleep 10
+          done
+          echo "Timed out waiting for backup runner."
+          exit 1
+
+  run-tests-on-backup:
+    needs: wait-for-runner
+    if: ${{ needs.wait-for-runner.result == 'success' }}
+    runs-on: [self-hosted, linux, x64, backup]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: ruff format --check .
+      - run: ruff check .
+      - run: pytest -q
+
+  stop-server:
+    needs: [start-server, wait-for-runner, run-tests-on-backup]
+    if: ${{ always() && (github.event.workflow_run.conclusion == 'cancelled' || github.event.workflow_run.conclusion == 'failure') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Power off backup server
+        env:
+          CLOUDING_APIKEY: ${{ secrets.CLOUDING_APIKEY }}
+          SERVER_ID: ${{ secrets.SERVER_ID }}
+        run: |
+          echo "Requesting Clouding server power off..."
+          curl --fail -sS -X POST "https://api.clouding.io/v1/servers/${SERVER_ID}/archive" \
+            -H "Content-Type: application/json" \
+            -H "X-API-KEY: ${CLOUDING_APIKEY}"
+          echo "Clouding power off request sent."

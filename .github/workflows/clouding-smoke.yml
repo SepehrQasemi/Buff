@@ -1,0 +1,39 @@
+name: clouding-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Clouding action to run"
+        required: true
+        default: "unarchive"
+        type: choice
+        options:
+          - unarchive
+          - archive
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Clouding API
+        env:
+          CLOUDING_APIKEY: ${{ secrets.CLOUDING_APIKEY }}
+          SERVER_ID: ${{ secrets.SERVER_ID }}
+          ACTION: ${{ inputs.action }}
+        run: |
+          set -euo pipefail
+          echo "Calling Clouding API action: ${ACTION}"
+          response=$(curl -sS -w "\n%{http_code}" -X POST "https://api.clouding.io/v1/servers/${SERVER_ID}/${ACTION}" \
+            -H "Content-Type: application/json" \
+            -H "X-API-KEY: ${CLOUDING_APIKEY}")
+          http_code=$(echo "${response}" | tail -n 1)
+          body=$(echo "${response}" | sed '$d')
+          echo "HTTP status: ${http_code}"
+          echo "Response (first 200 chars):"
+          echo "${body}" | head -c 200
+          echo ""
+          if [ "${http_code}" -lt 200 ] || [ "${http_code}" -ge 300 ]; then
+            echo "Clouding API request failed."
+            exit 1
+          fi
