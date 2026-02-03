@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import calendar
 import json
 import socket
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -11,7 +13,10 @@ from src.data.store import CANONICAL_COLUMNS
 
 
 def _make_hourly_df(symbol: str, start: str, periods: int) -> pd.DataFrame:
-    start_ms = pd.Timestamp(start, tz="UTC").value // 1_000_000
+    dt = datetime.fromisoformat(start)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    start_ms = calendar.timegm(dt.utctimetuple()) * 1000
     timestamps = [start_ms + i * 3_600_000 for i in range(periods)]
     base = [100.0 + i for i in range(periods)]
     return pd.DataFrame(
