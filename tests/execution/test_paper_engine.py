@@ -51,7 +51,7 @@ def test_armed_green_writes_record(tmp_path, monkeypatch) -> None:
         selected_strategy={"name": "s1", "version": "1.0.0"},
         control_state=ControlState(state=SystemState.ARMED),
     )
-    assert out["status"] == "ok"
+    assert out["status"] == "executed"
     path = Path("workspaces") / "run1" / "decision_records.jsonl"
     record = json.loads(path.read_text(encoding="utf-8").strip())
     validate_decision_record(record)

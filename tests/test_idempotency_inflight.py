@@ -111,7 +111,7 @@ def test_finalize_failure_keeps_inflight_and_blocks_retry(
     )
 
     assert len(broker.submitted) == 1
-    assert decision.action == "blocked"
+    assert decision.action == "error"
     assert decision.reason == "idempotency_finalize_error"
 
     decision_retry = engine.handle_intent(
