@@ -41,6 +41,13 @@ Create these in the repo settings (no values shown here):
 - Never paste API keys or runner tokens into chat or logs.
 - Use the least-privilege Clouding API key required to archive/unarchive the server.
 
+## Watchdog and sweep
+- `ci-backup-watchdog` runs after every `ci-backup` completion and always attempts to archive the server.
+  - `workflow_run` matches the workflow **name** (`ci-backup`), not the filename.
+- `clouding-sweep` runs on a schedule (every 6 hours) and archives the server if it is not already archived.
+  - The sweep skips archiving if a `ci-backup` run is in progress.
+  - The sweep queries runs via the workflow file path `ci-backup.yml`; do not rename the file.
+
 ## Operator scripts
 These scripts help validate Clouding connectivity without touching CI workflows:
 

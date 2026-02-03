@@ -1,0 +1,60 @@
+name: ci-backup-watchdog
+# NOTE: workflow_run matches by workflow NAME, not filename.
+
+on:
+  workflow_run:
+    workflows: ["ci-backup"] # must match ci-backup.yml name
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  archive-backup-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log watchdog context
+        env:
+          SERVER_ID: ${{ secrets.SERVER_ID }}
+        run: |
+          echo "ci-backup conclusion=${{ github.event.workflow_run.conclusion }}"
+          echo "ci-backup run_id=${{ github.event.workflow_run.id }}"
+          echo "server_id=${SERVER_ID}"
+
+      - name: Archive server (best effort)
+        env:
+          CLOUDING_APIKEY: ${{ secrets.CLOUDING_APIKEY }}
+          SERVER_ID: ${{ secrets.SERVER_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SERVER_ID}" ] || [ -z "${CLOUDING_APIKEY}" ]; then
+            echo "Missing SERVER_ID or CLOUDING_APIKEY; skipping archive."
+            exit 0
+          fi
+          response=$(curl -sS -w "\n%{http_code}" -X POST "https://api.clouding.io/v1/servers/${SERVER_ID}/archive" \
+            -H "Content-Type: application/json" \
+            -H "X-API-KEY: ${CLOUDING_APIKEY}")
+          http_code=$(echo "${response}" | tail -n 1)
+          body=$(echo "${response}" | sed '$d')
+          echo "archive http=${http_code}"
+          echo "archive response (first 200 chars):"
+          echo "${body}" | head -c 200
+          echo ""
+          if [ "${http_code}" = "401" ] || [ "${http_code}" = "403" ]; then
+            echo "Authorization failed while archiving."
+            exit 1
+          fi
+          if [ "${http_code}" = "404" ]; then
+            echo "Server not found (SERVER_ID invalid)."
+            exit 1
+          fi
+          if [ "${http_code}" -ge 500 ] && [ "${http_code}" -lt 600 ]; then
+            echo "Clouding service error while archiving."
+            exit 1
+          fi
+          if [ "${http_code}" -ge 200 ] && [ "${http_code}" -lt 300 ]; then
+            echo "Archive request accepted."
+            exit 0
+          fi
+          echo "Archive request returned non-2xx; treating as idempotent/ignored."
