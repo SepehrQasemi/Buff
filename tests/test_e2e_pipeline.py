@@ -41,7 +41,7 @@ def test_e2e_pipeline_writes_valid_record(tmp_path, monkeypatch) -> None:
         selected_strategy={"name": "dummy", "version": "1.0.0"},
         control_state=control_state,
     )
-    assert out["status"] == "ok"
+    assert out["status"] == "executed"
 
     records_path = Path("workspaces") / "e2e" / "decision_records.jsonl"
     record = json.loads(records_path.read_text(encoding="utf-8").strip())
