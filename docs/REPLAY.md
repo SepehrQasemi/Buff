@@ -15,13 +15,14 @@ Snapshots capture the minimal inputs required to replay a decision:
 - risk_inputs: dict | null (inputs used by risk evaluation)
 - config: dict | null (includes risk_config used to evaluate risk_inputs)
 - selector_inputs: dict | null (inputs used by selector)
-- snapshot_hash: str (SHA256 of canonical JSON with snapshot_hash empty)
-  <!-- NOTE (underspecified): Whether digest is computed with snapshot_hash omitted or set to empty string is not specified. -->
+- snapshot_hash: str (SHA256 of canonical JSON with snapshot_hash omitted)
 
 The snapshot artifact path is content-addressed as:
 `artifacts/snapshots/snapshot_<hash>.json`
 
-<!-- NOTE (underspecified): Format of <hash> (e.g. hex only, with/without "sha256:" prefix) is not specified. -->
+Hash format: lowercase hex, no prefix.
+
+Canonical JSON rules are implemented in `src/audit/canonical_json.py` (UTF-8, sorted keys, no whitespace).
 
 ## Replay equivalence
 
@@ -57,7 +58,7 @@ Create a snapshot:
 python -m src.audit.make_snapshot --input tests/fixtures/snapshot_payload.json --out artifacts/snapshots
 ```
 
-<!-- NOTE (underspecified): Whether --out is a directory or a full file path is not specified. -->
+`--out` is a directory; the snapshot file is written inside it.
 
 The command prints the created snapshot path (single line) to stdout.
 
@@ -78,7 +79,7 @@ Expected outputs:
 Replay records are written to:
 `artifacts/replays/replay_<decision_id>.json` unless `--out` is provided.
 
-<!-- NOTE (underspecified): Whether replay --out is a file path or a directory is not specified. -->
+`--out` is a directory; the replay file is written inside it. Passing a file path is an error.
 
 Use `--strict-full` to require full payload equality. Use `--json <path>` to write diffs
 to a file on mismatch.

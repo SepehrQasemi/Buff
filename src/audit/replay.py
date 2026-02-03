@@ -442,7 +442,7 @@ def main() -> None:
     parser.add_argument(
         "--out",
         required=False,
-        help="Output path or directory for replay record",
+        help="Output directory for replay record",
     )
     parser.add_argument(
         "--json",
@@ -477,11 +477,17 @@ def main() -> None:
         sys.exit(1)
 
     if args.out:
-        out_path = Path(args.out)
+        out_dir = Path(args.out)
+        if out_dir.suffix.lower() == ".json":
+            print("ERROR: --out must be a directory", file=sys.stderr)
+            sys.exit(2)
+        if out_dir.exists() and out_dir.is_file():
+            print("ERROR: --out must be a directory", file=sys.stderr)
+            sys.exit(2)
     else:
-        out_path = Path("artifacts") / "replays"
-    if out_path.suffix.lower() != ".json":
-        out_path = out_path / f"replay_{decision.decision_id}.json"
+        out_dir = Path("artifacts") / "replays"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"replay_{decision.decision_id}.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(report.replay_record.to_canonical_json(), encoding="utf-8")
 

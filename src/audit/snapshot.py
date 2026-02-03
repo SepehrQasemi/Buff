@@ -9,7 +9,7 @@ from audit.canonical_json import canonical_json_bytes
 
 
 def _sha256_hex(data: bytes) -> str:
-    return f"sha256:{sha256(data).hexdigest()}"
+    return sha256(data).hexdigest()
 
 
 def _require_str(value: Any, field: str) -> str:
@@ -76,7 +76,7 @@ class Snapshot:
         elif self.snapshot_hash != computed:
             raise ValueError("snapshot_hash does not match computed value")
 
-    def _to_payload(self, *, snapshot_hash: str) -> dict[str, Any]:
+    def _payload_without_hash(self) -> dict[str, Any]:
         return {
             "snapshot_version": self.snapshot_version,
             "decision_id": self.decision_id,
@@ -87,12 +87,16 @@ class Snapshot:
             "risk_inputs": self.risk_inputs,
             "config": self.config,
             "selector_inputs": self.selector_inputs,
-            "snapshot_hash": snapshot_hash,
         }
 
     def _compute_hash(self) -> str:
-        payload = self._to_payload(snapshot_hash="")
+        payload = self._payload_without_hash()
         return _sha256_hex(canonical_json_bytes(payload))
+
+    def _to_payload(self, *, snapshot_hash: str) -> dict[str, Any]:
+        payload = self._payload_without_hash()
+        payload["snapshot_hash"] = snapshot_hash
+        return payload
 
     def to_dict(self) -> dict[str, Any]:
         snapshot_hash = self.snapshot_hash or self._compute_hash()
@@ -104,7 +108,7 @@ class Snapshot:
     @property
     def snapshot_ref(self) -> str:
         snapshot_hash = self.snapshot_hash or self._compute_hash()
-        return f"snapshot_{snapshot_hash.replace('sha256:', '')}.json"
+        return f"snapshot_{snapshot_hash}.json"
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "Snapshot":

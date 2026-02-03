@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from audit.migrate_records import migrate_file, migrate_record_dict
 
 
@@ -48,6 +50,31 @@ def test_migration_preserves_selection_outcome_semantics() -> None:
     migrated = migrate_record_dict(original)
     assert migrated["selection"]["strategy_id"] == original["selection"]["strategy_id"]
     assert migrated["outcome"] == original["outcome"]
+
+
+def test_migration_fills_empty_strategy_id_from_strategy_ref() -> None:
+    src = Path("tests/fixtures/legacy_records/legacy_fact.json")
+    original = json.loads(src.read_text(encoding="utf-8"))
+    original["selection"]["strategy_id"] = ""
+    original["strategy"] = {"name": "trend", "version": "1.0.0"}
+    original["selection"].pop("selected", None)
+    original["selection"].pop("status", None)
+
+    migrated = migrate_record_dict(original)
+    assert migrated["selection"]["strategy_id"] == "trend@1.0.0"
+    assert migrated["selection"]["selected"] is True
+    assert migrated["selection"]["status"] == "selected"
+
+
+def test_migration_empty_strategy_id_missing_strategy_fails() -> None:
+    src = Path("tests/fixtures/legacy_records/legacy_fact.json")
+    original = json.loads(src.read_text(encoding="utf-8"))
+    original["selection"]["strategy_id"] = ""
+    original["selection"].pop("selected", None)
+    original["selection"].pop("status", None)
+
+    with pytest.raises(ValueError, match="empty_strategy_id_missing_strategy"):
+        migrate_record_dict(original)
 
 
 def test_cli_migrate_dry_run_no_write(tmp_path: Path) -> None:

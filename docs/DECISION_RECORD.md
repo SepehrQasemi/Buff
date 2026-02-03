@@ -99,7 +99,7 @@ Notes:
   producer before canonical serialization; the canonical encoder does not re-sort lists.
 - If risk evaluation is replayed from `snapshot.risk_inputs`, the corresponding
   `inputs.config.risk_config` must be present and is included in the core hash.
-  <!-- NOTE (underspecified): "snapshot" here refers to the snapshot artifact used as replay input; exact wording may be ambiguous. -->
+- In this document, "snapshot" refers to the snapshot artifact used as replay input.
 
 ## Corruption Handling
 
@@ -123,12 +123,14 @@ Do not infer business logic. Only map fields structurally:
 | Legacy field | New field(s) |
 | --- | --- |
 | `selection.strategy_id` is missing or null | `selection.selected=false`, `selection.status="no_selection"`, `selection.strategy_id=null` |
+| `selection.strategy_id` is empty string AND `strategy.name` + `strategy.version` exist | `selection.strategy_id="{name}@{version}"`, `selection.selected=true`, `selection.status="selected"` |
+| `selection.strategy_id` is empty string AND `strategy` fields are missing | Migration fails (fail-closed) with a clear error. |
 | `selection.strategy_id` is present | `selection.selected=true`, `selection.status="selected"`, `selection.strategy_id=<old>` |
 | Explicit blocked indicator (e.g., `outcome.allowed=false` AND `outcome.decision=="blocked"`) | `selection.status="blocked"` (only if explicitly indicated) |
 
 If the legacy record contains no explicit blocked indicator, do not set `status="blocked"`.
 
-<!-- NOTE (underspecified): Treatment of strategy_id="" (empty string) for migration is not defined. -->
+Empty string strategy_id is not valid without a strategy reference.
 
 ### CLI migration helper
 
