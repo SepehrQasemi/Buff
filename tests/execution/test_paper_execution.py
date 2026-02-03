@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -33,7 +34,8 @@ def test_disarmed_blocks_and_records(tmp_path, monkeypatch) -> None:
     record = json.loads(raw)
     validate_decision_record(record)
     assert raw.count('"timestamp_utc"') == 1
-    assert record["timestamp_utc"].endswith("Z")
+    ts = datetime.fromisoformat(record["timestamp_utc"].replace("Z", "+00:00"))
+    assert ts.tzinfo == timezone.utc
     assert record["execution_status"] == "BLOCKED"
     assert record["reason"]
 

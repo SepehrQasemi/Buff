@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from control_plane.state import ControlState, SystemState
+from execution.brokers import BrokerError, PaperBroker
 from execution.engine import execute_paper_run
 from execution.trade_log import TRADE_SCHEMA, write_trades_parquet
 
@@ -49,6 +50,24 @@ def test_execute_paper_run_writes_empty_trades(tmp_path: Path, monkeypatch) -> N
         risk_decision={"risk_state": "GREEN"},
         selected_strategy={"name": "demo", "version": "1.0.0"},
         control_state=ControlState(state=SystemState.DISARMED),
+    )
+    trades_path = Path("workspaces/run1/trades.parquet")
+    assert trades_path.exists()
+    df = pd.read_parquet(trades_path, engine="pyarrow")
+    assert df.empty
+    assert list(df.columns) == list(TRADE_SCHEMA.names)
+
+
+def test_execute_paper_run_error_writes_empty_trades(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    broker = PaperBroker(fail_on_submit=True, error=BrokerError("boom"))
+    _ = execute_paper_run(
+        input_data={"run_id": "run1", "timeframe": "1m"},
+        features={},
+        risk_decision={"risk_state": "GREEN"},
+        selected_strategy={"name": "demo", "version": "1.0.0"},
+        control_state=ControlState(state=SystemState.ARMED),
+        broker=broker,
     )
     trades_path = Path("workspaces/run1/trades.parquet")
     assert trades_path.exists()
