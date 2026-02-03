@@ -168,7 +168,9 @@ def test_broker_error_leaves_idempotency_inflight(tmp_path: Path) -> None:
     key = idempotency.records.keys()
     assert len(key) == 1
     idem_key = next(iter(key))
-    assert idempotency.get_record(idem_key)["status"] == "INFLIGHT"
+    assert idempotency.get_record(idem_key)["status"] == "INFLIGHT", (
+        "See EXECUTION_SAFETY.md#idempotency-inflight-broker-error-fail-closed"
+    )
 
     # Manual intervention required: idempotency is not finalized after broker error.
     followup = engine.handle_intent(
