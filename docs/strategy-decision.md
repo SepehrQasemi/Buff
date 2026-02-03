@@ -1,4 +1,4 @@
-# Strategy Decision Contract
+﻿# Strategy Decision Contract
 
 ## Decision schema (schema_version=1)
 Fields:
@@ -16,9 +16,11 @@ Fields:
   - feature_bundle_fingerprint
   - strategy_id (`name@version`)
   - strategy_params_hash
-- confidence (optional): 0.0–1.0
+- confidence (optional): 0.0-1.0
 
 ## Invariants
 - Deterministic outputs for identical inputs.
 - Schema-versioned validation with fail-closed errors.
 - No order placement or live trading in strategy execution.
+- No silent fallback; all violations raise errors.
+- Reproducibility core: the full decision payload is deterministic for identical inputs.

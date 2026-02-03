@@ -153,6 +153,22 @@ def validate_decision_payload(payload: Mapping[str, Any]) -> None:
     risk = payload.get("risk")
     if not isinstance(risk, Mapping):
         raise DecisionValidationError("decision_risk_invalid")
+    for key in ("max_position_size", "stop_loss", "take_profit"):
+        value = risk.get(key)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or value <= 0:
+            raise DecisionValidationError("decision_risk_invalid")
     provenance = payload.get("provenance")
     if not isinstance(provenance, Mapping):
         raise DecisionValidationError("decision_provenance_invalid")
+    for key in ("feature_bundle_fingerprint", "strategy_id", "strategy_params_hash"):
+        value = provenance.get(key)
+        if not isinstance(value, str) or not value:
+            raise DecisionValidationError("decision_provenance_invalid")
+    confidence = payload.get("confidence")
+    if confidence is not None:
+        if (
+            not isinstance(confidence, (int, float))
+            or isinstance(confidence, bool)
+            or not (0.0 <= float(confidence) <= 1.0)
+        ):
+            raise DecisionValidationError("decision_confidence_invalid")

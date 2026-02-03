@@ -8,6 +8,11 @@
 - Same snapshot + same FeatureSpecs => identical outputs (values, dtypes, column order) and identical manifest.
 - Canonicalization uses deterministic JSON (sorted keys, stable float formatting).
 - Feature execution order is deterministic and independent of input spec order.
+- Reproducibility guarantee: data + metadata are deterministic for identical inputs.
+- Parquet bytes are not guaranteed to be bitwise identical across different pyarrow versions; ordering + values are guaranteed.
+
+## Fail-Closed Semantics
+- No silent fallback; all contract violations raise errors.
 
 ## FeatureSpec schema
 Fields:
@@ -72,6 +77,8 @@ Generated artifacts include deterministic metadata:
 - code_fingerprint
 - bundle_fingerprint
 - Stored next to the parquet as `market_state.meta.json`.
+- Reproducibility core: all fields above are deterministic given the same inputs.
+- Runtime context: none in Phase 1; user-supplied run_id/as_of_utc are treated as inputs.
 
 ## Error semantics (deterministic codes)
 - feature_input_invalid: OHLCV contract failure (timestamp, types, monotonicity)

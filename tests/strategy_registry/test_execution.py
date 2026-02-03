@@ -58,6 +58,11 @@ def test_run_strategy_emits_decision_with_provenance() -> None:
     decision = run_strategy(_strategy(spec), features_df, metadata, metadata.time_bounds.as_of_utc)
     assert decision.provenance.feature_bundle_fingerprint == metadata.bundle_fingerprint
     assert decision.provenance.strategy_id == "demo@1.0.0"
+    payload = decision.to_dict()
+    assert payload["as_of_utc"] == metadata.time_bounds.as_of_utc
+    assert payload["provenance"]["feature_bundle_fingerprint"]
+    assert payload["provenance"]["strategy_id"] == "demo@1.0.0"
+    assert payload["provenance"]["strategy_params_hash"]
 
 
 def test_run_strategy_missing_features_fails() -> None:
@@ -76,3 +81,24 @@ def test_run_strategy_missing_features_fails() -> None:
     )
     with pytest.raises(StrategyExecutionError):
         run_strategy(_strategy(spec), features_df, metadata, metadata.time_bounds.as_of_utc)
+
+
+def test_run_strategy_missing_output_column_fails() -> None:
+    df = make_ohlcv(120)
+    specs = build_feature_specs_from_registry(FEATURES)
+    features_df, metadata = compute_features(df, specs)
+    features_df.attrs["instrument"] = "BTCUSDT"
+
+    required_feature = f"{metadata.specs[0].feature_id}@{metadata.specs[0].version}"
+    spec = StrategySpec(
+        name="demo",
+        version="1.0.0",
+        description="demo",
+        required_features=[required_feature],
+        required_timeframes=["1m"],
+        params={},
+    )
+    missing_col = metadata.specs[0].outputs[0]
+    broken = features_df.drop(columns=[missing_col])
+    with pytest.raises(StrategyExecutionError):
+        run_strategy(_strategy(spec), broken, metadata, metadata.time_bounds.as_of_utc)
