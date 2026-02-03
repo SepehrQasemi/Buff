@@ -2,14 +2,108 @@ name: ci-backup
 permissions:
   contents: read
   actions: read
+  issues: read
 on:
   workflow_run:
     workflows: ["ci"]
     types: [completed]
 
 jobs:
-  start-server:
+  precheck:
     if: ${{ github.event.workflow_run.conclusion == 'cancelled' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.decide.outputs.should_run }}
+    steps:
+      - name: Debug workflow_run context (safe)
+        env:
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -euo pipefail
+          echo "conclusion=${{ github.event.workflow_run.conclusion }}"
+          echo "event=${{ github.event.workflow_run.event }}"
+          echo "head_branch=${{ github.event.workflow_run.head_branch }}"
+          echo "head_sha=${{ github.event.workflow_run.head_sha }}"
+          echo "run_attempt=${{ github.event.workflow_run.run_attempt }}"
+          echo "actor=${{ github.event.workflow_run.actor.login }}"
+          python - <<'PY'
+import json, os
+with open(os.environ["EVENT_PATH"], "r", encoding="utf-8") as f:
+    event = json.load(f)
+wr = event.get("workflow_run", {})
+safe = {
+    "id": wr.get("id"),
+    "name": wr.get("name"),
+    "event": wr.get("event"),
+    "status": wr.get("status"),
+    "conclusion": wr.get("conclusion"),
+    "head_branch": wr.get("head_branch"),
+    "head_sha": wr.get("head_sha"),
+    "run_attempt": wr.get("run_attempt"),
+    "html_url": wr.get("html_url"),
+    "actor": (wr.get("actor") or {}).get("login"),
+    "pull_requests": [
+        {"number": pr.get("number"), "title": pr.get("title")}
+        for pr in wr.get("pull_requests", [])
+    ],
+}
+print(json.dumps(safe, indent=2))
+PY
+
+      - name: Decide if fallback should run
+        id: decide
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          EVENT_PATH: ${{ github.event_path }}
+        run: |
+          set -euo pipefail
+          conclusion="${{ github.event.workflow_run.conclusion }}"
+          if [ "${conclusion}" = "failure" ]; then
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          pr_number=$(python - <<'PY'
+import json, os
+with open(os.environ["EVENT_PATH"], "r", encoding="utf-8") as f:
+    event = json.load(f)
+prs = event.get("workflow_run", {}).get("pull_requests", [])
+print(prs[0].get("number", "") if prs else "")
+PY
+)
+          if [ -z "${pr_number}" ]; then
+            echo "No PR context found; skipping fallback for cancelled run."
+            echo "should_run=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          labels=$(curl -sS -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues/${pr_number}/labels")
+          http_code=$(echo "${labels}" | tail -n 1)
+          body=$(echo "${labels}" | sed '$d')
+          if [ "${http_code}" != "200" ]; then
+            echo "Failed to fetch PR labels (HTTP ${http_code}). Skipping fallback for cancelled run."
+            echo "should_run=false" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          has_label=$(LABELS_JSON="${body}" python - <<'PY'
+import json, os
+data = json.loads(os.environ["LABELS_JSON"])
+names = {label.get("name") for label in data}
+print("yes" if "use-backup-ci" in names else "no")
+PY
+) || has_label="no"
+          if [ "${has_label}" = "yes" ]; then
+            echo "PR label use-backup-ci found; running fallback."
+            echo "should_run=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "PR label use-backup-ci not found; skipping fallback for cancelled run."
+            echo "should_run=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+  start-server:
+    needs: precheck
+    if: ${{ needs.precheck.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Power on backup server
@@ -99,8 +193,8 @@ PY
       - run: pytest -q
 
   stop-server:
-    needs: [start-server, wait-for-runner, run-tests-on-backup]
-    if: ${{ always() && (github.event.workflow_run.conclusion == 'cancelled' || github.event.workflow_run.conclusion == 'failure') }}
+    needs: [precheck, start-server, wait-for-runner, run-tests-on-backup]
+    if: ${{ always() && needs.precheck.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Power off backup server

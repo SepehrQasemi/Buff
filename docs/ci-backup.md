@@ -17,7 +17,8 @@ Create these in the repo settings (no values shown here):
 ## How to test the fallback
 1) Open a PR to trigger the normal `ci` workflow.
 2) Cancel the running `ci` job from the Actions UI.
-3) Confirm `ci-backup` starts, powers on the server, waits for the runner, runs tests, and powers off the server.
+3) If you want the fallback on a cancelled run, add the PR label `use-backup-ci`.
+4) Confirm `ci-backup` starts, powers on the server, waits for the runner, runs tests, and powers off the server.
 
 ## Troubleshooting checklist
 - **Runner offline**
@@ -32,6 +33,9 @@ Create these in the repo settings (no values shown here):
 - **Archive/unarchive fails**
   - Verify `SERVER_ID` is correct in GitHub Secrets.
   - Check Clouding service status and API availability.
+- **Cancelled runs don’t trigger backup**
+  - By design, cancelled runs require PR label `use-backup-ci` to avoid wasted server cycles.
+  - Failures still trigger backup automatically.
 
 ## Security notes
 - Never paste API keys or runner tokens into chat or logs.
