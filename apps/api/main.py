@@ -9,9 +9,10 @@ from .artifacts import (
     collect_error_records,
     discover_runs,
     filter_decisions,
-    get_run_path,
+    get_artifacts_root,
     load_trades,
     parse_timestamp,
+    resolve_run_dir,
 )
 
 app = FastAPI(title="Buff Artifacts API", docs_url="/api/docs", openapi_url="/api/openapi.json")
@@ -37,9 +38,7 @@ def list_runs() -> list[dict[str, object]]:
 
 @app.get("/api/runs/{run_id}/summary")
 def run_summary(run_id: str) -> dict[str, object]:
-    run_path = get_run_path(run_id)
-    if run_path is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run_path = resolve_run_dir(run_id, get_artifacts_root())
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise HTTPException(status_code=404, detail="decision_records.jsonl missing")
@@ -55,20 +54,15 @@ def decisions(
     reason_code: list[str] | None = Query(default=None),
     start_ts: str | None = None,
     end_ts: str | None = None,
-    page: int = 1,
-    page_size: int = 50,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
 ) -> dict[str, object]:
-    run_path = get_run_path(run_id)
-    if run_path is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run_path = resolve_run_dir(run_id, get_artifacts_root())
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise HTTPException(status_code=404, detail="decision_records.jsonl missing")
-    if page < 1 or page_size < 1:
-        raise HTTPException(status_code=400, detail="page and page_size must be >= 1")
 
-    start_dt = _parse_query_timestamp(start_ts)
-    end_dt = _parse_query_timestamp(end_ts)
+    start_dt, end_dt = _parse_time_range(start_ts, end_ts)
 
     return filter_decisions(
         decision_path,
@@ -88,20 +82,15 @@ def trades(
     run_id: str,
     start_ts: str | None = None,
     end_ts: str | None = None,
-    page: int = 1,
-    page_size: int = 50,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
 ) -> dict[str, object]:
-    run_path = get_run_path(run_id)
-    if run_path is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run_path = resolve_run_dir(run_id, get_artifacts_root())
     trade_path = run_path / "trades.parquet"
     if not trade_path.exists():
         raise HTTPException(status_code=404, detail="trades.parquet missing")
-    if page < 1 or page_size < 1:
-        raise HTTPException(status_code=400, detail="page and page_size must be >= 1")
 
-    start_dt = _parse_query_timestamp(start_ts)
-    end_dt = _parse_query_timestamp(end_ts)
+    start_dt, end_dt = _parse_time_range(start_ts, end_ts)
 
     try:
         return load_trades(trade_path, start_dt, end_dt, page, page_size)
@@ -111,9 +100,7 @@ def trades(
 
 @app.get("/api/runs/{run_id}/errors")
 def errors(run_id: str) -> dict[str, object]:
-    run_path = get_run_path(run_id)
-    if run_path is None:
-        raise HTTPException(status_code=404, detail="Run not found")
+    run_path = resolve_run_dir(run_id, get_artifacts_root())
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise HTTPException(status_code=404, detail="decision_records.jsonl missing")
@@ -128,3 +115,13 @@ def _parse_query_timestamp(value: str | None) -> datetime | None:
     if parsed is None:
         raise HTTPException(status_code=400, detail=f"Invalid timestamp: {value}")
     return parsed
+
+
+def _parse_time_range(
+    start_ts: str | None, end_ts: str | None
+) -> tuple[datetime | None, datetime | None]:
+    start_dt = _parse_query_timestamp(start_ts)
+    end_dt = _parse_query_timestamp(end_ts)
+    if start_dt and end_dt and start_dt > end_dt:
+        raise HTTPException(status_code=400, detail="start_ts must be <= end_ts")
+    return start_dt, end_dt

@@ -6,12 +6,38 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
+from fastapi import HTTPException
+
 ARTIFACTS_ENV = "ARTIFACTS_ROOT"
 
 
 def get_artifacts_root() -> Path:
     root = os.environ.get(ARTIFACTS_ENV, "./artifacts")
     return Path(root).expanduser().resolve()
+
+
+def resolve_run_dir(run_id: str, artifacts_root: Path) -> Path:
+    candidate_id = (run_id or "").strip()
+    if (
+        not candidate_id
+        or candidate_id.startswith(".")
+        or "/" in candidate_id
+        or "\\" in candidate_id
+        or ".." in candidate_id
+    ):
+        raise HTTPException(status_code=400, detail="run_id must be a simple folder name")
+
+    root = artifacts_root.resolve()
+    candidate = (root / candidate_id).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400, detail="run_id must stay within ARTIFACTS_ROOT"
+        ) from exc
+    if not candidate.exists() or not candidate.is_dir():
+        raise HTTPException(status_code=404, detail="Run not found")
+    return candidate
 
 
 def parse_timestamp(value: Any) -> datetime | None:
@@ -112,18 +138,6 @@ def discover_runs() -> list[dict[str, Any]]:
     for run in runs:
         run.pop("_sort", None)
     return runs
-
-
-def get_run_path(run_id: str) -> Path | None:
-    root = get_artifacts_root()
-    candidate = (root / run_id).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError:
-        return None
-    if not candidate.exists() or not candidate.is_dir():
-        return None
-    return candidate
 
 
 def extract_run_metadata(decision_path: Path) -> tuple[str | None, list[str] | None, str | None]:
