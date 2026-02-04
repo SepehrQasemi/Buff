@@ -1,4 +1,4 @@
-export default function ErrorsPanel({ payload, loading, error }) {
+export default function ErrorsPanel({ payload, loading, error, onExport }) {
   const errors = payload?.errors || payload?.results || [];
   const totalErrors = payload?.total_errors ?? payload?.total ?? errors.length;
   const returnedErrorsCount = payload?.returned_errors_count ?? errors.length;
@@ -7,9 +7,21 @@ export default function ErrorsPanel({ payload, loading, error }) {
     <section className="card">
       <div className="section-title">
         <h2>Errors & Fail-Closed</h2>
-        <p>
-          {totalErrors} total / {returnedErrorsCount} returned
-        </p>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <p>
+            {totalErrors} total / {returnedErrorsCount} returned
+          </p>
+          {onExport && (
+            <>
+              <button className="secondary" onClick={() => onExport("csv")}>
+                Export CSV
+              </button>
+              <button className="secondary" onClick={() => onExport("json")}>
+                Export JSON
+              </button>
+            </>
+          )}
+        </div>
       </div>
       {error && <div className="banner">{error}</div>}
       {loading ? (

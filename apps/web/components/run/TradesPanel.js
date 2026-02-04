@@ -1,6 +1,6 @@
 import LineChart from "../LineChart";
 
-export default function TradesPanel({ trades, filters, onChange, loading, error }) {
+export default function TradesPanel({ trades, filters, onChange, loading, error, onExport }) {
   const rows = trades?.results || [];
 
   const pnlValues = rows.map((row) => Number(row.pnl)).filter((value) => Number.isFinite(value));
@@ -32,7 +32,19 @@ export default function TradesPanel({ trades, filters, onChange, loading, error 
     <section className="card" style={{ marginBottom: "24px" }}>
       <div className="section-title">
         <h2>Trades</h2>
-        <p>{trades ? `${trades.total} trades` : "Loading"}</p>
+        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+          <p>{trades ? `${trades.total} trades` : "Loading"}</p>
+          {onExport && (
+            <>
+              <button className="secondary" onClick={() => onExport("csv")}>
+                Export CSV
+              </button>
+              <button className="secondary" onClick={() => onExport("json")}>
+                Export JSON
+              </button>
+            </>
+          )}
+        </div>
       </div>
       {error && <div className="banner">{error}</div>}
       <div className="toolbar">

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 from collections import OrderedDict, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from fastapi import HTTPException
 
@@ -205,6 +207,47 @@ def collect_error_records(decision_path: Path) -> dict[str, Any]:
     return errors
 
 
+def stream_decisions_export(
+    decision_path: Path,
+    *,
+    symbols: list[str] | None,
+    actions: list[str] | None,
+    severities: list[str] | None,
+    reason_codes: list[str] | None,
+    start_ts: datetime | None,
+    end_ts: datetime | None,
+    fmt: str,
+) -> tuple[Iterable[bytes], str]:
+    def iter_records() -> Iterable[dict[str, Any]]:
+        yield from _iter_filtered_decisions(
+            decision_path,
+            symbols,
+            actions,
+            severities,
+            reason_codes,
+            start_ts,
+            end_ts,
+        )
+
+    return _build_export_stream(iter_records, fmt)
+
+
+def stream_errors_export(decision_path: Path, *, fmt: str) -> tuple[Iterable[bytes], str]:
+    def iter_records() -> Iterable[dict[str, Any]]:
+        yield from _iter_error_records(decision_path)
+
+    return _build_export_stream(iter_records, fmt)
+
+
+def stream_trades_export(
+    trade_path: Path, *, start_ts: datetime | None, end_ts: datetime | None, fmt: str
+) -> tuple[Iterable[bytes], str]:
+    def iter_records() -> Iterable[dict[str, Any]]:
+        yield from _iter_trade_records(trade_path, start_ts, end_ts)
+
+    return _build_export_stream(iter_records, fmt)
+
+
 def _get_cached_analysis(decision_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     cache_key = _decision_cache_key(decision_path)
     cached = _DECISION_CACHE.get(cache_key)
@@ -345,6 +388,124 @@ def load_trades(
         "results": records,
         "timestamp_field": timestamp_col,
     }
+
+
+def _iter_filtered_decisions(
+    decision_path: Path,
+    symbols: list[str] | None,
+    actions: list[str] | None,
+    severities: list[str] | None,
+    reason_codes: list[str] | None,
+    start_ts: datetime | None,
+    end_ts: datetime | None,
+) -> Iterable[dict[str, Any]]:
+    symbol_filter = _normalize_filter(symbols)
+    action_filter = _normalize_filter(actions)
+    severity_filter = _normalize_filter(severities)
+    reason_filter = _normalize_filter(reason_codes)
+
+    for record in DecisionRecords(decision_path):
+        if not _matches_filters(
+            record,
+            symbol_filter,
+            action_filter,
+            severity_filter,
+            reason_filter,
+            start_ts,
+            end_ts,
+        ):
+            continue
+        yield _normalize_record(record)
+
+
+def _iter_error_records(decision_path: Path) -> Iterable[dict[str, Any]]:
+    for record in DecisionRecords(decision_path):
+        if _is_error_record(record):
+            yield _normalize_record(record)
+
+
+def _iter_trade_records(
+    trade_path: Path, start_ts: datetime | None, end_ts: datetime | None
+) -> Iterable[dict[str, Any]]:
+    try:
+        import pyarrow.parquet as pq
+    except ImportError as exc:  # pragma: no cover - env issue
+        raise RuntimeError("pyarrow is required to read trades.parquet") from exc
+
+    parquet = pq.ParquetFile(trade_path)
+    timestamp_col = _pick_timestamp_column(parquet.schema.names)
+
+    for batch in parquet.iter_batches():
+        table = batch.to_pandas()
+        records = table.to_dict(orient="records")
+        for record in records:
+            ts_value = record.get(timestamp_col) if timestamp_col else None
+            ts = None
+            if timestamp_col:
+                try:
+                    ts = parse_ts(ts_value)
+                except ValueError:
+                    ts = None
+            if start_ts and (ts is None or ts < start_ts):
+                continue
+            if end_ts and (ts is None or ts > end_ts):
+                continue
+            if timestamp_col:
+                record[timestamp_col] = format_ts(ts)
+            yield record
+
+
+def _build_export_stream(
+    record_iter_factory: Callable[[], Iterable[dict[str, Any]]], fmt: str
+) -> tuple[Iterable[bytes], str]:
+    fmt_lower = fmt.lower()
+    if fmt_lower == "json":
+        return _stream_json_array(record_iter_factory), "application/json"
+    if fmt_lower == "csv":
+        fieldnames = _collect_fieldnames(record_iter_factory())
+        return _stream_csv(record_iter_factory, fieldnames), "text/csv"
+    raise ValueError(f"Unsupported export format: {fmt}")
+
+
+def _collect_fieldnames(records: Iterable[dict[str, Any]]) -> list[str]:
+    seen: set[str] = set()
+    fieldnames: list[str] = []
+    for record in records:
+        for key in record.keys():
+            if key not in seen:
+                seen.add(key)
+                fieldnames.append(key)
+    return fieldnames
+
+
+def _stream_csv(
+    record_iter_factory: Callable[[], Iterable[dict[str, Any]]], fieldnames: list[str]
+) -> Iterable[bytes]:
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    yield output.getvalue().encode("utf-8")
+    output.seek(0)
+    output.truncate(0)
+
+    for record in record_iter_factory():
+        writer.writerow(record)
+        yield output.getvalue().encode("utf-8")
+        output.seek(0)
+        output.truncate(0)
+
+
+def _stream_json_array(
+    record_iter_factory: Callable[[], Iterable[dict[str, Any]]],
+) -> Iterable[bytes]:
+    yield b"["
+    first = True
+    for record in record_iter_factory():
+        if not first:
+            yield b","
+        yield json.dumps(record).encode("utf-8")
+        first = False
+    yield b"]"
 
 
 def _get_created_at(run_path: Path, decision_path: Path) -> datetime | None:

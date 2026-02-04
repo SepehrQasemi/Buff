@@ -31,15 +31,20 @@ const parseErrorMessage = (data, fallback) => {
   return fallback;
 };
 
-const request = async (path, params) => {
+export const buildApiUrl = (path, params) => {
   const url = new URL(path, API_BASE);
   const query = buildQuery(params);
   if (query) {
     url.search = query;
   }
+  return url.toString();
+};
+
+const request = async (path, params) => {
+  const url = buildApiUrl(path, params);
 
   try {
-    const response = await fetch(url.toString());
+    const response = await fetch(url);
     const contentType = response.headers.get("content-type") || "";
     let data;
     if (contentType.includes("application/json")) {

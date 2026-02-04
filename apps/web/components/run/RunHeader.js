@@ -7,6 +7,8 @@ export default function RunHeader({
   missingArtifactsMessage,
   networkError,
   onRetry,
+  onCopyLink,
+  linkCopied,
 }) {
   const statusLabel = runStatus || "UNKNOWN";
   const statusClass = statusLabel === "OK" ? "ok" : "invalid";
@@ -20,6 +22,10 @@ export default function RunHeader({
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <span className={`badge ${statusClass}`}>{statusLabel}</span>
+          <button className="secondary" onClick={onCopyLink}>
+            Copy link
+          </button>
+          {linkCopied && <span className="badge info">Link copied</span>}
           <Link className="badge info" href="/runs">
             Back to runs
           </Link>

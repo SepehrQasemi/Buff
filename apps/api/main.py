@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Iterable
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 from .artifacts import (
     build_summary,
@@ -11,6 +13,9 @@ from .artifacts import (
     filter_decisions,
     get_artifacts_root,
     load_trades,
+    stream_decisions_export,
+    stream_errors_export,
+    stream_trades_export,
     resolve_run_dir,
 )
 from .timeutils import coerce_ts_param
@@ -107,6 +112,75 @@ def errors(run_id: str) -> dict[str, object]:
     return collect_error_records(decision_path)
 
 
+@app.get("/api/runs/{run_id}/decisions/export")
+def export_decisions(
+    run_id: str,
+    format: str = "json",
+    symbol: list[str] | None = Query(default=None),
+    action: list[str] | None = Query(default=None),
+    severity: list[str] | None = Query(default=None),
+    reason_code: list[str] | None = Query(default=None),
+    start_ts: str | None = None,
+    end_ts: str | None = None,
+) -> StreamingResponse:
+    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    decision_path = run_path / "decision_records.jsonl"
+    if not decision_path.exists():
+        raise HTTPException(status_code=404, detail="decision_records.jsonl missing")
+
+    start_dt, end_dt = _parse_time_range(start_ts, end_ts)
+    try:
+        stream, media_type = stream_decisions_export(
+            decision_path,
+            symbols=symbol,
+            actions=action,
+            severities=severity,
+            reason_codes=reason_code,
+            start_ts=start_dt,
+            end_ts=end_dt,
+            fmt=format,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _export_response(stream, media_type, f"{run_id}-decisions.{format}")
+
+
+@app.get("/api/runs/{run_id}/errors/export")
+def export_errors(run_id: str, format: str = "json") -> StreamingResponse:
+    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    decision_path = run_path / "decision_records.jsonl"
+    if not decision_path.exists():
+        raise HTTPException(status_code=404, detail="decision_records.jsonl missing")
+
+    try:
+        stream, media_type = stream_errors_export(decision_path, fmt=format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _export_response(stream, media_type, f"{run_id}-errors.{format}")
+
+
+@app.get("/api/runs/{run_id}/trades/export")
+def export_trades(
+    run_id: str,
+    format: str = "json",
+    start_ts: str | None = None,
+    end_ts: str | None = None,
+) -> StreamingResponse:
+    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    trade_path = run_path / "trades.parquet"
+    if not trade_path.exists():
+        raise HTTPException(status_code=404, detail="trades.parquet missing")
+
+    start_dt, end_dt = _parse_time_range(start_ts, end_ts)
+    try:
+        stream, media_type = stream_trades_export(
+            trade_path, start_ts=start_dt, end_ts=end_dt, fmt=format
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _export_response(stream, media_type, f"{run_id}-trades.{format}")
+
+
 def _parse_time_range(
     start_ts: str | None, end_ts: str | None
 ) -> tuple[datetime | None, datetime | None]:
@@ -115,3 +189,8 @@ def _parse_time_range(
     if start_dt and end_dt and start_dt > end_dt:
         raise HTTPException(status_code=400, detail="start_ts must be <= end_ts")
     return start_dt, end_dt
+
+
+def _export_response(stream: Iterable[bytes], media_type: str, filename: str) -> StreamingResponse:
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(stream, media_type=media_type, headers=headers)

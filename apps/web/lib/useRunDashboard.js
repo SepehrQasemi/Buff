@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/router";
 import { getDecisions, getErrors, getRuns, getRunSummary, getTrades } from "./api";
+import { buildQueryString, parseViewState, serializeViewState } from "./urlState";
 
 const splitList = (value) =>
   value
@@ -29,6 +31,7 @@ const buildDecisionParams = (filters) => ({
 });
 
 export default function useRunDashboard(runId) {
+  const router = useRouter();
   const [run, setRun] = useState(null);
   const [runError, setRunError] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -52,6 +55,8 @@ export default function useRunDashboard(runId) {
   const [networkError, setNetworkError] = useState(null);
   const [missingArtifactsMessage, setMissingArtifactsMessage] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [activeTab, setActiveTab] = useState("decisions");
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const [filters, setFilters] = useState({
     symbol: "",
@@ -74,9 +79,74 @@ export default function useRunDashboard(runId) {
   const decisionsRequestId = useRef(0);
   const tradesRequestId = useRef(0);
   const errorsRequestId = useRef(0);
+  const initializedRef = useRef(false);
+  const debounceRef = useRef(null);
+  const viewStateRef = useRef({ filters, activeTab });
 
   const invalidRun = run && run.status !== "OK";
   const decisionParams = useMemo(() => buildDecisionParams(filters), [filters]);
+
+  useEffect(() => {
+    viewStateRef.current = { filters, activeTab };
+  }, [filters, activeTab]);
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+    const parsed = parseViewState(router.query);
+    const incomingQuery = buildQueryString(serializeViewState(parsed));
+    const currentQuery = buildQueryString(
+      serializeViewState({
+        ...viewStateRef.current.filters,
+        active_tab: viewStateRef.current.activeTab,
+      })
+    );
+    if (initializedRef.current && incomingQuery === currentQuery) {
+      return;
+    }
+    setFilters((current) => ({
+      ...current,
+      symbol: parsed.symbol,
+      action: parsed.action,
+      severity: parsed.severity,
+      reason_code: parsed.reason_code,
+      start_ts: parsed.start_ts,
+      end_ts: parsed.end_ts,
+      page: parsed.page,
+      page_size: parsed.page_size,
+    }));
+    setActiveTab(parsed.active_tab);
+    initializedRef.current = true;
+  }, [router.isReady, router.query]);
+
+  useEffect(() => {
+    if (!router.isReady || !initializedRef.current || !runId) {
+      return;
+    }
+    const nextQuery = serializeViewState({ ...filters, active_tab: activeTab });
+    const currentQuery = router.asPath.split("?")[1] || "";
+    const nextQueryString = buildQueryString(nextQuery);
+    const currentQueryString = new URLSearchParams(currentQuery).toString();
+    if (currentQueryString === nextQueryString) {
+      return;
+    }
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    debounceRef.current = setTimeout(() => {
+      router.replace(
+        { pathname: router.pathname, query: { id: runId, ...nextQuery } },
+        undefined,
+        { shallow: true }
+      );
+    }, 300);
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, [filters, activeTab, router, runId]);
 
   useEffect(() => {
     if (!runId) {
@@ -246,6 +316,20 @@ export default function useRunDashboard(runId) {
     setReloadToken((value) => value + 1);
   };
 
+  const copyLink = async () => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const url = window.location.href;
+    try {
+      await navigator.clipboard.writeText(url);
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    } catch (error) {
+      setLinkCopied(false);
+    }
+  };
+
   return {
     run,
     runError,
@@ -268,6 +352,11 @@ export default function useRunDashboard(runId) {
     setFilters,
     tradeFilters,
     setTradeFilters,
+    decisionParams,
+    activeTab,
+    setActiveTab,
+    linkCopied,
+    copyLink,
     reload,
   };
 }

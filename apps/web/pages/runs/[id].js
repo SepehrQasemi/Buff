@@ -6,6 +6,7 @@ import RunHeader from "../../components/run/RunHeader";
 import SummaryCards from "../../components/run/SummaryCards";
 import TradesPanel from "../../components/run/TradesPanel";
 import useRunDashboard from "../../lib/useRunDashboard";
+import { buildApiUrl } from "../../lib/api";
 
 export default function RunDashboard() {
   const router = useRouter();
@@ -33,10 +34,33 @@ export default function RunDashboard() {
     setFilters,
     tradeFilters,
     setTradeFilters,
+    decisionParams,
+    linkCopied,
+    copyLink,
     reload,
   } = useRunDashboard(id);
 
   const decisionItems = decisions.items || decisions.results || [];
+
+  const handleExport = (section, format) => {
+    if (!id) {
+      return;
+    }
+    const params = { format };
+    if (section === "decisions") {
+      Object.assign(params, { ...decisionParams, page: undefined, page_size: undefined });
+    }
+    if (section === "trades") {
+      Object.assign(params, {
+        start_ts: tradeFilters.start_ts || undefined,
+        end_ts: tradeFilters.end_ts || undefined,
+        page: undefined,
+        page_size: undefined,
+      });
+    }
+    const url = buildApiUrl(`/api/runs/${id}/${section}/export`, params);
+    window.location.href = url;
+  };
 
   return (
     <main>
@@ -47,6 +71,8 @@ export default function RunDashboard() {
         missingArtifactsMessage={missingArtifactsMessage}
         networkError={networkError}
         onRetry={reload}
+        onCopyLink={copyLink}
+        linkCopied={linkCopied}
       />
 
       {runError && <div className="banner">{runError}</div>}
@@ -100,7 +126,15 @@ export default function RunDashboard() {
         <section className="card" style={{ marginBottom: "24px" }}>
           <div className="section-title">
             <h2>Decisions</h2>
-            <p>{decisions.total} records</p>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+              <p>{decisions.total} records</p>
+              <button className="secondary" onClick={() => handleExport("decisions", "csv")}>
+                Export CSV
+              </button>
+              <button className="secondary" onClick={() => handleExport("decisions", "json")}>
+                Export JSON
+              </button>
+            </div>
           </div>
           <FiltersBar
             filters={filters}
@@ -127,11 +161,17 @@ export default function RunDashboard() {
           onChange={setTradeFilters}
           loading={tradesLoading}
           error={tradesError}
+          onExport={(format) => handleExport("trades", format)}
         />
       )}
 
       {!invalidRun && (
-        <ErrorsPanel payload={errorsPayload} loading={errorsLoading} error={errorsError} />
+        <ErrorsPanel
+          payload={errorsPayload}
+          loading={errorsLoading}
+          error={errorsError}
+          onExport={(format) => handleExport("errors", format)}
+        />
       )}
     </main>
   );

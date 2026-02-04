@@ -101,6 +101,15 @@ Smoke check (API must be running):
 node apps/web/scripts/smoke.mjs
 ```
 
+Filters and pagination are shareable via the URL (query params are updated automatically).
+Decisions, trades, and errors can be exported as CSV/JSON via the dashboard or:
+
+```text
+/api/runs/<id>/decisions/export?format=csv|json
+/api/runs/<id>/trades/export?format=csv|json
+/api/runs/<id>/errors/export?format=csv|json
+```
+
 ### Timestamp contract
 
 - Inputs: `start_ts`/`end_ts` accept ISO 8601 with or without timezone or epoch milliseconds.
