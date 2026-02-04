@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from hashlib import sha256
+from itertools import product
 import json
 from pathlib import Path
 import re
@@ -37,10 +39,14 @@ def _now_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
 def _write_json(path: Path, payload: object) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n",
+        _canonical_json(payload) + "\n",
         encoding="utf-8",
     )
     return path
@@ -97,6 +103,46 @@ def _data_quality(df: object) -> tuple[dict[str, object], str | None]:
     return details, None
 
 
+def _config_id(config: object) -> tuple[str, str]:
+    payload = _canonical_json(config)
+    digest = sha256(payload.encode("utf-8")).hexdigest()[:8]
+    return digest, payload
+
+
+def _expand_param_grid(param_grid: dict[str, list[Any]] | None) -> list[dict[str, Any]]:
+    if not param_grid:
+        return [{}]
+    keys = sorted(param_grid)
+    values = [list(param_grid[key]) for key in keys]
+    out: list[dict[str, Any]] = []
+    for combo in product(*values):
+        out.append({key: value for key, value in zip(keys, combo, strict=True)})
+    return out
+
+
+def _strategy_usage(decision_records_path: Path) -> tuple[dict[str, int], str | None, float, int]:
+    counts: dict[str, int] = {}
+    total = 0
+    for line in decision_records_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        payload = json.loads(line)
+        selection = payload.get("selection", {})
+        if not isinstance(selection, dict):
+            selection = {}
+        strategy_id = selection.get("strategy_id")
+        strategy_id = str(strategy_id) if strategy_id else "NONE"
+        counts[strategy_id] = counts.get(strategy_id, 0) + 1
+        total += 1
+
+    if total == 0:
+        return {}, None, 0.0, 0
+
+    primary_strategy, primary_count = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
+    primary_share = float(primary_count) / float(total)
+    return counts, primary_strategy, primary_share, total
+
+
 def run_batch_backtests(
     datasets: dict[str, pd.DataFrame],
     *,
@@ -107,6 +153,7 @@ def run_batch_backtests(
     initial_equity: float,
     costs: dict[str, object] | None = None,
     seed_run_id_prefix: str | None = None,
+    param_grid: dict[str, list[Any]] | None = None,
 ) -> BatchResult:
     commission_bps = 0.0
     slippage_bps = 0.0
@@ -120,156 +167,259 @@ def run_batch_backtests(
     batch_dir = Path(out_dir) / f"batch_{batch_id}"
     batch_dir.mkdir(parents=True, exist_ok=True)
 
-    start_iso = _iso_utc(start_at_utc) if start_at_utc is not None else None
-    end_iso = _iso_utc(end_at_utc) if end_at_utc is not None else None
+    base_start_iso = _iso_utc(start_at_utc) if start_at_utc is not None else None
+    base_end_iso = _iso_utc(end_at_utc) if end_at_utc is not None else None
 
     rows: list[dict[str, object]] = []
     index_payload: dict[str, dict[str, object]] = {}
     used_run_ids: set[str] = set()
+    overall_strategy_counts: dict[str, int] = {}
+    overall_decisions = 0
 
     ordered = sorted(
         ((symbol, timeframe, df) for symbol, df in datasets.items()), key=lambda x: (x[0], x[1])
     )
+    configs = _expand_param_grid(param_grid)
     for symbol, tf, df in ordered:
         symbol_str = str(symbol)
-        run_id_base = f"{batch_id}_{_slugify(symbol_str)}_{_slugify(tf)}"
-        run_id = run_id_base
-        suffix = 2
-        while run_id in used_run_ids:
-            run_id = f"{run_id_base}_{suffix}"
-            suffix += 1
-        used_run_ids.add(run_id)
-
         quality, error = _data_quality(df)
+        timestamp_repaired = False
+        timestamp_repaired_reason = None
         if (
             error is None
             and quality.get("non_monotonic_timestamps")
             and isinstance(df, pd.DataFrame)
         ):
             df = df.sort_index()
-
-        df_slice = df
-        if error is None and isinstance(df, pd.DataFrame):
-            if start_at_utc is not None:
-                df_slice = df_slice.loc[df_slice.index >= pd.to_datetime(start_at_utc, utc=True)]
+            timestamp_repaired = True
+            timestamp_repaired_reason = "non_monotonic_sorted"
 
         if error is not None:
-            row = {
-                "symbol": symbol_str,
-                "timeframe": tf,
-                "status": "FAILED",
-                "run_id": run_id,
-                "error": error,
-                "data_quality": quality,
-                "initial_equity": float(initial_equity),
-                "commission_bps": float(commission_bps),
-                "slippage_bps": float(slippage_bps),
-                "start_at_utc": start_iso,
-                "end_at_utc": end_iso,
-            }
-            rows.append(row)
-            index_payload[run_id] = {
-                "status": "FAILED",
-                "symbol": symbol_str,
-                "timeframe": tf,
-                "error": error,
-                "artifacts": {},
-            }
+            for config in configs:
+                effective_start = config.get("start_at_utc", start_at_utc)
+                effective_end = config.get("end_at_utc", end_at_utc)
+                if effective_start is not None and not isinstance(effective_start, datetime):
+                    raise ValueError("batch_invalid_start_at_utc")
+                if effective_end is not None and not isinstance(effective_end, datetime):
+                    raise ValueError("batch_invalid_end_at_utc")
+                start_iso = _iso_utc(effective_start) if effective_start is not None else None
+                end_iso = _iso_utc(effective_end) if effective_end is not None else None
+
+                config_obj = {
+                    "timeframe": tf,
+                    "start_at_utc": start_iso,
+                    "end_at_utc": end_iso,
+                    "params": dict(config),
+                }
+                config_id, config_json = _config_id(config_obj)
+                run_id_prefix = f"{batch_id}_{_slugify(symbol_str)}_{_slugify(tf)}"
+                run_id_base = (
+                    f"{run_id_prefix}_{config_id}" if param_grid is not None else run_id_prefix
+                )
+                run_id = run_id_base
+                suffix = 2
+                while run_id in used_run_ids:
+                    run_id = f"{run_id_base}_{suffix}"
+                    suffix += 1
+                used_run_ids.add(run_id)
+                row = {
+                    "symbol": symbol_str,
+                    "timeframe": tf,
+                    "status": "FAILED",
+                    "run_id": run_id,
+                    "config_id": config_id,
+                    "config_json": config_json,
+                    "error": error,
+                    "data_quality": quality,
+                    "timestamp_repaired": timestamp_repaired,
+                    "timestamp_repaired_reason": timestamp_repaired_reason,
+                    "strategy_counts_json": "{}",
+                    "primary_strategy": None,
+                    "primary_strategy_share": 0.0,
+                    "initial_equity": float(initial_equity),
+                    "commission_bps": float(commission_bps),
+                    "slippage_bps": float(slippage_bps),
+                    "start_at_utc": start_iso,
+                    "end_at_utc": end_iso,
+                }
+                rows.append(row)
+                index_payload[run_id] = {
+                    "status": "FAILED",
+                    "symbol": symbol_str,
+                    "timeframe": tf,
+                    "config_id": config_id,
+                    "config_json": config_json,
+                    "error": error,
+                    "artifacts": {},
+                }
             continue
 
-        try:
-            result = run_backtest(
-                df_slice,
-                float(initial_equity),
-                run_id=run_id,
-                out_dir=out_dir,
-                end_at_utc=end_iso,
-                commission_bps=float(commission_bps),
-                slippage_bps=float(slippage_bps),
+        for config in configs:
+            effective_initial_equity = float(config.get("initial_equity", initial_equity))
+            effective_commission_bps = float(config.get("commission_bps", commission_bps))
+            effective_slippage_bps = float(config.get("slippage_bps", slippage_bps))
+            effective_start = config.get("start_at_utc", start_at_utc)
+            effective_end = config.get("end_at_utc", end_at_utc)
+            if effective_commission_bps < 0.0 or effective_slippage_bps < 0.0:
+                raise ValueError("batch_invalid_costs")
+            if effective_start is not None and not isinstance(effective_start, datetime):
+                raise ValueError("batch_invalid_start_at_utc")
+            if effective_end is not None and not isinstance(effective_end, datetime):
+                raise ValueError("batch_invalid_end_at_utc")
+
+            start_iso = _iso_utc(effective_start) if effective_start is not None else None
+            end_iso = _iso_utc(effective_end) if effective_end is not None else None
+
+            config_obj = {
+                "timeframe": tf,
+                "start_at_utc": start_iso,
+                "end_at_utc": end_iso,
+                "initial_equity": effective_initial_equity,
+                "costs": {
+                    "commission_bps": effective_commission_bps,
+                    "slippage_bps": effective_slippage_bps,
+                },
+                "params": dict(config),
+            }
+            config_id, config_json = _config_id(config_obj)
+
+            run_id_prefix = f"{batch_id}_{_slugify(symbol_str)}_{_slugify(tf)}"
+            run_id_base = (
+                f"{run_id_prefix}_{config_id}" if param_grid is not None else run_id_prefix
             )
-            metrics_payload = json.loads(result.metrics_path.read_text(encoding="utf-8"))
-            manifest_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+            run_id = run_id_base
+            suffix = 2
+            while run_id in used_run_ids:
+                run_id = f"{run_id_base}_{suffix}"
+                suffix += 1
+            used_run_ids.add(run_id)
 
-            row = {
-                "symbol": symbol_str,
-                "timeframe": tf,
-                "status": "OK",
-                "run_id": run_id,
-                "error": None,
-                "data_quality": quality,
-                "initial_equity": float(initial_equity),
-                "commission_bps": float(commission_bps),
-                "slippage_bps": float(slippage_bps),
-                "start_at_utc": start_iso,
-                "end_at_utc": end_iso,
-            }
-            for key in (
-                "total_return",
-                "max_drawdown",
-                "num_trades",
-                "win_rate",
-                "avg_win",
-                "avg_loss",
-                "total_costs",
-            ):
-                if key in metrics_payload:
-                    row[key] = metrics_payload[key]
+            try:
+                df_slice = df
+                if effective_start is not None:
+                    df_slice = df_slice.loc[
+                        df_slice.index >= pd.to_datetime(effective_start, utc=True)
+                    ]
+                result = run_backtest(
+                    df_slice,
+                    effective_initial_equity,
+                    run_id=run_id,
+                    out_dir=out_dir,
+                    end_at_utc=end_iso,
+                    commission_bps=effective_commission_bps,
+                    slippage_bps=effective_slippage_bps,
+                )
+                metrics_payload = json.loads(result.metrics_path.read_text(encoding="utf-8"))
+                manifest_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
 
-            rows.append(row)
-            index_payload[run_id] = {
-                "status": "OK",
-                "symbol": symbol_str,
-                "timeframe": tf,
-                "artifacts": {
-                    "run_dir": str(Path(out_dir) / run_id),
-                    "trades": str(result.trades_path),
-                    "metrics": str(result.metrics_path),
-                    "run_manifest": str(result.manifest_path),
-                    "decision_records": str(result.decision_records_path),
-                },
-                "metrics": {
-                    "total_return": metrics_payload.get("total_return"),
-                    "max_drawdown": metrics_payload.get("max_drawdown"),
-                    "num_trades": metrics_payload.get("num_trades"),
-                    "total_costs": metrics_payload.get("total_costs"),
-                },
-                "run_manifest": {
-                    "git_sha": manifest_payload.get("git_sha"),
-                    "pnl_method": manifest_payload.get("pnl_method"),
-                    "end_of_run_position_handling": manifest_payload.get(
-                        "end_of_run_position_handling"
-                    ),
-                    "strategy_switch_policy": manifest_payload.get("strategy_switch_policy"),
-                },
-            }
-        except Exception as exc:
-            msg = str(exc) or exc.__class__.__name__
-            row = {
-                "symbol": symbol_str,
-                "timeframe": tf,
-                "status": "FAILED",
-                "run_id": run_id,
-                "error": msg,
-                "data_quality": quality,
-                "initial_equity": float(initial_equity),
-                "commission_bps": float(commission_bps),
-                "slippage_bps": float(slippage_bps),
-                "start_at_utc": start_iso,
-                "end_at_utc": end_iso,
-            }
-            rows.append(row)
-            index_payload[run_id] = {
-                "status": "FAILED",
-                "symbol": symbol_str,
-                "timeframe": tf,
-                "error": msg,
-                "artifacts": {},
-            }
+                counts, primary, primary_share, decisions = _strategy_usage(
+                    result.decision_records_path
+                )
+                strategy_counts_json = _canonical_json(counts)
+                overall_decisions += decisions
+                for strategy_id, count in counts.items():
+                    overall_strategy_counts[strategy_id] = (
+                        overall_strategy_counts.get(strategy_id, 0) + count
+                    )
+
+                row = {
+                    "symbol": symbol_str,
+                    "timeframe": tf,
+                    "status": "OK",
+                    "run_id": run_id,
+                    "config_id": config_id,
+                    "config_json": config_json,
+                    "error": None,
+                    "data_quality": quality,
+                    "timestamp_repaired": timestamp_repaired,
+                    "timestamp_repaired_reason": timestamp_repaired_reason,
+                    "strategy_counts_json": strategy_counts_json,
+                    "primary_strategy": primary,
+                    "primary_strategy_share": float(primary_share),
+                    "initial_equity": float(effective_initial_equity),
+                    "commission_bps": float(effective_commission_bps),
+                    "slippage_bps": float(effective_slippage_bps),
+                    "start_at_utc": start_iso,
+                    "end_at_utc": end_iso,
+                }
+                for key in (
+                    "total_return",
+                    "max_drawdown",
+                    "num_trades",
+                    "win_rate",
+                    "avg_win",
+                    "avg_loss",
+                    "total_costs",
+                ):
+                    if key in metrics_payload:
+                        row[key] = metrics_payload[key]
+
+                rows.append(row)
+                index_payload[run_id] = {
+                    "status": "OK",
+                    "symbol": symbol_str,
+                    "timeframe": tf,
+                    "config_id": config_id,
+                    "config_json": config_json,
+                    "artifacts": {
+                        "run_dir": str(Path(out_dir) / run_id),
+                        "trades": str(result.trades_path),
+                        "metrics": str(result.metrics_path),
+                        "run_manifest": str(result.manifest_path),
+                        "decision_records": str(result.decision_records_path),
+                    },
+                    "metrics": {
+                        "total_return": metrics_payload.get("total_return"),
+                        "max_drawdown": metrics_payload.get("max_drawdown"),
+                        "num_trades": metrics_payload.get("num_trades"),
+                        "total_costs": metrics_payload.get("total_costs"),
+                    },
+                    "run_manifest": {
+                        "git_sha": manifest_payload.get("git_sha"),
+                        "pnl_method": manifest_payload.get("pnl_method"),
+                        "end_of_run_position_handling": manifest_payload.get(
+                            "end_of_run_position_handling"
+                        ),
+                        "strategy_switch_policy": manifest_payload.get("strategy_switch_policy"),
+                    },
+                }
+            except Exception as exc:
+                msg = str(exc) or exc.__class__.__name__
+                row = {
+                    "symbol": symbol_str,
+                    "timeframe": tf,
+                    "status": "FAILED",
+                    "run_id": run_id,
+                    "config_id": config_id,
+                    "config_json": config_json,
+                    "error": msg,
+                    "data_quality": quality,
+                    "timestamp_repaired": timestamp_repaired,
+                    "timestamp_repaired_reason": timestamp_repaired_reason,
+                    "strategy_counts_json": "{}",
+                    "primary_strategy": None,
+                    "primary_strategy_share": 0.0,
+                    "initial_equity": float(effective_initial_equity),
+                    "commission_bps": float(effective_commission_bps),
+                    "slippage_bps": float(effective_slippage_bps),
+                    "start_at_utc": start_iso,
+                    "end_at_utc": end_iso,
+                }
+                rows.append(row)
+                index_payload[run_id] = {
+                    "status": "FAILED",
+                    "symbol": symbol_str,
+                    "timeframe": tf,
+                    "config_id": config_id,
+                    "config_json": config_json,
+                    "error": msg,
+                    "artifacts": {},
+                }
 
     summary_df = pd.DataFrame(rows)
     if not summary_df.empty:
         summary_df = summary_df.sort_values(
-            ["symbol", "timeframe", "run_id"], kind="mergesort"
+            ["symbol", "timeframe", "config_id", "run_id"], kind="mergesort"
         ).reset_index(drop=True)
 
     summary_csv_path = batch_dir / "summary.csv"
@@ -281,7 +431,14 @@ def run_batch_backtests(
         "timeframe",
         "status",
         "run_id",
+        "config_id",
+        "config_json",
         "error",
+        "timestamp_repaired",
+        "timestamp_repaired_reason",
+        "strategy_counts_json",
+        "primary_strategy",
+        "primary_strategy_share",
         "total_return",
         "max_drawdown",
         "num_trades",
@@ -349,20 +506,74 @@ def run_batch_backtests(
         )
         top_worst = {"top": top, "worst": worst}
 
+    overall_strategy_share: dict[str, float] = {}
+    if overall_decisions > 0:
+        overall_strategy_share = {
+            strategy_id: float(count) / float(overall_decisions)
+            for strategy_id, count in overall_strategy_counts.items()
+        }
+
+    best_worst_by_dataset: dict[str, object] = {}
+    if not ok.empty:
+        ok_num = ok.copy()
+        ok_num["total_return"] = pd.to_numeric(ok_num["total_return"], errors="coerce")
+        ok_num["max_drawdown"] = pd.to_numeric(ok_num["max_drawdown"], errors="coerce")
+        for dataset_key, group in ok_num.groupby("symbol", sort=True):
+            group = group.sort_values(["config_id", "run_id"], kind="mergesort")
+            by_ret = group.sort_values(
+                ["total_return", "config_id", "run_id"],
+                ascending=[False, True, True],
+                kind="mergesort",
+            )
+            by_dd = group.sort_values(
+                ["max_drawdown", "config_id", "run_id"],
+                ascending=[True, True, True],
+                kind="mergesort",
+            )
+            best_worst_by_dataset[str(dataset_key)] = {
+                "by_total_return": {
+                    "best": by_ret.head(1)[
+                        ["run_id", "config_id", "total_return", "max_drawdown"]
+                    ].to_dict(orient="records")[0],
+                    "worst": by_ret.tail(1)[
+                        ["run_id", "config_id", "total_return", "max_drawdown"]
+                    ].to_dict(orient="records")[0],
+                },
+                "by_max_drawdown": {
+                    "best": by_dd.head(1)[
+                        ["run_id", "config_id", "total_return", "max_drawdown"]
+                    ].to_dict(orient="records")[0],
+                    "worst": by_dd.tail(1)[
+                        ["run_id", "config_id", "total_return", "max_drawdown"]
+                    ].to_dict(orient="records")[0],
+                },
+            }
+
     summary_json = {
         "batch_id": batch_id,
         "timeframe": timeframe,
-        "start_at_utc": start_iso,
-        "end_at_utc": end_iso,
+        "start_at_utc": base_start_iso,
+        "end_at_utc": base_end_iso,
         "initial_equity": float(initial_equity),
         "costs": {"commission_bps": float(commission_bps), "slippage_bps": float(slippage_bps)},
         "counts": {
             "total": int(len(summary_df)),
             "ok": int((summary_df["status"] == "OK").sum()) if not summary_df.empty else 0,
             "failed": int((summary_df["status"] == "FAILED").sum()) if not summary_df.empty else 0,
+            "success_count": int((summary_df["status"] == "OK").sum())
+            if not summary_df.empty
+            else 0,
+            "failed_count": int((summary_df["status"] == "FAILED").sum())
+            if not summary_df.empty
+            else 0,
+            "repaired_count": int(summary_df["timestamp_repaired"].fillna(False).astype(bool).sum())
+            if not summary_df.empty
+            else 0,
         },
         "aggregates": aggregates,
         "top_worst": top_worst,
+        "overall_strategy_share": overall_strategy_share,
+        "best_worst_by_dataset": best_worst_by_dataset,
     }
     _write_json(summary_json_path, summary_json)
 

@@ -59,7 +59,14 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
         "timeframe",
         "status",
         "run_id",
+        "config_id",
+        "config_json",
         "error",
+        "timestamp_repaired",
+        "timestamp_repaired_reason",
+        "strategy_counts_json",
+        "primary_strategy",
+        "primary_strategy_share",
         "total_return",
         "max_drawdown",
         "num_trades",
@@ -84,10 +91,16 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
     expected_mean = (metrics_a["total_return"] + metrics_b["total_return"]) / 2.0
 
     summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
-    assert summary_json["counts"] == {"failed": 0, "ok": 2, "total": 2}
+    assert summary_json["counts"]["total"] == 2
+    assert summary_json["counts"]["ok"] == 2
+    assert summary_json["counts"]["failed"] == 0
+    assert summary_json["counts"]["success_count"] == 2
+    assert summary_json["counts"]["failed_count"] == 0
+    assert summary_json["counts"]["repaired_count"] == 0
     assert summary_json["aggregates"]["total_return"]["mean"] == pytest.approx(
         expected_mean, rel=1e-12
     )
+    assert isinstance(summary_json["overall_strategy_share"], dict)
 
     top = summary_json["top_worst"]["top"]
     assert len(top) == 2
@@ -121,3 +134,101 @@ def test_batch_backtest_failed_dataset_does_not_stop(tmp_path: Path) -> None:
     status = {row["symbol"]: row["status"] for row in summary.to_dict(orient="records")}
     assert status["GOOD"] == "OK"
     assert status["BAD"] == "FAILED"
+
+
+def test_strategy_usage_share_fields_populated(tmp_path: Path) -> None:
+    datasets = {"AAA": _make_ohlcv(last_open=99.0)}
+    result = run_batch_backtests(
+        datasets,
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="usage",
+    )
+
+    summary = pd.read_csv(result.summary_csv_path)
+    assert len(summary) == 1
+    row = summary.iloc[0].to_dict()
+    counts = json.loads(row["strategy_counts_json"])
+    assert isinstance(counts, dict)
+    assert counts
+
+    decision_path = tmp_path / "usage_AAA_1m" / "decision_records.jsonl"
+    decision_lines = [
+        line for line in decision_path.read_text(encoding="utf-8").splitlines() if line
+    ]
+    assert sum(counts.values()) == len(decision_lines)
+
+    primary = row["primary_strategy"]
+    assert primary in counts
+    expected_share = counts[primary] / float(len(decision_lines))
+    assert float(row["primary_strategy_share"]) == pytest.approx(expected_share, rel=1e-12)
+
+
+def test_non_monotonic_timestamps_sets_repaired_flag(tmp_path: Path) -> None:
+    df = _make_ohlcv(last_open=99.0)
+    order = [0, 2, 1] + list(range(3, len(df)))
+    df = df.iloc[order]
+    assert not df.index.is_monotonic_increasing
+
+    result = run_batch_backtests(
+        {"AAA": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="repair",
+    )
+
+    summary = pd.read_csv(result.summary_csv_path)
+    assert len(summary) == 1
+    row = summary.iloc[0].to_dict()
+    assert row["status"] == "OK"
+    assert row["timestamp_repaired"] in (True, "True")
+    assert row["timestamp_repaired_reason"] == "non_monotonic_sorted"
+
+    summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    assert summary_json["counts"]["repaired_count"] == 1
+
+
+def test_param_grid_runs_cartesian_product(tmp_path: Path) -> None:
+    df = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="grid",
+        param_grid={"commission_bps": [0.0, 10.0]},
+    )
+
+    run_dirs = sorted(
+        p.name for p in tmp_path.iterdir() if p.is_dir() and p.name.startswith("grid_AAA_1m_")
+    )
+    assert len(run_dirs) == 2
+
+    summary = pd.read_csv(result.summary_csv_path)
+    assert len(summary) == 2
+    assert summary["config_id"].nunique() == 2
+
+    configs = [json.loads(value) for value in summary["config_json"].tolist()]
+    commissions = sorted(float(cfg["params"]["commission_bps"]) for cfg in configs)
+    assert commissions == [0.0, 10.0]
+
+    summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    assert "AAA" in summary_json["best_worst_by_dataset"]
+    dataset = summary_json["best_worst_by_dataset"]["AAA"]
+    assert "by_total_return" in dataset
+    assert "by_max_drawdown" in dataset
+    assert (
+        dataset["by_total_return"]["best"]["config_id"]
+        != dataset["by_total_return"]["worst"]["config_id"]
+    )
