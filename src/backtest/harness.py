@@ -91,9 +91,7 @@ def _market_state(df: pd.DataFrame) -> pd.DataFrame:
     regimes = classify_regimes(feats)
     structure_state = pd.Series("unknown", index=regimes.index, dtype="string")
     structure_state = structure_state.mask(regimes["trend_state"] == "flat", "meanrevert")
-    structure_state = structure_state.mask(
-        regimes["trend_state"].isin(["up", "down"]), "breakout"
-    )
+    structure_state = structure_state.mask(regimes["trend_state"].isin(["up", "down"]), "breakout")
     vol = regimes["volatility_regime"].replace({"normal": "mid"})
     out = pd.DataFrame(
         {
@@ -141,7 +139,9 @@ def _write_trades(path: Path, trades: list[dict[str, object]]) -> Path:
     return path
 
 
-def _metrics_from_equity(equity_curve: list[float], trade_pnls: list[float]) -> dict[str, float | int]:
+def _metrics_from_equity(
+    equity_curve: list[float], trade_pnls: list[float]
+) -> dict[str, float | int]:
     if not equity_curve:
         return {
             "total_return": 0.0,
@@ -184,7 +184,10 @@ def _metrics_from_equity(equity_curve: list[float], trade_pnls: list[float]) -> 
 
 def _write_json(path: Path, payload: Mapping[str, object]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
     return path
 
 

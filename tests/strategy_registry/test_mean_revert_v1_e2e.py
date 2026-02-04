@@ -12,7 +12,9 @@ from tests.fixtures.ohlcv_factory import make_ohlcv
 
 def _expected_action(frame: pd.DataFrame) -> str:
     latest = frame.dropna().iloc[-1]
-    entry = latest["close"] < latest["bb_lower_20_2"] and latest["rsi_14"] < mean_revert_v1.RSI_ENTRY
+    entry = (
+        latest["close"] < latest["bb_lower_20_2"] and latest["rsi_14"] < mean_revert_v1.RSI_ENTRY
+    )
     exit_ = latest["close"] >= latest["bb_mid_20_2"] or latest["rsi_14"] > mean_revert_v1.RSI_EXIT
     if entry:
         return "ENTER_LONG"
@@ -46,7 +48,11 @@ def test_mean_revert_v1_end_to_end_decision() -> None:
         "bundle_fingerprint": "test-bundle",
         "instrument": "BTCUSDT",
         "features": [
-            {"feature_id": "bbands_20_2", "version": 1, "outputs": ["bb_mid_20_2", "bb_upper_20_2", "bb_lower_20_2"]},
+            {
+                "feature_id": "bbands_20_2",
+                "version": 1,
+                "outputs": ["bb_mid_20_2", "bb_upper_20_2", "bb_lower_20_2"],
+            },
             {"feature_id": "rsi_14", "version": 1, "outputs": ["rsi_14"]},
             {"feature_id": "atr_14", "version": 1, "outputs": ["atr_14"]},
         ],
@@ -104,7 +110,11 @@ def test_mean_revert_v1_respects_as_of_utc() -> None:
         "bundle_fingerprint": "test-bundle",
         "instrument": "BTCUSDT",
         "features": [
-            {"feature_id": "bbands_20_2", "version": 1, "outputs": ["bb_mid_20_2", "bb_upper_20_2", "bb_lower_20_2"]},
+            {
+                "feature_id": "bbands_20_2",
+                "version": 1,
+                "outputs": ["bb_mid_20_2", "bb_upper_20_2", "bb_lower_20_2"],
+            },
             {"feature_id": "rsi_14", "version": 1, "outputs": ["rsi_14"]},
             {"feature_id": "atr_14", "version": 1, "outputs": ["atr_14"]},
         ],

@@ -59,7 +59,9 @@ def test_trend_follow_v1_end_to_end_decision() -> None:
     strategy = get_strategy("TREND_FOLLOW_V1@1.0.0")
     decision = run_strategy(strategy, features_df, metadata, as_of_utc)
 
-    expected_action = _expected_action(features_df[["close", "ema_20", "ema_50", "rsi_14", "atr_14"]])
+    expected_action = _expected_action(
+        features_df[["close", "ema_20", "ema_50", "rsi_14", "atr_14"]]
+    )
     assert decision.action.value == expected_action
 
     latest = features_df[["close", "atr_14"]].dropna().iloc[-1]
