@@ -20,6 +20,14 @@ MEAN_REVERT = StrategySpecImpl(
     tags={"range"},
 )
 
+MEAN_REVERT_V1 = StrategySpecImpl(
+    strategy_id="MEAN_REVERT_V1",
+    name="Mean Revert V1",
+    description="Bollinger/RSI mean reversion profile.",
+    allowed_risk_states={RiskState.GREEN},
+    tags={"range", "v1"},
+)
+
 DEFENSIVE = StrategySpecImpl(
     strategy_id="DEFENSIVE",
     name="Defensive",
@@ -28,11 +36,21 @@ DEFENSIVE = StrategySpecImpl(
     tags={"defensive", "meta"},
 )
 
+TREND_FOLLOW_V1 = StrategySpecImpl(
+    strategy_id="TREND_FOLLOW_V1",
+    name="Trend Follow V1",
+    description="EMA20/EMA50 trend-following with RSI confirmation.",
+    allowed_risk_states={RiskState.GREEN},
+    tags={"trend", "v1"},
+)
+
 
 STRATEGY_MENU: dict[str, StrategySpec] = {
     TREND_FOLLOW.strategy_id: TREND_FOLLOW,
     MEAN_REVERT.strategy_id: MEAN_REVERT,
     DEFENSIVE.strategy_id: DEFENSIVE,
+    TREND_FOLLOW_V1.strategy_id: TREND_FOLLOW_V1,
+    MEAN_REVERT_V1.strategy_id: MEAN_REVERT_V1,
 }
 
 

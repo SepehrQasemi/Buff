@@ -77,6 +77,15 @@ def build_engines() -> dict[str, StrategyEngine]:
 def build_profiles() -> list[StrategyProfile]:
     return [
         StrategyProfile(
+            strategy_id="TREND_FOLLOW_V1",
+            engine_id="trend",
+            description="Trend follow V1 profile",
+            conservative=False,
+            priority=15,
+            required_market_keys={"trend_state", "structure_state"},
+            required_conditions={"trend_state": "UP", "structure_state": "BREAKOUT"},
+        ),
+        StrategyProfile(
             strategy_id="trend_follow_v1_conservative",
             engine_id="trend",
             description="Trend follow up, conservative",
@@ -84,6 +93,15 @@ def build_profiles() -> list[StrategyProfile]:
             priority=10,
             required_market_keys={"trend_state"},
             required_conditions={"trend_state": "UP"},
+        ),
+        StrategyProfile(
+            strategy_id="MEAN_REVERT_V1",
+            engine_id="mean_revert",
+            description="Mean revert V1 profile",
+            conservative=True,
+            priority=55,
+            required_market_keys={"trend_state", "structure_state"},
+            required_conditions={"trend_state": "RANGE", "structure_state": "MEANREVERT"},
         ),
         StrategyProfile(
             strategy_id="trend_follow_v1_short",
