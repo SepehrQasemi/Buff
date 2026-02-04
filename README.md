@@ -59,6 +59,43 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
+## Local UI
+
+Read-only UI for inspecting run artifacts (no execution or mutation).
+
+Example artifacts layout:
+
+```text
+artifacts/
+  <run_id>/
+    decision_records.jsonl
+    trades.parquet        (optional)
+    snapshots/            (optional)
+```
+
+Backend (FastAPI):
+
+```bash
+set ARTIFACTS_ROOT=.\artifacts
+uvicorn apps.api.main:app --reload
+```
+
+Or with the module entrypoint:
+
+```bash
+python -m apps.api --host 127.0.0.1 --port 8000
+```
+
+Frontend (Next.js):
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+To point the UI at a custom API base, set `NEXT_PUBLIC_API_BASE`.
+
 ## Generate local artifacts
 
 Generate the M3 market state artifact:
