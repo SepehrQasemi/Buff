@@ -8,6 +8,8 @@ ruff check .
 pytest -q
 ```
 
+Note: Do not paste UI "Undo" lines; include only real command outputs.
+
 ## Red-lines (non-negotiable)
 
 - No price prediction

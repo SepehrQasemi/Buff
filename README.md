@@ -59,6 +59,122 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
+## Local UI (Artifact Inspector)
+
+Read-only UI for inspecting run artifacts (no execution or mutation). Preferred API prefix is
+`/api/v1` (legacy `/api` remains supported).
+
+### Requirements
+
+- Python 3.10+ with dev dependencies installed (`pip install -e ".[dev]"`).
+- Node.js 18+ (npm).
+
+### Docker (recommended)
+
+```bash
+docker compose up --build
+```
+
+Or use the helper scripts:
+
+```bash
+./scripts/dev-ui.sh
+```
+
+```powershell
+.\scripts\dev-ui.ps1
+```
+
+Open `http://localhost:3000`. The local `./artifacts` directory is bind-mounted read-only into
+the API container at `/artifacts`. The browser calls the API through the host-mapped port at
+`http://localhost:8000/api/v1` (not the internal container hostname).
+
+### Run API
+
+Example artifacts layout:
+
+```text
+artifacts/
+  <run_id>/
+    decision_records.jsonl
+    trades.parquet        (optional)
+    snapshots/            (optional)
+```
+
+```bash
+set ARTIFACTS_ROOT=.\artifacts
+uvicorn apps.api.main:app --reload
+```
+
+Or with the module entrypoint:
+
+```bash
+python -m apps.api --host 127.0.0.1 --port 8000
+```
+
+Health endpoint: `GET /api/v1/health` returns `status` and `api_version`.
+
+### Run Web
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+To point the UI at a custom API base, set `NEXT_PUBLIC_API_BASE` (defaults to
+`http://127.0.0.1:8000/api/v1`). In Docker, the container writes
+`apps/web/public/runtime-config.js` at startup from `NEXT_PUBLIC_API_BASE`, so changing the
+environment variable only requires a container restart (no rebuild).
+
+### Smoke checks
+
+```bash
+pytest -q
+node apps/web/scripts/smoke.mjs
+```
+
+### URL filters (shareable)
+
+- Multi-value filters use comma-separated lists; whitespace is trimmed, empty values are dropped,
+  and each filter supports up to 50 values.
+- Example (comma-separated + trimmed):
+
+```text
+/runs/<id>?symbol=BTCUSDT, ETHUSDT&action=placed,blocked&severity=ERROR&reason_code=foo, bar&start_ts=2026-02-04T00:00:00Z&end_ts=2026-02-05T00:00:00Z&page=2&page_size=100
+```
+
+- Timestamp inputs: `start_ts`/`end_ts` accept ISO 8601 with or without timezone or epoch
+  milliseconds (e.g., `2026-02-04T12:34:56Z`, `2026-02-04T12:34:56` assumed UTC, `1738672496789`).
+- Timestamp outputs: all timestamps are normalized to UTC with a trailing `Z`
+  (e.g., `2026-02-04T12:34:56.789Z`).
+- Invalid timestamp format -> HTTP 400. Invalid pagination (`page < 1` or `page_size` outside
+  1..500) -> HTTP 422.
+- Decisions are streamed from JSONL (no full-file load). Summary and errors are cached per file
+  mtime/size. Errors return up to 2000 records (oldest-first within the returned window) plus
+  `total_errors`.
+
+### Exports
+
+Endpoints:
+
+```text
+/api/v1/runs/<id>/decisions/export?format=csv|json|ndjson
+/api/v1/runs/<id>/trades/export?format=csv|json|ndjson
+/api/v1/runs/<id>/errors/export?format=csv|json|ndjson
+```
+
+Example curl commands:
+
+```bash
+curl "http://127.0.0.1:8000/api/v1/runs/<id>/decisions/export?format=ndjson" -o decisions.ndjson
+curl "http://127.0.0.1:8000/api/v1/runs/<id>/trades/export?format=csv" -o trades.csv
+curl "http://127.0.0.1:8000/api/v1/runs/<id>/errors/export?format=json" -o errors.json
+```
+
+Use `format=ndjson` for large JSON exports. CSV exports apply formula-injection protection (cells
+starting with `=`, `+`, `-`, or `@` are prefixed with a single quote).
+
 ## Generate local artifacts
 
 Generate the M3 market state artifact:
