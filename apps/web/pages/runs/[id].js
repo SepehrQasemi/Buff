@@ -58,7 +58,7 @@ export default function RunDashboard() {
         page_size: undefined,
       });
     }
-    const url = buildApiUrl(`/api/runs/${id}/${section}/export`, params);
+    const url = buildApiUrl(`/runs/${id}/${section}/export`, params);
     window.location.href = url;
   };
 

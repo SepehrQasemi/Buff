@@ -69,6 +69,25 @@ Read-only UI for inspecting run artifacts (no execution or mutation). Preferred 
 - Python 3.10+ with dev dependencies installed (`pip install -e ".[dev]"`).
 - Node.js 18+ (npm).
 
+### Docker (recommended)
+
+```bash
+docker compose up --build
+```
+
+Or use the helper scripts:
+
+```bash
+./scripts/dev-ui.sh
+```
+
+```powershell
+.\scripts\dev-ui.ps1
+```
+
+Open `http://localhost:3000`. The local `./artifacts` directory is bind-mounted read-only into
+the API container at `/artifacts`.
+
 ### Run API
 
 Example artifacts layout:
@@ -103,7 +122,9 @@ npm run dev
 ```
 
 To point the UI at a custom API base, set `NEXT_PUBLIC_API_BASE` (defaults to
-`http://127.0.0.1:8000`). The UI calls `/api` endpoints (legacy alias of `/api/v1`).
+`http://127.0.0.1:8000/api/v1`). In Docker, the container writes
+`apps/web/public/runtime-config.js` at startup from `NEXT_PUBLIC_API_BASE`, so changing the
+environment variable only requires a container restart (no rebuild).
 
 ### Smoke checks
 

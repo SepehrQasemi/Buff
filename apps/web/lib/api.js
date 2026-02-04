@@ -1,4 +1,22 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+const DEFAULT_API_BASE = "http://127.0.0.1:8000/api/v1";
+
+const getRuntimeBase = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  return window.__BUFF_API_BASE__ || null;
+};
+
+const normalizeBase = (base) => {
+  if (!base) {
+    return `${DEFAULT_API_BASE}/`;
+  }
+  return base.endsWith("/") ? base : `${base}/`;
+};
+
+const API_BASE = normalizeBase(
+  getRuntimeBase() || process.env.NEXT_PUBLIC_API_BASE || DEFAULT_API_BASE
+);
 
 const buildQuery = (params = {}) => {
   const query = new URLSearchParams();
@@ -32,7 +50,8 @@ const parseErrorMessage = (data, fallback) => {
 };
 
 export const buildApiUrl = (path, params) => {
-  const url = new URL(path, API_BASE);
+  const normalizedPath = String(path || "").replace(/^\/+/, "");
+  const url = new URL(normalizedPath, API_BASE);
   const query = buildQuery(params);
   if (query) {
     url.search = query;
@@ -68,12 +87,12 @@ const request = async (path, params) => {
   }
 };
 
-export const getRuns = () => request("/api/runs");
+export const getRuns = () => request("/runs");
 
-export const getRunSummary = (id) => request(`/api/runs/${id}/summary`);
+export const getRunSummary = (id) => request(`/runs/${id}/summary`);
 
-export const getDecisions = (id, params) => request(`/api/runs/${id}/decisions`, params);
+export const getDecisions = (id, params) => request(`/runs/${id}/decisions`, params);
 
-export const getTrades = (id, params) => request(`/api/runs/${id}/trades`, params);
+export const getTrades = (id, params) => request(`/runs/${id}/trades`, params);
 
-export const getErrors = (id, params) => request(`/api/runs/${id}/errors`, params);
+export const getErrors = (id, params) => request(`/runs/${id}/errors`, params);
