@@ -28,6 +28,25 @@ def _make_ohlcv(*, last_open: float) -> pd.DataFrame:
     return df
 
 
+def _make_ohlcv_n(*, periods: int, last_open: float) -> pd.DataFrame:
+    idx = pd.date_range("2026-02-01", periods=periods, freq="min", tz="UTC")
+    close = np.array([100.0] * max(periods - 2, 0) + [98.5, 100.0])[:periods]
+    open_ = close.copy()
+    if periods:
+        open_[-1] = float(last_open)
+    high = close + 1.0
+    low = close - 1.0
+    if periods:
+        low[-1] = 90.0
+    volume = np.ones_like(close) * 1000.0
+    df = pd.DataFrame(
+        {"open": open_, "high": high, "low": low, "close": close, "volume": volume},
+        index=idx,
+    )
+    df.index.name = "timestamp"
+    return df
+
+
 def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
     datasets = {
         "BBB": _make_ohlcv(last_open=101.0),
@@ -58,6 +77,10 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
     expected_cols = {
         "symbol",
         "timeframe",
+        "split_type",
+        "segment",
+        "pair_id",
+        "window_index",
         "status",
         "run_id",
         "config_id",
@@ -94,7 +117,7 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
     expected_mean = (metrics_a["total_return"] + metrics_b["total_return"]) / 2.0
 
     summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
-    assert summary_json["schema_version"] == "batch_summary_v1"
+    assert summary_json["schema_version"] == "batch_summary_v2"
     assert isinstance(summary_json["summary_columns"], list)
     assert summary_json["counts"]["total"] == 2
     assert summary_json["counts"]["ok"] == 2
@@ -117,7 +140,7 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
     assert top[0]["run_id"] == best
 
     index_json = json.loads(result.index_json_path.read_text(encoding="utf-8"))
-    assert index_json["schema_version"] == "batch_index_v1"
+    assert index_json["schema_version"] == "batch_index_v2"
 
 
 def test_batch_backtest_failed_dataset_does_not_stop(tmp_path: Path) -> None:
@@ -157,10 +180,10 @@ def test_schema_version_present(tmp_path: Path) -> None:
         seed_run_id_prefix="schema",
     )
     summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
-    assert summary_json["schema_version"] == "batch_summary_v1"
+    assert summary_json["schema_version"] == "batch_summary_v2"
     assert isinstance(summary_json["summary_columns"], list)
     index_json = json.loads(result.index_json_path.read_text(encoding="utf-8"))
-    assert index_json["schema_version"] == "batch_index_v1"
+    assert index_json["schema_version"] == "batch_index_v2"
 
 
 def test_strategy_usage_share_fields_populated(tmp_path: Path) -> None:
@@ -452,3 +475,121 @@ def test_drawdown_best_worst_ordering(tmp_path: Path, monkeypatch: pytest.Monkey
     dataset = summary_json["best_worst_by_dataset"]["AAA"]["by_max_drawdown"]
     assert dataset["ordering"] == "smaller_is_better"
     assert dataset["best"]["max_drawdown"] < dataset["worst"]["max_drawdown"]
+
+
+def test_holdout_split_creates_paired_runs(tmp_path: Path) -> None:
+    df = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="holdout",
+        split={
+            "type": "holdout",
+            "train_frac": 0.7,
+            "min_train_bars": 50,
+            "min_test_bars": 20,
+        },
+    )
+
+    assert (tmp_path / "holdout_AAA_1m__seg-TRAIN").exists()
+    assert (tmp_path / "holdout_AAA_1m__seg-TEST").exists()
+
+    summary = pd.read_csv(result.summary_csv_path)
+    assert len(summary) == 2
+    assert set(summary["segment"]) == {"TRAIN", "TEST"}
+    assert set(summary["split_type"]) == {"holdout"}
+    assert summary["pair_id"].nunique() == 1
+    assert summary["window_index"].isna().all()
+
+    summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    assert summary_json["schema_version"] == "batch_summary_v2"
+
+
+def test_insufficient_bars_for_split_fails_soft(tmp_path: Path) -> None:
+    too_short = _make_ohlcv_n(periods=40, last_open=99.0)
+    ok = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"SHORT": too_short, "OK": ok},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="small",
+        split={
+            "type": "holdout",
+            "train_frac": 0.7,
+            "min_train_bars": 50,
+            "min_test_bars": 20,
+        },
+    )
+
+    summary = pd.read_csv(result.summary_csv_path)
+    row_short = summary.loc[summary["symbol"] == "SHORT"].iloc[0].to_dict()
+    assert row_short["status"] == "FAILED"
+    assert row_short["error"] == "insufficient_bars_for_split"
+
+    assert (tmp_path / "small_OK_1m__seg-TRAIN").exists()
+    assert (tmp_path / "small_OK_1m__seg-TEST").exists()
+
+
+def test_walk_forward_creates_multiple_windows(tmp_path: Path) -> None:
+    df = _make_ohlcv_n(periods=100, last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="wf",
+        split={
+            "type": "walk_forward",
+            "train_bars": 40,
+            "test_bars": 20,
+            "step_bars": 20,
+        },
+    )
+
+    summary = pd.read_csv(result.summary_csv_path)
+    assert len(summary) == 6
+    assert set(summary["split_type"]) == {"walk_forward"}
+    assert set(summary["segment"]) == {"TRAIN", "TEST"}
+    assert sorted(summary["window_index"].dropna().unique().tolist()) == [0, 1, 2]
+    assert summary.groupby("window_index").size().to_dict() == {0.0: 2, 1.0: 2, 2.0: 2}
+
+    assert (tmp_path / "wf_AAA_1m__wf-0__seg-TRAIN").exists()
+    assert (tmp_path / "wf_AAA_1m__wf-1__seg-TEST").exists()
+
+
+def test_overfit_deltas_present(tmp_path: Path) -> None:
+    df = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="delta",
+        split={
+            "type": "holdout",
+            "train_frac": 0.7,
+            "min_train_bars": 50,
+            "min_test_bars": 20,
+        },
+    )
+
+    summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    pairs = summary_json["overfit_pairs"]
+    assert pairs
+    assert all("delta_total_return" in item for item in pairs)
+    assert all(isinstance(item["delta_total_return"], float) for item in pairs)
