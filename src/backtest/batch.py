@@ -127,7 +127,9 @@ def run_batch_backtests(
     index_payload: dict[str, dict[str, object]] = {}
     used_run_ids: set[str] = set()
 
-    ordered = sorted(((symbol, timeframe, df) for symbol, df in datasets.items()), key=lambda x: (x[0], x[1]))
+    ordered = sorted(
+        ((symbol, timeframe, df) for symbol, df in datasets.items()), key=lambda x: (x[0], x[1])
+    )
     for symbol, tf, df in ordered:
         symbol_str = str(symbol)
         run_id_base = f"{batch_id}_{_slugify(symbol_str)}_{_slugify(tf)}"
@@ -139,7 +141,11 @@ def run_batch_backtests(
         used_run_ids.add(run_id)
 
         quality, error = _data_quality(df)
-        if error is None and quality.get("non_monotonic_timestamps") and isinstance(df, pd.DataFrame):
+        if (
+            error is None
+            and quality.get("non_monotonic_timestamps")
+            and isinstance(df, pd.DataFrame)
+        ):
             df = df.sort_index()
 
         df_slice = df
@@ -230,7 +236,9 @@ def run_batch_backtests(
                 "run_manifest": {
                     "git_sha": manifest_payload.get("git_sha"),
                     "pnl_method": manifest_payload.get("pnl_method"),
-                    "end_of_run_position_handling": manifest_payload.get("end_of_run_position_handling"),
+                    "end_of_run_position_handling": manifest_payload.get(
+                        "end_of_run_position_handling"
+                    ),
                     "strategy_switch_policy": manifest_payload.get("strategy_switch_policy"),
                 },
             }
@@ -260,7 +268,9 @@ def run_batch_backtests(
 
     summary_df = pd.DataFrame(rows)
     if not summary_df.empty:
-        summary_df = summary_df.sort_values(["symbol", "timeframe", "run_id"], kind="mergesort").reset_index(drop=True)
+        summary_df = summary_df.sort_values(
+            ["symbol", "timeframe", "run_id"], kind="mergesort"
+        ).reset_index(drop=True)
 
     summary_csv_path = batch_dir / "summary.csv"
     summary_json_path = batch_dir / "summary.json"
@@ -294,6 +304,7 @@ def run_batch_backtests(
     ok = summary_df[summary_df["status"] == "OK"].copy()
     aggregates: dict[str, Any] = {}
     if not ok.empty:
+
         def _num(series: pd.Series) -> pd.Series:
             return pd.to_numeric(series, errors="coerce")
 
@@ -323,11 +334,19 @@ def run_batch_backtests(
 
     top_worst: dict[str, object] = {"top": [], "worst": []}
     if not ok.empty:
-        ranked = ok.sort_values(["total_return", "symbol", "run_id"], ascending=[False, True, True], kind="mergesort")
-        top = ranked.head(3)[["symbol", "timeframe", "run_id", "total_return"]].to_dict(orient="records")
-        worst = ranked.tail(3).sort_values(["total_return", "symbol", "run_id"], kind="mergesort")[
-            ["symbol", "timeframe", "run_id", "total_return"]
-        ].to_dict(orient="records")
+        ranked = ok.sort_values(
+            ["total_return", "symbol", "run_id"], ascending=[False, True, True], kind="mergesort"
+        )
+        top = ranked.head(3)[["symbol", "timeframe", "run_id", "total_return"]].to_dict(
+            orient="records"
+        )
+        worst = (
+            ranked.tail(3)
+            .sort_values(["total_return", "symbol", "run_id"], kind="mergesort")[
+                ["symbol", "timeframe", "run_id", "total_return"]
+            ]
+            .to_dict(orient="records")
+        )
         top_worst = {"top": top, "worst": worst}
 
     summary_json = {
@@ -365,4 +384,3 @@ def run_batch_backtests(
         summary=summary_df[columns],
         index=index_payload,
     )
-

@@ -91,7 +91,11 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
 
     top = summary_json["top_worst"]["top"]
     assert len(top) == 2
-    best = "golden_BBB_1m" if metrics_b["total_return"] > metrics_a["total_return"] else "golden_AAA_1m"
+    best = (
+        "golden_BBB_1m"
+        if metrics_b["total_return"] > metrics_a["total_return"]
+        else "golden_AAA_1m"
+    )
     assert top[0]["run_id"] == best
 
 
