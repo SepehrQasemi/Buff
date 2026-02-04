@@ -292,18 +292,52 @@ def run_backtest(
     run_id: str = "backtest",
     out_dir: str | Path = "runs",
     end_at_utc: str | None = None,
+    commission_bps: float = 0.0,
+    slippage_bps: float = 0.0,
 ) -> BacktestResult:
     df = _validate_ohlcv(df_ohlcv)
     if len(df) < 2:
         raise ValueError("backtest_insufficient_bars")
     if not isinstance(initial_equity, (int, float)) or initial_equity <= 0:
         raise ValueError("backtest_invalid_equity")
+    if (
+        not isinstance(commission_bps, (int, float))
+        or isinstance(commission_bps, bool)
+        or float(commission_bps) < 0.0
+    ):
+        raise ValueError("backtest_invalid_commission_bps")
+    if (
+        not isinstance(slippage_bps, (int, float))
+        or isinstance(slippage_bps, bool)
+        or float(slippage_bps) < 0.0
+    ):
+        raise ValueError("backtest_invalid_slippage_bps")
 
     instrument = str(df.attrs.get("instrument") or "TEST")
     features_df = _feature_frame(df)
     features_df.attrs["instrument"] = instrument
     market_state = _market_state(df)
     bundle_fingerprint = _bundle_fingerprint(df)
+
+    pnl_method = "mark_to_market"
+    end_of_run_position_handling = "close_on_end"
+    strategy_switch_policy = "no_forced_flat_on_switch"
+
+    def _apply_slippage(price: float, *, side: str) -> tuple[float, float]:
+        bps = float(slippage_bps)
+        if bps == 0.0:
+            return price, 0.0
+        mult = 1.0 + (bps / 10_000.0) if side == "BUY" else 1.0 - (bps / 10_000.0)
+        effective = float(price) * mult
+        slip_cost = abs(effective - float(price))
+        return effective, slip_cost
+
+    def _commission_cost(*, qty: float, price: float) -> float:
+        bps = float(commission_bps)
+        if bps == 0.0:
+            return 0.0
+        notional = abs(float(qty) * float(price))
+        return notional * (bps / 10_000.0)
 
     run_path = Path(out_dir) / run_id
     run_path.mkdir(parents=True, exist_ok=True)
@@ -316,8 +350,11 @@ def run_backtest(
     trade_pnls: list[float] = []
     position_qty = 0.0
     entry_price = 0.0
+    position_commission_paid = 0.0
     stop_loss = None
     take_profit = None
+    total_costs = 0.0
+    costs_breakdown = {"commission": 0.0, "slippage": 0.0}
 
     metadata: dict[str, Any] = {
         "bundle_fingerprint": bundle_fingerprint,
@@ -328,17 +365,20 @@ def run_backtest(
     config: dict[str, object] = {
         "execution_timing": "next_open",
         "stop_takeprofit_policy": "stop_first_if_both_touched",
-        "costs": {"commission_bps": 0, "slippage_bps": 0},
+        "costs": {"commission_bps": float(commission_bps), "slippage_bps": float(slippage_bps)},
         "run_id": run_id,
         "end_at_utc": end_at_utc,
         "initial_equity": initial_equity,
     }
 
     index = df.index
-    decision_indices = list(range(len(df) - 1))
+    sim_end_idx = len(df) - 1
     if end_at_utc is not None:
         cutoff = pd.to_datetime(end_at_utc, utc=True)
-        decision_indices = [i for i in decision_indices if index[i] <= cutoff]
+        sim_end_idx = int(index.searchsorted(cutoff, side="right") - 1)
+        if sim_end_idx < 1:
+            raise ValueError("backtest_end_before_start")
+    decision_indices = list(range(sim_end_idx))
 
     for i in decision_indices:
         as_of_ts = index[i]
@@ -347,6 +387,7 @@ def run_backtest(
         next_open = float(df.iloc[i + 1]["open"])
         next_high = float(df.iloc[i + 1]["high"])
         next_low = float(df.iloc[i + 1]["low"])
+        next_close = float(df.iloc[i + 1]["close"])
 
         state_row = market_state.loc[as_of_ts]
         market_state_row = {
@@ -387,23 +428,30 @@ def run_backtest(
             selection=selection_record,
         )
 
-        if decision is None:
-            equity_curve.append(equity)
-            continue
-
-        action = decision.action.value
+        action = decision.action.value if decision is not None else "HOLD"
         if action == "ENTER_LONG" and position_qty == 0.0:
             qty = float(decision.risk.max_position_size)
-            entry_price = next_open
+            entry_price, slip_cost = _apply_slippage(next_open, side="BUY")
             position_qty = qty
+            position_commission_paid = 0.0
             stop_loss = float(decision.risk.stop_loss)
             take_profit = float(decision.risk.take_profit)
+            entry_comm = _commission_cost(qty=qty, price=entry_price)
+            equity -= entry_comm
+            position_commission_paid += entry_comm
+            total_costs += entry_comm + (abs(qty) * slip_cost)
+            costs_breakdown["commission"] += entry_comm
+            costs_breakdown["slippage"] += abs(qty) * slip_cost
             trades.append(
                 {
                     "ts_utc": _iso_utc(next_ts),
                     "side": "BUY",
                     "qty": qty,
                     "price": entry_price,
+                    "price_raw": next_open,
+                    "commission": entry_comm,
+                    "slippage": abs(qty) * slip_cost,
+                    "reason": "enter_long",
                     "pnl": 0.0,
                     "equity_after": equity,
                 }
@@ -418,40 +466,63 @@ def run_backtest(
                 else:
                     exit_price = None
                 if exit_price is not None:
-                    pnl = (exit_price - entry_price) * position_qty
-                    equity += pnl
+                    exit_price_eff, slip_exit = _apply_slippage(float(exit_price), side="SELL")
+                    exit_comm = _commission_cost(qty=position_qty, price=exit_price_eff)
+                    equity -= exit_comm
+                    gross = (exit_price_eff - entry_price) * position_qty
+                    equity += gross
+                    net = gross - position_commission_paid - exit_comm
                     trades.append(
                         {
                             "ts_utc": _iso_utc(next_ts),
                             "side": "SELL",
                             "qty": position_qty,
-                            "price": exit_price,
-                            "pnl": pnl,
+                            "price": exit_price_eff,
+                            "price_raw": float(exit_price),
+                            "commission": exit_comm,
+                            "slippage": abs(position_qty) * slip_exit,
+                            "reason": "stop_loss" if stop_hit else "take_profit",
+                            "pnl": net,
                             "equity_after": equity,
                         }
                     )
-                    trade_pnls.append(pnl)
+                    total_costs += exit_comm + (abs(position_qty) * slip_exit)
+                    costs_breakdown["commission"] += exit_comm
+                    costs_breakdown["slippage"] += abs(position_qty) * slip_exit
+                    trade_pnls.append(net)
                     position_qty = 0.0
                     entry_price = 0.0
+                    position_commission_paid = 0.0
                     stop_loss = None
                     take_profit = None
         elif action == "EXIT_LONG" and position_qty > 0.0:
-            exit_price = next_open
-            pnl = (exit_price - entry_price) * position_qty
-            equity += pnl
+            exit_price_eff, slip_exit = _apply_slippage(next_open, side="SELL")
+            exit_comm = _commission_cost(qty=position_qty, price=exit_price_eff)
+            equity -= exit_comm
+            gross = (exit_price_eff - entry_price) * position_qty
+            equity += gross
+            net = gross - position_commission_paid - exit_comm
             trades.append(
                 {
                     "ts_utc": _iso_utc(next_ts),
                     "side": "SELL",
                     "qty": position_qty,
-                    "price": exit_price,
-                    "pnl": pnl,
+                    "price": exit_price_eff,
+                    "price_raw": next_open,
+                    "commission": exit_comm,
+                    "slippage": abs(position_qty) * slip_exit,
+                    "reason": "exit_long",
+                    "pnl": net,
                     "equity_after": equity,
                 }
             )
-            trade_pnls.append(pnl)
+            total_costs += exit_comm + (abs(position_qty) * slip_exit)
+            costs_breakdown["commission"] += exit_comm
+            costs_breakdown["slippage"] += abs(position_qty) * slip_exit
+            trade_pnls.append(net)
             position_qty = 0.0
             entry_price = 0.0
+            position_commission_paid = 0.0
             stop_loss = None
             take_profit = None
         elif position_qty > 0.0 and stop_loss is not None and take_profit is not None:
@@ -459,27 +530,76 @@ def run_backtest(
             take_hit = next_high >= take_profit
             if stop_hit or take_hit:
                 exit_price = stop_loss if stop_hit else take_profit
-                pnl = (exit_price - entry_price) * position_qty
-                equity += pnl
+                exit_price_eff, slip_exit = _apply_slippage(float(exit_price), side="SELL")
+                exit_comm = _commission_cost(qty=position_qty, price=exit_price_eff)
+                equity -= exit_comm
+                gross = (exit_price_eff - entry_price) * position_qty
+                equity += gross
+                net = gross - position_commission_paid - exit_comm
                 trades.append(
                     {
                         "ts_utc": _iso_utc(next_ts),
                         "side": "SELL",
                         "qty": position_qty,
-                        "price": exit_price,
-                        "pnl": pnl,
+                        "price": exit_price_eff,
+                        "price_raw": float(exit_price),
+                        "commission": exit_comm,
+                        "slippage": abs(position_qty) * slip_exit,
+                        "reason": "stop_loss" if stop_hit else "take_profit",
+                        "pnl": net,
                         "equity_after": equity,
                     }
                 )
-                trade_pnls.append(pnl)
+                total_costs += exit_comm + (abs(position_qty) * slip_exit)
+                costs_breakdown["commission"] += exit_comm
+                costs_breakdown["slippage"] += abs(position_qty) * slip_exit
+                trade_pnls.append(net)
                 position_qty = 0.0
                 entry_price = 0.0
+                position_commission_paid = 0.0
                 stop_loss = None
                 take_profit = None
 
-        equity_curve.append(equity)
+        if pnl_method == "mark_to_market" and position_qty > 0.0:
+            equity_curve.append(equity + (next_close - entry_price) * position_qty)
+        else:
+            equity_curve.append(equity)
 
     writer.close()
+
+    if end_of_run_position_handling == "close_on_end" and position_qty > 0.0:
+        end_ts = index[sim_end_idx]
+        end_close = float(df.iloc[sim_end_idx]["close"])
+        exit_price_eff, slip_exit = _apply_slippage(end_close, side="SELL")
+        exit_comm = _commission_cost(qty=position_qty, price=exit_price_eff)
+        equity -= exit_comm
+        gross = (exit_price_eff - entry_price) * position_qty
+        equity += gross
+        net = gross - position_commission_paid - exit_comm
+        trades.append(
+            {
+                "ts_utc": _iso_utc(end_ts),
+                "side": "SELL",
+                "qty": position_qty,
+                "price": exit_price_eff,
+                "price_raw": end_close,
+                "commission": exit_comm,
+                "slippage": abs(position_qty) * slip_exit,
+                "reason": "close_on_end",
+                "pnl": net,
+                "equity_after": equity,
+            }
+        )
+        total_costs += exit_comm + (abs(position_qty) * slip_exit)
+        costs_breakdown["commission"] += exit_comm
+        costs_breakdown["slippage"] += abs(position_qty) * slip_exit
+        trade_pnls.append(net)
+        position_qty = 0.0
+        entry_price = 0.0
+        position_commission_paid = 0.0
+        stop_loss = None
+        take_profit = None
+        equity_curve[-1] = equity
 
     trades_path = run_path / "trades.parquet"
     metrics_path = run_path / "metrics.json"
@@ -489,6 +609,14 @@ def run_backtest(
     metrics = _metrics_from_equity(equity_curve, trade_pnls)
     metrics_payload = dict(metrics)
     metrics_payload["config"] = config
+    metrics_payload["pnl_method"] = pnl_method
+    metrics_payload["end_of_run_position_handling"] = end_of_run_position_handling
+    metrics_payload["strategy_switch_policy"] = strategy_switch_policy
+    metrics_payload["total_costs"] = float(total_costs)
+    metrics_payload["costs_breakdown"] = {
+        "commission": float(costs_breakdown["commission"]),
+        "slippage": float(costs_breakdown["slippage"]),
+    }
     _write_json(metrics_path, metrics_payload)
 
     manifest_path = run_path / "run_manifest.json"
@@ -496,6 +624,9 @@ def run_backtest(
         "run_id": run_id,
         "git_sha": _git_sha(),
         "config": config,
+        "pnl_method": pnl_method,
+        "end_of_run_position_handling": end_of_run_position_handling,
+        "strategy_switch_policy": strategy_switch_policy,
         "data_start_utc": _iso_utc(index[0]),
         "data_end_utc": _iso_utc(index[-1]),
         "artifacts": {

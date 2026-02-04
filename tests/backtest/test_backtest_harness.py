@@ -9,7 +9,15 @@ import pytest
 
 from backtest.harness import run_backtest
 from buff.features.indicators import atr_wilder
+from selector.types import SelectionResult
 from strategies.runners import mean_revert_v1
+from strategy_registry.decision import (
+    DECISION_SCHEMA_VERSION,
+    Decision,
+    DecisionAction,
+    DecisionProvenance,
+    DecisionRisk,
+)
 
 
 def _make_ohlcv() -> pd.DataFrame:
@@ -74,6 +82,18 @@ def test_backtest_golden(tmp_path: Path) -> None:
     assert result.metrics_path.exists()
     assert result.decision_records_path.exists()
     assert result.manifest_path.exists()
+
+    metrics_payload = json.loads(result.metrics_path.read_text(encoding="utf-8"))
+    assert metrics_payload["pnl_method"] == "mark_to_market"
+    assert metrics_payload["end_of_run_position_handling"] == "close_on_end"
+    assert metrics_payload["strategy_switch_policy"] == "no_forced_flat_on_switch"
+    assert metrics_payload["total_costs"] == pytest.approx(0.0, rel=1e-12)
+    assert metrics_payload["costs_breakdown"] == {"commission": 0.0, "slippage": 0.0}
+
+    manifest_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest_payload["pnl_method"] == "mark_to_market"
+    assert manifest_payload["end_of_run_position_handling"] == "close_on_end"
+    assert manifest_payload["strategy_switch_policy"] == "no_forced_flat_on_switch"
 
     records = result.decision_records_path.read_text(encoding="utf-8").strip().splitlines()
     assert records
@@ -145,3 +165,92 @@ def test_as_of_utc_no_leak(tmp_path: Path) -> None:
     payload_full = _find_selection(rec_full, target)
     payload_trunc = _find_selection(rec_trunc, target)
     assert payload_full["decision_action"] == payload_trunc["decision_action"]
+
+
+def test_costs_reduce_pnl(tmp_path: Path) -> None:
+    df = _make_ohlcv()
+    no_costs = run_backtest(df, 10_000.0, run_id="no_costs", out_dir=tmp_path)
+    with_costs = run_backtest(
+        df,
+        10_000.0,
+        run_id="with_costs",
+        out_dir=tmp_path,
+        commission_bps=10.0,
+        slippage_bps=5.0,
+    )
+
+    assert with_costs.trades.iloc[-1]["equity_after"] < no_costs.trades.iloc[-1]["equity_after"]
+    assert with_costs.metrics["total_return"] < no_costs.metrics["total_return"]
+
+    metrics_payload = json.loads(with_costs.metrics_path.read_text(encoding="utf-8"))
+    assert metrics_payload["total_costs"] > 0.0
+    breakdown = metrics_payload["costs_breakdown"]
+    assert breakdown["commission"] > 0.0
+    assert breakdown["slippage"] > 0.0
+
+
+def test_close_on_end(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    idx = pd.date_range("2026-02-01", periods=3, freq="min", tz="UTC")
+    df = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 100.0],
+            "high": [101.0, 101.0, 101.0],
+            "low": [99.0, 99.0, 99.0],
+            "close": [100.0, 100.0, 100.0],
+            "volume": [1000.0, 1000.0, 1000.0],
+        },
+        index=idx,
+    )
+    df.index.name = "timestamp"
+
+    monkeypatch.setattr(
+        "backtest.harness.select_strategy",
+        lambda *_args, **_kwargs: SelectionResult(
+            strategy_id="DUMMY",
+            reason="test",
+            rule_id="test",
+            inputs={},
+        ),
+    )
+    monkeypatch.setattr("backtest.harness._resolve_strategy_id", lambda _name: "DUMMY@1")
+
+    class _DummySpec:
+        version = 1
+
+    class _DummyStrategy:
+        spec = _DummySpec()
+
+    monkeypatch.setattr("backtest.harness.get_strategy", lambda _id: _DummyStrategy())
+
+    call_count = {"n": 0}
+
+    def _stub_run_strategy(_strategy, _features_df, metadata, as_of_utc: str) -> Decision:
+        action = DecisionAction.ENTER_LONG if call_count["n"] == 0 else DecisionAction.HOLD
+        call_count["n"] += 1
+        return Decision(
+            schema_version=DECISION_SCHEMA_VERSION,
+            as_of_utc=as_of_utc,
+            instrument=str(metadata["instrument"]),
+            action=action,
+            rationale=["test"],
+            risk=DecisionRisk(
+                max_position_size=1.0,
+                stop_loss=1.0,
+                take_profit=1_000_000.0,
+            ),
+            provenance=DecisionProvenance(
+                feature_bundle_fingerprint=str(metadata["bundle_fingerprint"]),
+                strategy_id="DUMMY@1",
+                strategy_params_hash="0" * 64,
+            ),
+            confidence=0.5,
+        )
+
+    monkeypatch.setattr("backtest.harness.run_strategy", _stub_run_strategy)
+
+    result = run_backtest(df, 10_000.0, run_id="close_on_end", out_dir=tmp_path)
+    assert len(result.trades) == 2
+    assert result.trades.iloc[0]["side"] == "BUY"
+    assert result.trades.iloc[-1]["side"] == "SELL"
+    assert result.trades.iloc[-1]["reason"] == "close_on_end"
+    assert result.trades.iloc[-1]["price"] == pytest.approx(100.0, rel=1e-12)
