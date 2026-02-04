@@ -11,9 +11,9 @@ from .artifacts import (
     filter_decisions,
     get_artifacts_root,
     load_trades,
-    parse_timestamp,
     resolve_run_dir,
 )
+from .timeutils import coerce_ts_param
 
 app = FastAPI(title="Buff Artifacts API", docs_url="/api/docs", openapi_url="/api/openapi.json")
 
@@ -108,20 +108,11 @@ def errors(run_id: str) -> dict[str, object]:
     return {"total": len(records), "results": records}
 
 
-def _parse_query_timestamp(value: str | None) -> datetime | None:
-    if value is None:
-        return None
-    parsed = parse_timestamp(value)
-    if parsed is None:
-        raise HTTPException(status_code=400, detail=f"Invalid timestamp: {value}")
-    return parsed
-
-
 def _parse_time_range(
     start_ts: str | None, end_ts: str | None
 ) -> tuple[datetime | None, datetime | None]:
-    start_dt = _parse_query_timestamp(start_ts)
-    end_dt = _parse_query_timestamp(end_ts)
+    start_dt = coerce_ts_param(start_ts, "start_ts")
+    end_dt = coerce_ts_param(end_ts, "end_ts")
     if start_dt and end_dt and start_dt > end_dt:
         raise HTTPException(status_code=400, detail="start_ts must be <= end_ts")
     return start_dt, end_dt

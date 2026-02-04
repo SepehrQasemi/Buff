@@ -96,6 +96,14 @@ npm run dev
 
 To point the UI at a custom API base, set `NEXT_PUBLIC_API_BASE`.
 
+### Timestamp contract
+
+- Inputs: `start_ts`/`end_ts` accept ISO 8601 with or without timezone or epoch milliseconds.
+  - Examples: `2026-02-04T12:34:56Z`, `2026-02-04T12:34:56` (assumed UTC), `1738672496789`.
+- Outputs: all timestamps are normalized to UTC with a trailing `Z` (e.g., `2026-02-04T12:34:56.789Z`).
+- Invalid timestamp format -> HTTP 400.
+- Invalid pagination (`page < 1` or `page_size` outside 1..500) -> HTTP 422.
+
 ## Generate local artifacts
 
 Generate the M3 market state artifact:

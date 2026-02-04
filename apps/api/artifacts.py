@@ -8,6 +8,8 @@ from typing import Any, Iterable
 
 from fastapi import HTTPException
 
+from .timeutils import format_ts, parse_ts
+
 ARTIFACTS_ENV = "ARTIFACTS_ROOT"
 
 
@@ -20,63 +22,20 @@ def resolve_run_dir(run_id: str, artifacts_root: Path) -> Path:
     candidate_id = (run_id or "").strip()
     if (
         not candidate_id
+        or candidate_id in {".", ".."}
         or candidate_id.startswith(".")
         or "/" in candidate_id
         or "\\" in candidate_id
-        or ".." in candidate_id
     ):
-        raise HTTPException(status_code=400, detail="run_id must be a simple folder name")
+        raise HTTPException(status_code=400, detail="Invalid run id")
 
     root = artifacts_root.resolve()
     candidate = (root / candidate_id).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400, detail="run_id must stay within ARTIFACTS_ROOT"
-        ) from exc
+    if not _is_within_root(candidate, root):
+        raise HTTPException(status_code=400, detail="Invalid run id")
     if not candidate.exists() or not candidate.is_dir():
         raise HTTPException(status_code=404, detail="Run not found")
     return candidate
-
-
-def parse_timestamp(value: Any) -> datetime | None:
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        dt = value
-    elif isinstance(value, (int, float)):
-        dt = _parse_epoch(float(value))
-    elif isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        if raw.isdigit():
-            dt = _parse_epoch(float(raw))
-        else:
-            if raw.endswith("Z"):
-                raw = f"{raw[:-1]}+00:00"
-            try:
-                dt = datetime.fromisoformat(raw)
-            except ValueError:
-                return None
-    else:
-        return None
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
-
-def normalize_timestamp(value: Any) -> str | None:
-    dt = parse_timestamp(value)
-    if dt is None:
-        return None
-    return dt.isoformat()
-
-
-def _parse_epoch(value: float) -> datetime:
-    seconds = value / 1000.0 if value > 1e11 else value
-    return datetime.fromtimestamp(seconds, tz=timezone.utc)
 
 
 class DecisionRecords:
@@ -113,7 +72,7 @@ def discover_runs() -> list[dict[str, Any]]:
         decision_path = child / "decision_records.jsonl"
         status = "OK" if decision_path.exists() else "INVALID"
         created_at_dt = _get_created_at(child, decision_path)
-        created_at = created_at_dt.isoformat() if created_at_dt else None
+        created_at = format_ts(created_at_dt)
         strategy = None
         symbols = None
         timeframe = None
@@ -173,14 +132,17 @@ def build_summary(decision_path: Path) -> dict[str, Any]:
         if severity:
             severity_key = str(severity)
             counts_by_severity[severity_key] = counts_by_severity.get(severity_key, 0) + 1
-        ts = parse_timestamp(record.get("timestamp"))
+        try:
+            ts = parse_ts(record.get("timestamp"))
+        except ValueError:
+            ts = None
         if ts is not None:
             min_ts = ts if min_ts is None or ts < min_ts else min_ts
             max_ts = ts if max_ts is None or ts > max_ts else max_ts
 
     return {
-        "min_timestamp": min_ts.isoformat() if min_ts else None,
-        "max_timestamp": max_ts.isoformat() if max_ts else None,
+        "min_timestamp": format_ts(min_ts),
+        "max_timestamp": format_ts(max_ts),
         "counts_by_action": counts_by_action,
         "counts_by_severity": counts_by_severity,
         "malformed_lines_count": records.malformed_lines,
@@ -278,9 +240,11 @@ def load_trades(
     records = page_df.to_dict(orient="records")
     if timestamp_col:
         for record in records:
-            normalized = normalize_timestamp(record.get(timestamp_col))
+            normalized = _format_timestamp_value(record.get(timestamp_col))
             if normalized is not None:
                 record[timestamp_col] = normalized
+            else:
+                record[timestamp_col] = None
 
     return {
         "total": total,
@@ -366,7 +330,10 @@ def _matches_filters(
         return False
 
     if start_ts or end_ts:
-        ts = parse_timestamp(record.get("timestamp"))
+        try:
+            ts = parse_ts(record.get("timestamp"))
+        except ValueError:
+            ts = None
         if ts is None:
             return False
         if start_ts and ts < start_ts:
@@ -388,9 +355,8 @@ def _matches_value(value: Any, allowed: set[str]) -> bool:
 def _normalize_record(record: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(record)
     if "timestamp" in normalized:
-        normalized_ts = normalize_timestamp(normalized.get("timestamp"))
-        if normalized_ts is not None:
-            normalized["timestamp"] = normalized_ts
+        normalized_ts = _format_timestamp_value(normalized.get("timestamp"))
+        normalized["timestamp"] = normalized_ts
     return normalized
 
 
@@ -407,3 +373,17 @@ def _pick_timestamp_column(columns: Iterable[str]) -> str | None:
         if name in columns:
             return name
     return None
+
+
+def _format_timestamp_value(value: Any) -> str | None:
+    try:
+        return format_ts(parse_ts(value))
+    except ValueError:
+        return None
+
+
+def _is_within_root(candidate: Path, root: Path) -> bool:
+    try:
+        return candidate.is_relative_to(root)
+    except AttributeError:
+        return candidate == root or root in candidate.parents

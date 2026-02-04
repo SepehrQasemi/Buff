@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timezone
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from apps.api.artifacts import DecisionRecords, discover_runs, normalize_timestamp, resolve_run_dir
+from apps.api.artifacts import DecisionRecords, discover_runs, resolve_run_dir
 from apps.api.main import app
+from apps.api.timeutils import format_ts, parse_ts
 
 
 def test_decision_records_malformed_lines(tmp_path):
@@ -21,12 +23,21 @@ def test_decision_records_malformed_lines(tmp_path):
     assert records.malformed_lines == 1
 
 
-def test_normalize_timestamp_epoch_and_iso():
+def test_parse_ts_and_format_ts_contract():
     dt = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     epoch_ms = int(dt.timestamp() * 1000)
 
-    assert normalize_timestamp("2026-01-01T00:00:00Z") == dt.isoformat()
-    assert normalize_timestamp(epoch_ms) == dt.isoformat()
+    parsed = parse_ts("2026-01-01T00:00:00")
+    assert parsed.tzinfo is not None
+    assert parsed.isoformat().startswith("2026-01-01T00:00:00")
+
+    parsed = parse_ts("2026-01-01T02:00:00+02:00")
+    assert parsed.isoformat().startswith("2026-01-01T00:00:00")
+
+    assert parse_ts(epoch_ms) == dt
+
+    formatted = format_ts(dt)
+    assert formatted.endswith("Z")
 
 
 def test_discover_runs_marks_invalid_and_sorts(monkeypatch, tmp_path):
@@ -111,3 +122,51 @@ def test_time_range_rejected(monkeypatch, tmp_path):
         params={"start_ts": "2026-01-02T00:00:00Z", "end_ts": "2026-01-01T00:00:00Z"},
     )
     assert response.status_code == 400
+
+    response = client.get("/api/runs/run-123/decisions", params={"start_ts": "not-a-date"})
+    assert response.status_code == 400
+
+    response = client.get("/api/runs/run-123/decisions", params={"end_ts": "bad"})
+    assert response.status_code == 400
+
+
+def test_timestamp_contract_in_endpoints(monkeypatch, tmp_path):
+    artifacts_root = tmp_path / "artifacts"
+    artifacts_root.mkdir()
+    run_dir = artifacts_root / "run-123"
+    run_dir.mkdir()
+
+    dt_epoch = datetime(2026, 1, 1, 2, 0, tzinfo=timezone.utc)
+    epoch_ms = int(dt_epoch.timestamp() * 1000)
+
+    records = [
+        {"timestamp": "2026-01-01T00:00:00Z", "action": "noop"},
+        {"timestamp": "2026-01-01T01:00:00", "action": "noop"},
+        {"timestamp": "2026-01-01T03:00:00+02:00", "action": "noop"},
+        {"timestamp": str(epoch_ms), "action": "noop"},
+    ]
+    payload = "\n".join([json.dumps(record) for record in records]) + "\n"
+    (run_dir / "decision_records.jsonl").write_text(payload)
+
+    monkeypatch.setenv("ARTIFACTS_ROOT", str(artifacts_root))
+    client = TestClient(app)
+
+    summary = client.get("/api/runs/run-123/summary")
+    assert summary.status_code == 200
+    summary_data = summary.json()
+    assert summary_data["min_timestamp"].endswith("Z")
+    assert summary_data["max_timestamp"].endswith("Z")
+
+    decisions = client.get("/api/runs/run-123/decisions")
+    assert decisions.status_code == 200
+    decisions_data = decisions.json()
+    for row in decisions_data["results"]:
+        assert row["timestamp"].endswith("Z")
+
+    filtered = client.get(
+        "/api/runs/run-123/decisions",
+        params={"start_ts": "2026-01-01T00:30:00Z", "end_ts": "2026-01-01T01:30:00Z"},
+    )
+    assert filtered.status_code == 200
+    filtered_data = filtered.json()
+    assert len(filtered_data["results"]) == 2
