@@ -2,7 +2,7 @@ import assert from "assert";
 import { parseViewState, serializeViewState } from "../lib/urlState.js";
 
 const query = {
-  symbol: "BTCUSDT,ETHUSDT",
+  symbol: "BTCUSDT, ,ETHUSDT",
   action: "placed",
   page: "2",
   page_size: "100",

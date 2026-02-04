@@ -460,27 +460,22 @@ def _build_export_stream(
 ) -> tuple[Iterable[bytes], str]:
     fmt_lower = fmt.lower()
     if fmt_lower == "json":
-        return _stream_json_array(record_iter_factory), "application/json"
+        return _stream_json_array(record_iter_factory), "application/json; charset=utf-8"
+    if fmt_lower == "ndjson":
+        return _stream_ndjson(record_iter_factory), "application/x-ndjson; charset=utf-8"
     if fmt_lower == "csv":
-        fieldnames = _collect_fieldnames(record_iter_factory())
-        return _stream_csv(record_iter_factory, fieldnames), "text/csv"
+        return _stream_csv(record_iter_factory), "text/csv; charset=utf-8"
     raise ValueError(f"Unsupported export format: {fmt}")
 
 
-def _collect_fieldnames(records: Iterable[dict[str, Any]]) -> list[str]:
-    seen: set[str] = set()
-    fieldnames: list[str] = []
-    for record in records:
-        for key in record.keys():
-            if key not in seen:
-                seen.add(key)
-                fieldnames.append(key)
-    return fieldnames
+def _stream_csv(record_iter_factory: Callable[[], Iterable[dict[str, Any]]]) -> Iterable[bytes]:
+    record_iter = iter(record_iter_factory())
+    try:
+        first_record = next(record_iter)
+    except StopIteration:
+        return
 
-
-def _stream_csv(
-    record_iter_factory: Callable[[], Iterable[dict[str, Any]]], fieldnames: list[str]
-) -> Iterable[bytes]:
+    fieldnames = list(first_record.keys())
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
@@ -488,8 +483,13 @@ def _stream_csv(
     output.seek(0)
     output.truncate(0)
 
-    for record in record_iter_factory():
-        writer.writerow(record)
+    writer.writerow(_sanitize_csv_row(first_record))
+    yield output.getvalue().encode("utf-8")
+    output.seek(0)
+    output.truncate(0)
+
+    for record in record_iter:
+        writer.writerow(_sanitize_csv_row(record))
         yield output.getvalue().encode("utf-8")
         output.seek(0)
         output.truncate(0)
@@ -506,6 +506,29 @@ def _stream_json_array(
         yield json.dumps(record).encode("utf-8")
         first = False
     yield b"]"
+
+
+def _stream_ndjson(record_iter_factory: Callable[[], Iterable[dict[str, Any]]]) -> Iterable[bytes]:
+    for record in record_iter_factory():
+        yield json.dumps(record).encode("utf-8") + b"\n"
+
+
+def _sanitize_csv_row(record: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, value in record.items():
+        sanitized[key] = _sanitize_csv_value(value)
+    return sanitized
+
+
+def _sanitize_csv_value(value: Any) -> Any:
+    if isinstance(value, (list, dict)):
+        value = json.dumps(value)
+    if not isinstance(value, str):
+        return value
+    stripped = value.lstrip()
+    if stripped.startswith(("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
 
 
 def _get_created_at(run_path: Path, decision_path: Path) -> datetime | None:
@@ -638,7 +661,7 @@ def _format_timestamp_value(value: Any) -> str | None:
 def _truncate_preview(value: str, limit: int = 300) -> str:
     if len(value) <= limit:
         return value
-    return f"{value[:limit]}…"
+    return f"{value[:limit]}..."
 
 
 def _is_within_root(candidate: Path, root: Path) -> bool:

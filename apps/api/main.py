@@ -67,6 +67,11 @@ def decisions(
     if not decision_path.exists():
         raise HTTPException(status_code=404, detail="decision_records.jsonl missing")
 
+    symbol = _normalize_filter_values(symbol, "symbol")
+    action = _normalize_filter_values(action, "action")
+    severity = _normalize_filter_values(severity, "severity")
+    reason_code = _normalize_filter_values(reason_code, "reason_code")
+
     start_dt, end_dt = _parse_time_range(start_ts, end_ts)
 
     return filter_decisions(
@@ -127,6 +132,11 @@ def export_decisions(
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise HTTPException(status_code=404, detail="decision_records.jsonl missing")
+
+    symbol = _normalize_filter_values(symbol, "symbol")
+    action = _normalize_filter_values(action, "action")
+    severity = _normalize_filter_values(severity, "severity")
+    reason_code = _normalize_filter_values(reason_code, "reason_code")
 
     start_dt, end_dt = _parse_time_range(start_ts, end_ts)
     try:
@@ -191,6 +201,25 @@ def _parse_time_range(
     return start_dt, end_dt
 
 
+def _normalize_filter_values(values: list[str] | None, name: str) -> list[str] | None:
+    if not values:
+        return None
+    normalized: list[str] = []
+    for value in values:
+        if value is None:
+            continue
+        for item in str(value).split(","):
+            item = item.strip()
+            if item:
+                normalized.append(item)
+    if len(normalized) > 50:
+        raise HTTPException(status_code=400, detail=f"{name} supports at most 50 values")
+    return normalized or None
+
+
 def _export_response(stream: Iterable[bytes], media_type: str, filename: str) -> StreamingResponse:
-    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"',
+        "Cache-Control": "no-store",
+    }
     return StreamingResponse(stream, media_type=media_type, headers=headers)

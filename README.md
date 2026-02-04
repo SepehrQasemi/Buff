@@ -102,13 +102,15 @@ node apps/web/scripts/smoke.mjs
 ```
 
 Filters and pagination are shareable via the URL (query params are updated automatically).
-Decisions, trades, and errors can be exported as CSV/JSON via the dashboard or:
+Decisions, trades, and errors can be exported as CSV/JSON/NDJSON via the dashboard or:
 
 ```text
-/api/runs/<id>/decisions/export?format=csv|json
-/api/runs/<id>/trades/export?format=csv|json
-/api/runs/<id>/errors/export?format=csv|json
+/api/runs/<id>/decisions/export?format=csv|json|ndjson
+/api/runs/<id>/trades/export?format=csv|json|ndjson
+/api/runs/<id>/errors/export?format=csv|json|ndjson
 ```
+
+Use `format=ndjson` for large JSON exports. CSV exports apply formula-injection protection.
 
 ### Timestamp contract
 

@@ -12,6 +12,17 @@ const toStringValue = (value) => {
   return String(value);
 };
 
+const normalizeCsvList = (value) => {
+  if (!value) {
+    return "";
+  }
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(",");
+};
+
 const normalizeNumber = (value, fallback, min, max) => {
   const parsed = Number.parseInt(value, 10);
   if (Number.isNaN(parsed)) {
@@ -43,10 +54,10 @@ export const normalizeTimestampForUrl = (value) => {
 };
 
 export const parseViewState = (query) => {
-  const symbol = toStringValue(query.symbol);
-  const action = toStringValue(query.action);
-  const severity = toStringValue(query.severity);
-  const reason_code = toStringValue(query.reason_code);
+  const symbol = normalizeCsvList(toStringValue(query.symbol));
+  const action = normalizeCsvList(toStringValue(query.action));
+  const severity = normalizeCsvList(toStringValue(query.severity));
+  const reason_code = normalizeCsvList(toStringValue(query.reason_code));
 
   const start_ts = normalizeTimestampForUrl(toStringValue(query.start_ts));
   const end_ts = normalizeTimestampForUrl(toStringValue(query.end_ts));
