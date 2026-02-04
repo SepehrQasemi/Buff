@@ -104,8 +104,7 @@ def errors(run_id: str) -> dict[str, object]:
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise HTTPException(status_code=404, detail="decision_records.jsonl missing")
-    records = collect_error_records(decision_path)
-    return {"total": len(records), "results": records}
+    return collect_error_records(decision_path)
 
 
 def _parse_time_range(

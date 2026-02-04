@@ -103,6 +103,8 @@ To point the UI at a custom API base, set `NEXT_PUBLIC_API_BASE`.
 - Outputs: all timestamps are normalized to UTC with a trailing `Z` (e.g., `2026-02-04T12:34:56.789Z`).
 - Invalid timestamp format -> HTTP 400.
 - Invalid pagination (`page < 1` or `page_size` outside 1..500) -> HTTP 422.
+- Decisions are streamed from JSONL (no full-file load). Summary and errors are cached per file mtime/size.
+- Errors endpoint returns up to 2000 records (oldest-first within the returned window) plus `total_errors`.
 
 ## Generate local artifacts
 

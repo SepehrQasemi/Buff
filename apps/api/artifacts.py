@@ -2,13 +2,44 @@ from __future__ import annotations
 
 import json
 import os
+from collections import OrderedDict, deque
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Lock
 from typing import Any, Iterable
 
 from fastapi import HTTPException
 
 from .timeutils import format_ts, parse_ts
+
+_CACHE_MAX_ENTRIES = 32
+_ERRORS_LIMIT = 2000
+_MALFORMED_SAMPLE_LIMIT = 5
+
+
+class _LRUCache:
+    def __init__(self, max_entries: int) -> None:
+        self._max_entries = max_entries
+        self._lock = Lock()
+        self._data: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
+
+    def get(self, key: tuple[Any, ...]) -> dict[str, Any] | None:
+        with self._lock:
+            value = self._data.get(key)
+            if value is None:
+                return None
+            self._data.move_to_end(key)
+            return value
+
+    def set(self, key: tuple[Any, ...], value: dict[str, Any]) -> None:
+        with self._lock:
+            self._data[key] = value
+            self._data.move_to_end(key)
+            while len(self._data) > self._max_entries:
+                self._data.popitem(last=False)
+
+
+_DECISION_CACHE = _LRUCache(_CACHE_MAX_ENTRIES)
 
 ARTIFACTS_ENV = "ARTIFACTS_ROOT"
 
@@ -117,36 +148,8 @@ def extract_run_metadata(decision_path: Path) -> tuple[str | None, list[str] | N
 
 
 def build_summary(decision_path: Path) -> dict[str, Any]:
-    records = DecisionRecords(decision_path)
-    min_ts: datetime | None = None
-    max_ts: datetime | None = None
-    counts_by_action: dict[str, int] = {}
-    counts_by_severity: dict[str, int] = {}
-
-    for record in records:
-        action = record.get("action")
-        if action:
-            action_key = str(action)
-            counts_by_action[action_key] = counts_by_action.get(action_key, 0) + 1
-        severity = record.get("severity") or record.get("risk_state")
-        if severity:
-            severity_key = str(severity)
-            counts_by_severity[severity_key] = counts_by_severity.get(severity_key, 0) + 1
-        try:
-            ts = parse_ts(record.get("timestamp"))
-        except ValueError:
-            ts = None
-        if ts is not None:
-            min_ts = ts if min_ts is None or ts < min_ts else min_ts
-            max_ts = ts if max_ts is None or ts > max_ts else max_ts
-
-    return {
-        "min_timestamp": format_ts(min_ts),
-        "max_timestamp": format_ts(max_ts),
-        "counts_by_action": counts_by_action,
-        "counts_by_severity": counts_by_severity,
-        "malformed_lines_count": records.malformed_lines,
-    }
+    summary, _ = _get_cached_analysis(decision_path)
+    return summary
 
 
 def filter_decisions(
@@ -193,16 +196,95 @@ def filter_decisions(
         "page": page,
         "page_size": page_size,
         "results": results,
+        "items": results,
     }
 
 
-def collect_error_records(decision_path: Path) -> list[dict[str, Any]]:
-    records = DecisionRecords(decision_path)
-    results: list[dict[str, Any]] = []
-    for record in records:
-        if _is_error_record(record):
-            results.append(_normalize_record(record))
-    return results
+def collect_error_records(decision_path: Path) -> dict[str, Any]:
+    _, errors = _get_cached_analysis(decision_path)
+    return errors
+
+
+def _get_cached_analysis(decision_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    cache_key = _decision_cache_key(decision_path)
+    cached = _DECISION_CACHE.get(cache_key)
+    if cached is not None:
+        return cached["summary"], cached["errors"]
+
+    summary, errors = _scan_decision_records(decision_path)
+    _DECISION_CACHE.set(cache_key, {"summary": summary, "errors": errors})
+    return summary, errors
+
+
+def _decision_cache_key(decision_path: Path) -> tuple[Any, ...]:
+    stat = decision_path.stat()
+    run_id = decision_path.parent.name
+    return (run_id, stat.st_mtime_ns, stat.st_size)
+
+
+def _scan_decision_records(decision_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    min_ts: datetime | None = None
+    max_ts: datetime | None = None
+    counts_by_action: dict[str, int] = {}
+    counts_by_severity: dict[str, int] = {}
+    malformed_lines_count = 0
+    malformed_samples: list[str] = []
+    total_errors = 0
+    errors = deque(maxlen=_ERRORS_LIMIT)
+
+    with decision_path.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                malformed_lines_count += 1
+                if len(malformed_samples) < _MALFORMED_SAMPLE_LIMIT:
+                    malformed_samples.append(line)
+                continue
+            if not isinstance(payload, dict):
+                continue
+
+            action = payload.get("action")
+            if action:
+                action_key = str(action)
+                counts_by_action[action_key] = counts_by_action.get(action_key, 0) + 1
+            severity = payload.get("severity") or payload.get("risk_state")
+            if severity:
+                severity_key = str(severity)
+                counts_by_severity[severity_key] = counts_by_severity.get(severity_key, 0) + 1
+
+            try:
+                ts = parse_ts(payload.get("timestamp"))
+            except ValueError:
+                ts = None
+            if ts is not None:
+                min_ts = ts if min_ts is None or ts < min_ts else min_ts
+                max_ts = ts if max_ts is None or ts > max_ts else max_ts
+
+            if _is_error_record(payload):
+                total_errors += 1
+                errors.append(_normalize_record(payload))
+
+    summary = {
+        "min_timestamp": format_ts(min_ts),
+        "max_timestamp": format_ts(max_ts),
+        "counts_by_action": counts_by_action,
+        "counts_by_severity": counts_by_severity,
+        "malformed_lines_count": malformed_lines_count,
+        "malformed_samples": malformed_samples,
+    }
+    error_list = list(errors)
+    errors_payload = {
+        "total_errors": total_errors,
+        "returned_errors_count": len(error_list),
+        "errors": error_list,
+        "total": total_errors,
+        "results": error_list,
+    }
+    return summary, errors_payload
 
 
 def load_trades(
