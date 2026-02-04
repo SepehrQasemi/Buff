@@ -50,7 +50,7 @@ def _legacy_reason_fields(
         return "R0", "risk=RED", {"risk_state": risk_state_value}
     if risk_state_value == RiskState.YELLOW.value:
         return "R1", "risk=YELLOW", {"risk_state": risk_state_value}
-    if chosen_strategy_id == "TREND_FOLLOW":
+    if chosen_strategy_id in {"TREND_FOLLOW", "TREND_FOLLOW_V1"}:
         return (
             "R2",
             "trend+breakout & vol not high",
@@ -61,7 +61,7 @@ def _legacy_reason_fields(
                 "structure_state": structure_state,
             },
         )
-    if chosen_strategy_id == "MEAN_REVERT":
+    if chosen_strategy_id in {"MEAN_REVERT", "MEAN_REVERT_V1"}:
         return (
             "R3",
             "range+meanrevert & vol not high",
@@ -98,7 +98,7 @@ def _score_strategy(
     volatility_regime = market_state.get("volatility_regime", "unknown")
     structure_state = market_state.get("structure_state", "unknown")
 
-    if strategy_id == "TREND_FOLLOW":
+    if strategy_id in {"TREND_FOLLOW", "TREND_FOLLOW_V1"}:
         if (
             trend_state in {"up", "down"}
             and volatility_regime in {"low", "mid"}
@@ -106,7 +106,7 @@ def _score_strategy(
         ):
             return 100
         return None
-    if strategy_id == "MEAN_REVERT":
+    if strategy_id in {"MEAN_REVERT", "MEAN_REVERT_V1"}:
         if (
             trend_state == "flat"
             and volatility_regime in {"low", "mid"}

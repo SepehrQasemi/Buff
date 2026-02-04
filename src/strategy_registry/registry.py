@@ -132,15 +132,29 @@ class StrategyRegistry:
 _DEFAULT_REGISTRY = StrategyRegistry()
 
 
+def _ensure_builtins_registered() -> None:
+    try:
+        from strategy_registry import builtins
+    except Exception as exc:  # pragma: no cover - defensive
+        raise StrategyRegistryError("strategy_builtin_import_failed") from exc
+    if not _DEFAULT_REGISTRY.strategies:
+        builtins.register_builtin_strategies()
+        return
+    if not builtins.BUILTIN_STRATEGY_IDS.issubset(set(_DEFAULT_REGISTRY.strategies.keys())):
+        builtins.register_builtin_strategies()
+
+
 def register_strategy(strategy: Strategy) -> None:
     _DEFAULT_REGISTRY.register(strategy)
 
 
 def list_strategies() -> list[StrategySpec]:
+    _ensure_builtins_registered()
     return _DEFAULT_REGISTRY.list_strategies()
 
 
 def get_strategy(strategy_id: StrategyId | str) -> Strategy:
+    _ensure_builtins_registered()
     return _DEFAULT_REGISTRY.get(strategy_id)
 
 
