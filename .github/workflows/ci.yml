@@ -39,10 +39,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           STATE: ${{ needs.test.result == 'success' && 'success' || 'failure' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          curl -sS -X POST \
-            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
-            -d "{\"state\":\"${STATE}\",\"context\":\"ci\",\"description\":\"ci workflow status\",\"target_url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          TARGETS=("${GITHUB_SHA}")
+          if [ -n "${HEAD_SHA:-}" ]; then
+            TARGETS=("${HEAD_SHA}")
+            if [ "${HEAD_SHA}" != "${GITHUB_SHA}" ]; then
+              TARGETS+=("${GITHUB_SHA}")
+            fi
+          fi
+          for SHA in "${TARGETS[@]}"; do
+            curl -sS -X POST \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/statuses/${SHA}" \
+              -d "{\"state\":\"${STATE}\",\"context\":\"ci\",\"description\":\"ci workflow status\",\"target_url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\"}"
+          done
