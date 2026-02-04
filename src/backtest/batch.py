@@ -233,8 +233,10 @@ def run_batch_backtests(
                     "data_quality": quality,
                     "timestamp_repaired": timestamp_repaired,
                     "timestamp_repaired_reason": timestamp_repaired_reason,
+                    "strategy_share_available": False,
+                    "strategy_share_error": "",
                     "strategy_counts_json": "{}",
-                    "primary_strategy": None,
+                    "primary_strategy": "",
                     "primary_strategy_share": 0.0,
                     "initial_equity": float(initial_equity),
                     "commission_bps": float(commission_bps),
@@ -293,6 +295,41 @@ def run_batch_backtests(
                 run_id = f"{run_id_base}_{suffix}"
                 suffix += 1
             used_run_ids.add(run_id)
+            run_dir = Path(out_dir) / run_id
+            if run_dir.exists():
+                row = {
+                    "symbol": symbol_str,
+                    "timeframe": tf,
+                    "status": "FAILED",
+                    "run_id": run_id,
+                    "config_id": config_id,
+                    "config_json": config_json,
+                    "error": "run_id_collision",
+                    "data_quality": quality,
+                    "timestamp_repaired": timestamp_repaired,
+                    "timestamp_repaired_reason": timestamp_repaired_reason,
+                    "strategy_share_available": False,
+                    "strategy_share_error": "",
+                    "strategy_counts_json": "{}",
+                    "primary_strategy": "",
+                    "primary_strategy_share": 0.0,
+                    "initial_equity": float(effective_initial_equity),
+                    "commission_bps": float(effective_commission_bps),
+                    "slippage_bps": float(effective_slippage_bps),
+                    "start_at_utc": start_iso,
+                    "end_at_utc": end_iso,
+                }
+                rows.append(row)
+                index_payload[run_id] = {
+                    "status": "FAILED",
+                    "symbol": symbol_str,
+                    "timeframe": tf,
+                    "config_id": config_id,
+                    "config_json": config_json,
+                    "error": "run_id_collision",
+                    "artifacts": {},
+                }
+                continue
 
             try:
                 df_slice = df
@@ -312,15 +349,28 @@ def run_batch_backtests(
                 metrics_payload = json.loads(result.metrics_path.read_text(encoding="utf-8"))
                 manifest_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
 
-                counts, primary, primary_share, decisions = _strategy_usage(
-                    result.decision_records_path
-                )
-                strategy_counts_json = _canonical_json(counts)
-                overall_decisions += decisions
-                for strategy_id, count in counts.items():
-                    overall_strategy_counts[strategy_id] = (
-                        overall_strategy_counts.get(strategy_id, 0) + count
+                strategy_share_available = True
+                strategy_share_error = ""
+                strategy_counts_json = "{}"
+                primary = ""
+                primary_share = 0.0
+                decisions = 0
+                try:
+                    counts, primary_calc, primary_share_calc, decisions_calc = _strategy_usage(
+                        result.decision_records_path
                     )
+                    strategy_counts_json = _canonical_json(counts)
+                    primary = primary_calc or ""
+                    primary_share = float(primary_share_calc)
+                    decisions = int(decisions_calc)
+                    overall_decisions += decisions
+                    for strategy_id, count in counts.items():
+                        overall_strategy_counts[strategy_id] = (
+                            overall_strategy_counts.get(strategy_id, 0) + count
+                        )
+                except Exception as exc:
+                    strategy_share_available = False
+                    strategy_share_error = str(exc) or exc.__class__.__name__
 
                 row = {
                     "symbol": symbol_str,
@@ -333,6 +383,8 @@ def run_batch_backtests(
                     "data_quality": quality,
                     "timestamp_repaired": timestamp_repaired,
                     "timestamp_repaired_reason": timestamp_repaired_reason,
+                    "strategy_share_available": bool(strategy_share_available),
+                    "strategy_share_error": strategy_share_error,
                     "strategy_counts_json": strategy_counts_json,
                     "primary_strategy": primary,
                     "primary_strategy_share": float(primary_share),
@@ -362,7 +414,7 @@ def run_batch_backtests(
                     "config_id": config_id,
                     "config_json": config_json,
                     "artifacts": {
-                        "run_dir": str(Path(out_dir) / run_id),
+                        "run_dir": str(run_dir),
                         "trades": str(result.trades_path),
                         "metrics": str(result.metrics_path),
                         "run_manifest": str(result.manifest_path),
@@ -396,8 +448,10 @@ def run_batch_backtests(
                     "data_quality": quality,
                     "timestamp_repaired": timestamp_repaired,
                     "timestamp_repaired_reason": timestamp_repaired_reason,
+                    "strategy_share_available": False,
+                    "strategy_share_error": "",
                     "strategy_counts_json": "{}",
-                    "primary_strategy": None,
+                    "primary_strategy": "",
                     "primary_strategy_share": 0.0,
                     "initial_equity": float(effective_initial_equity),
                     "commission_bps": float(effective_commission_bps),
@@ -436,6 +490,8 @@ def run_batch_backtests(
         "error",
         "timestamp_repaired",
         "timestamp_repaired_reason",
+        "strategy_share_available",
+        "strategy_share_error",
         "strategy_counts_json",
         "primary_strategy",
         "primary_strategy_share",
@@ -525,6 +581,7 @@ def run_batch_backtests(
                 ascending=[False, True, True],
                 kind="mergesort",
             )
+            max_drawdown_ordering = "smaller_is_better"
             by_dd = group.sort_values(
                 ["max_drawdown", "config_id", "run_id"],
                 ascending=[True, True, True],
@@ -540,6 +597,7 @@ def run_batch_backtests(
                     ].to_dict(orient="records")[0],
                 },
                 "by_max_drawdown": {
+                    "ordering": max_drawdown_ordering,
                     "best": by_dd.head(1)[
                         ["run_id", "config_id", "total_return", "max_drawdown"]
                     ].to_dict(orient="records")[0],
@@ -550,12 +608,14 @@ def run_batch_backtests(
             }
 
     summary_json = {
+        "schema_version": "batch_summary_v1",
         "batch_id": batch_id,
         "timeframe": timeframe,
         "start_at_utc": base_start_iso,
         "end_at_utc": base_end_iso,
         "initial_equity": float(initial_equity),
         "costs": {"commission_bps": float(commission_bps), "slippage_bps": float(slippage_bps)},
+        "summary_columns": list(columns),
         "counts": {
             "total": int(len(summary_df)),
             "ok": int((summary_df["status"] == "OK").sum()) if not summary_df.empty else 0,
@@ -578,6 +638,7 @@ def run_batch_backtests(
     _write_json(summary_json_path, summary_json)
 
     index_payload_out: dict[str, object] = {
+        "schema_version": "batch_index_v1",
         "batch_id": batch_id,
         "batch_dir": str(batch_dir),
         "summary_csv": str(summary_csv_path),

@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from backtest.batch import run_batch_backtests
+from backtest.harness import BacktestResult
 
 
 def _make_ohlcv(*, last_open: float) -> pd.DataFrame:
@@ -64,6 +65,8 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
         "error",
         "timestamp_repaired",
         "timestamp_repaired_reason",
+        "strategy_share_available",
+        "strategy_share_error",
         "strategy_counts_json",
         "primary_strategy",
         "primary_strategy_share",
@@ -91,6 +94,8 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
     expected_mean = (metrics_a["total_return"] + metrics_b["total_return"]) / 2.0
 
     summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    assert summary_json["schema_version"] == "batch_summary_v1"
+    assert isinstance(summary_json["summary_columns"], list)
     assert summary_json["counts"]["total"] == 2
     assert summary_json["counts"]["ok"] == 2
     assert summary_json["counts"]["failed"] == 0
@@ -110,6 +115,9 @@ def test_batch_backtest_golden_two_runs(tmp_path: Path) -> None:
         else "golden_AAA_1m"
     )
     assert top[0]["run_id"] == best
+
+    index_json = json.loads(result.index_json_path.read_text(encoding="utf-8"))
+    assert index_json["schema_version"] == "batch_index_v1"
 
 
 def test_batch_backtest_failed_dataset_does_not_stop(tmp_path: Path) -> None:
@@ -136,6 +144,25 @@ def test_batch_backtest_failed_dataset_does_not_stop(tmp_path: Path) -> None:
     assert status["BAD"] == "FAILED"
 
 
+def test_schema_version_present(tmp_path: Path) -> None:
+    df = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="schema",
+    )
+    summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    assert summary_json["schema_version"] == "batch_summary_v1"
+    assert isinstance(summary_json["summary_columns"], list)
+    index_json = json.loads(result.index_json_path.read_text(encoding="utf-8"))
+    assert index_json["schema_version"] == "batch_index_v1"
+
+
 def test_strategy_usage_share_fields_populated(tmp_path: Path) -> None:
     datasets = {"AAA": _make_ohlcv(last_open=99.0)}
     result = run_batch_backtests(
@@ -152,6 +179,8 @@ def test_strategy_usage_share_fields_populated(tmp_path: Path) -> None:
     summary = pd.read_csv(result.summary_csv_path)
     assert len(summary) == 1
     row = summary.iloc[0].to_dict()
+    assert row["strategy_share_available"] in (True, "True")
+    assert row["strategy_share_error"] in ("", None) or str(row["strategy_share_error"]) == "nan"
     counts = json.loads(row["strategy_counts_json"])
     assert isinstance(counts, dict)
     assert counts
@@ -166,6 +195,96 @@ def test_strategy_usage_share_fields_populated(tmp_path: Path) -> None:
     assert primary in counts
     expected_share = counts[primary] / float(len(decision_lines))
     assert float(row["primary_strategy_share"]) == pytest.approx(expected_share, rel=1e-12)
+
+
+def test_strategy_share_missing_records(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _stub_run_backtest(
+        df: pd.DataFrame,
+        initial_equity: float,
+        *,
+        run_id: str,
+        out_dir: Path,
+        **_kwargs: object,
+    ) -> BacktestResult:
+        run_dir = Path(out_dir) / run_id
+        run_dir.mkdir(parents=True, exist_ok=False)
+        metrics_path = run_dir / "metrics.json"
+        manifest_path = run_dir / "run_manifest.json"
+        decision_records_path = run_dir / "decision_records.jsonl"
+        trades_path = run_dir / "trades.parquet"
+
+        metrics_path.write_text(
+            json.dumps(
+                {
+                    "total_return": 0.01 if "BBB" in run_id else 0.02,
+                    "max_drawdown": 0.2 if "BBB" in run_id else 0.1,
+                    "num_trades": 1,
+                    "total_costs": 0.0,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "git_sha": None,
+                    "pnl_method": "mark_to_market",
+                    "end_of_run_position_handling": "close_on_end",
+                    "strategy_switch_policy": "no_forced_flat_on_switch",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        trades_path.write_bytes(b"PAR1")
+
+        if "AAA" not in run_id:
+            decision_records_path.write_text(
+                json.dumps(
+                    {"selection": {"strategy_id": "S1"}}, sort_keys=True, separators=(",", ":")
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        return BacktestResult(
+            trades=pd.DataFrame(),
+            metrics={},
+            trades_path=trades_path,
+            metrics_path=metrics_path,
+            decision_records_path=decision_records_path,
+            manifest_path=manifest_path,
+        )
+
+    monkeypatch.setattr("backtest.batch.run_backtest", _stub_run_backtest)
+
+    df = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df, "BBB": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="missing_records",
+    )
+    summary = pd.read_csv(result.summary_csv_path)
+    assert set(summary["status"]) == {"OK"}
+    row_aaa = summary.loc[summary["symbol"] == "AAA"].iloc[0].to_dict()
+    assert row_aaa["strategy_share_available"] in (False, "False")
+    assert row_aaa["strategy_counts_json"] == "{}"
+    assert row_aaa["primary_strategy"] == "" or pd.isna(row_aaa["primary_strategy"])
+    assert float(row_aaa["primary_strategy_share"]) == pytest.approx(0.0, rel=1e-12)
+    assert isinstance(row_aaa["strategy_share_error"], str) and row_aaa["strategy_share_error"]
+
+    row_bbb = summary.loc[summary["symbol"] == "BBB"].iloc[0].to_dict()
+    assert row_bbb["strategy_share_available"] in (True, "True")
+    assert json.loads(row_bbb["strategy_counts_json"]) == {"S1": 1}
 
 
 def test_non_monotonic_timestamps_sets_repaired_flag(tmp_path: Path) -> None:
@@ -232,3 +351,104 @@ def test_param_grid_runs_cartesian_product(tmp_path: Path) -> None:
         dataset["by_total_return"]["best"]["config_id"]
         != dataset["by_total_return"]["worst"]["config_id"]
     )
+
+
+def test_run_id_collision_fails_soft(tmp_path: Path) -> None:
+    df = _make_ohlcv(last_open=99.0)
+    (tmp_path / "collision_AAA_1m").mkdir(parents=True, exist_ok=False)
+    result = run_batch_backtests(
+        {"AAA": df, "BBB": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="collision",
+    )
+    summary = pd.read_csv(result.summary_csv_path)
+    row_aaa = summary.loc[summary["symbol"] == "AAA"].iloc[0].to_dict()
+    assert row_aaa["status"] == "FAILED"
+    assert row_aaa["error"] == "run_id_collision"
+    row_bbb = summary.loc[summary["symbol"] == "BBB"].iloc[0].to_dict()
+    assert row_bbb["status"] == "OK"
+
+
+def test_drawdown_best_worst_ordering(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _stub_run_backtest(
+        df: pd.DataFrame,
+        initial_equity: float,
+        *,
+        run_id: str,
+        out_dir: Path,
+        commission_bps: float = 0.0,
+        **_kwargs: object,
+    ) -> BacktestResult:
+        run_dir = Path(out_dir) / run_id
+        run_dir.mkdir(parents=True, exist_ok=False)
+        metrics_path = run_dir / "metrics.json"
+        manifest_path = run_dir / "run_manifest.json"
+        decision_records_path = run_dir / "decision_records.jsonl"
+        trades_path = run_dir / "trades.parquet"
+
+        max_drawdown = 0.05 if commission_bps == 0.0 else 0.25
+        metrics_path.write_text(
+            json.dumps(
+                {
+                    "total_return": 0.02 if commission_bps == 0.0 else 0.01,
+                    "max_drawdown": max_drawdown,
+                    "num_trades": 1,
+                    "total_costs": 0.0,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "git_sha": None,
+                    "pnl_method": "mark_to_market",
+                    "end_of_run_position_handling": "close_on_end",
+                    "strategy_switch_policy": "no_forced_flat_on_switch",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        decision_records_path.write_text(
+            json.dumps({"selection": {"strategy_id": "S1"}}, sort_keys=True, separators=(",", ":"))
+            + "\n",
+            encoding="utf-8",
+        )
+        trades_path.write_bytes(b"PAR1")
+        return BacktestResult(
+            trades=pd.DataFrame(),
+            metrics={},
+            trades_path=trades_path,
+            metrics_path=metrics_path,
+            decision_records_path=decision_records_path,
+            manifest_path=manifest_path,
+        )
+
+    monkeypatch.setattr("backtest.batch.run_backtest", _stub_run_backtest)
+    df = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="dd",
+        param_grid={"commission_bps": [0.0, 10.0]},
+    )
+    summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    dataset = summary_json["best_worst_by_dataset"]["AAA"]["by_max_drawdown"]
+    assert dataset["ordering"] == "smaller_is_better"
+    assert dataset["best"]["max_drawdown"] < dataset["worst"]["max_drawdown"]
