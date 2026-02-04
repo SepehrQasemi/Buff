@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +35,17 @@ def test_golden(tmp_path: Path) -> None:
     assert result.metrics_path.exists()
     assert result.decision_records_path.exists()
     assert result.manifest_path.exists()
+
+    metrics_payload = json.loads(result.metrics_path.read_text(encoding="utf-8"))
+    assert metrics_payload["pnl_method"] == "mark_to_market"
+    assert metrics_payload["end_of_run_position_handling"] == "close_on_end"
+    assert metrics_payload["strategy_switch_policy"] == "no_forced_flat_on_switch"
+    assert metrics_payload["total_costs"] == pytest.approx(0.0, rel=1e-12)
+
+    manifest_payload = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest_payload["pnl_method"] == "mark_to_market"
+    assert manifest_payload["end_of_run_position_handling"] == "close_on_end"
+    assert manifest_payload["strategy_switch_policy"] == "no_forced_flat_on_switch"
 
     trades = result.trades
     assert len(trades) == 2
