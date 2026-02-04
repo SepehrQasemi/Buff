@@ -15,7 +15,14 @@ from audit.decision_records import (
 )
 from features.build_features import build_features
 from buff.features.indicators import atr_wilder, bollinger_bands, ema, rsi_wilder
-from features.regime import classify_regimes
+from features.regime import (
+    ATR_PCT_HIGH_QUANTILE,
+    ATR_PCT_LOW_QUANTILE,
+    EMA_SPREAD_THRESHOLD,
+    RSI_BEAR,
+    RSI_BULL,
+    RSI_SLOPE_THRESHOLD,
+)
 from risk.types import RiskState
 from selector.records import selection_to_record
 from selector.selector import select_strategy
@@ -88,19 +95,52 @@ def _feature_frame(df: pd.DataFrame) -> pd.DataFrame:
 def _market_state(df: pd.DataFrame) -> pd.DataFrame:
     with_ts = df.reset_index().rename(columns={df.index.name or "index": "timestamp"})
     feats = build_features(with_ts)
-    regimes = classify_regimes(feats)
-    structure_state = pd.Series("unknown", index=regimes.index, dtype="string")
-    structure_state = structure_state.mask(regimes["trend_state"] == "flat", "meanrevert")
-    structure_state = structure_state.mask(regimes["trend_state"].isin(["up", "down"]), "breakout")
-    vol = regimes["volatility_regime"].replace({"normal": "mid"})
+
+    spread = feats.get("ema_spread_20_50_pct")
+    if spread is None:
+        denom = feats["ema_50"].replace(0.0, float("nan"))
+        spread = (feats["ema_20"] - feats["ema_50"]) / denom
+
+    trend_state = pd.Series("flat", index=feats.index, dtype="string")
+    trend_state = trend_state.mask(spread > EMA_SPREAD_THRESHOLD, "up")
+    trend_state = trend_state.mask(spread < -EMA_SPREAD_THRESHOLD, "down")
+
+    rsi = feats["rsi_14"].astype(float)
+    rsi_slope_val = feats["rsi_slope_14_5"].astype(float)
+    momentum_state = pd.Series("neutral", index=feats.index, dtype="string")
+    bull_mask = (rsi >= RSI_BULL) & (rsi_slope_val >= RSI_SLOPE_THRESHOLD)
+    bear_mask = (rsi <= RSI_BEAR) & (rsi_slope_val <= -RSI_SLOPE_THRESHOLD)
+    momentum_state = momentum_state.mask(bull_mask, "bull")
+    momentum_state = momentum_state.mask(bear_mask, "bear")
+
+    atr_pct = feats["atr_pct"].astype(float)
+    vol = pd.Series("mid", index=feats.index, dtype="string")
+    # Compute percentile cutoffs using only past bars to avoid look-ahead.
+    for idx in range(len(atr_pct)):
+        window = atr_pct.iloc[: idx + 1].dropna()
+        value = atr_pct.iloc[idx]
+        if window.empty or not pd.notna(value):
+            continue
+        low_cut = float(window.quantile(ATR_PCT_LOW_QUANTILE))
+        high_cut = float(window.quantile(ATR_PCT_HIGH_QUANTILE))
+        if not (low_cut < high_cut):
+            continue
+        if value <= low_cut:
+            vol.iloc[idx] = "low"
+        elif value >= high_cut:
+            vol.iloc[idx] = "high"
+
+    structure_state = pd.Series("unknown", index=trend_state.index, dtype="string")
+    structure_state = structure_state.mask(trend_state == "flat", "meanrevert")
+    structure_state = structure_state.mask(trend_state.isin(["up", "down"]), "breakout")
     out = pd.DataFrame(
         {
-            "trend_state": regimes["trend_state"],
-            "momentum_state": regimes["momentum_state"],
+            "trend_state": trend_state,
+            "momentum_state": momentum_state,
             "volatility_regime": vol,
             "structure_state": structure_state,
         },
-        index=regimes.index,
+        index=feats.index,
     )
     out.index.name = df.index.name or "timestamp"
     return out
