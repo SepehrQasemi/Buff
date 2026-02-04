@@ -146,10 +146,9 @@ def _strategy_usage(decision_records_path: Path) -> tuple[dict[str, int], str | 
 def _pair_id(
     dataset_key: str, timeframe: str, config_id: str, window_index: int | None = None
 ) -> str:
-    payload = f"{dataset_key}{timeframe}{config_id}"
-    if window_index is not None:
-        payload = f"{payload}{window_index}"
-    return sha256(payload.encode("utf-8")).hexdigest()[:10]
+    window_part = "" if window_index is None else str(int(window_index))
+    pair_id_source = f"{dataset_key}|{timeframe}|{config_id}|{window_part}"
+    return sha256(pair_id_source.encode("utf-8")).hexdigest()[:10]
 
 
 def run_batch_backtests(

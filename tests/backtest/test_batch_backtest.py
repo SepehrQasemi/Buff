@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from backtest.batch import run_batch_backtests
+from backtest.batch import _pair_id
 from backtest.harness import BacktestResult
 
 
@@ -593,3 +594,237 @@ def test_overfit_deltas_present(tmp_path: Path) -> None:
     assert pairs
     assert all("delta_total_return" in item for item in pairs)
     assert all(isinstance(item["delta_total_return"], float) for item in pairs)
+
+
+def test_pair_id_changes_with_any_component() -> None:
+    base = _pair_id("AAA", "1m", "abc12345", None)
+    assert base != _pair_id("BBB", "1m", "abc12345", None)
+    assert base != _pair_id("AAA", "5m", "abc12345", None)
+    assert base != _pair_id("AAA", "1m", "def67890", None)
+    assert base != _pair_id("AAA", "1m", "abc12345", 0)
+    assert _pair_id("AAA", "1m", "abc12345", 0) != _pair_id("AAA", "1m", "abc12345", 1)
+
+
+def test_walk_forward_segments_do_not_overlap(tmp_path: Path) -> None:
+    df = _make_ohlcv_n(periods=100, last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="wfo",
+        split={
+            "type": "walk_forward",
+            "train_bars": 40,
+            "test_bars": 20,
+            "step_bars": 20,
+        },
+    )
+    summary = pd.read_csv(result.summary_csv_path)
+    for window_index in sorted(summary["window_index"].dropna().unique().tolist()):
+        train_run_id = summary.loc[
+            (summary["window_index"] == window_index) & (summary["segment"] == "TRAIN"),
+            "run_id",
+        ].iloc[0]
+        test_run_id = summary.loc[
+            (summary["window_index"] == window_index) & (summary["segment"] == "TEST"),
+            "run_id",
+        ].iloc[0]
+
+        train_records = (
+            (tmp_path / str(train_run_id) / "decision_records.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
+        test_records = (
+            (tmp_path / str(test_run_id) / "decision_records.jsonl")
+            .read_text(encoding="utf-8")
+            .splitlines()
+        )
+        train_ts = [
+            pd.to_datetime(json.loads(line)["ts_utc"], utc=True) for line in train_records if line
+        ]
+        test_ts = [
+            pd.to_datetime(json.loads(line)["ts_utc"], utc=True) for line in test_records if line
+        ]
+        assert train_ts
+        assert test_ts
+        assert max(train_ts) < min(test_ts)
+
+
+def test_rankings_exclude_failed_runs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def _stub_run_backtest(
+        df: pd.DataFrame,
+        initial_equity: float,
+        *,
+        run_id: str,
+        out_dir: Path,
+        **_kwargs: object,
+    ) -> BacktestResult:
+        if "AAA" in run_id and "__seg-TEST" in run_id:
+            raise ValueError("boom")
+
+        run_dir = Path(out_dir) / run_id
+        run_dir.mkdir(parents=True, exist_ok=False)
+        metrics_path = run_dir / "metrics.json"
+        manifest_path = run_dir / "run_manifest.json"
+        decision_records_path = run_dir / "decision_records.jsonl"
+        trades_path = run_dir / "trades.parquet"
+
+        symbol = "AAA" if "AAA" in run_id else "BBB"
+        segment = "TEST" if "__seg-TEST" in run_id else "TRAIN"
+        metrics_path.write_text(
+            json.dumps(
+                {
+                    "total_return": 0.10 if symbol == "BBB" and segment == "TEST" else 0.05,
+                    "max_drawdown": 0.30 if symbol == "BBB" and segment == "TEST" else 0.10,
+                    "num_trades": 1,
+                    "total_costs": 0.0,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "git_sha": None,
+                    "pnl_method": "mark_to_market",
+                    "end_of_run_position_handling": "close_on_end",
+                    "strategy_switch_policy": "no_forced_flat_on_switch",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        decision_records_path.write_text(
+            json.dumps({"selection": {"strategy_id": "S1"}, "ts_utc": "2026-02-01T00:00:00Z"})
+            + "\n",
+            encoding="utf-8",
+        )
+        trades_path.write_bytes(b"PAR1")
+        return BacktestResult(
+            trades=pd.DataFrame(),
+            metrics={},
+            trades_path=trades_path,
+            metrics_path=metrics_path,
+            decision_records_path=decision_records_path,
+            manifest_path=manifest_path,
+        )
+
+    monkeypatch.setattr("backtest.batch.run_backtest", _stub_run_backtest)
+    df = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df, "BBB": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="rank",
+        split={
+            "type": "holdout",
+            "train_frac": 0.7,
+            "min_train_bars": 50,
+            "min_test_bars": 20,
+        },
+    )
+    summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    assert all("AAA" not in item["symbol"] for item in summary_json["top_by_test_return"])
+    assert all("AAA" not in item["symbol"] for item in summary_json["worst_by_test_drawdown"])
+
+
+def test_drawdown_ranking_picks_larger_as_worst(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def _stub_run_backtest(
+        df: pd.DataFrame,
+        initial_equity: float,
+        *,
+        run_id: str,
+        out_dir: Path,
+        **_kwargs: object,
+    ) -> BacktestResult:
+        run_dir = Path(out_dir) / run_id
+        run_dir.mkdir(parents=True, exist_ok=False)
+        metrics_path = run_dir / "metrics.json"
+        manifest_path = run_dir / "run_manifest.json"
+        decision_records_path = run_dir / "decision_records.jsonl"
+        trades_path = run_dir / "trades.parquet"
+
+        symbol = "AAA" if "AAA" in run_id else "BBB"
+        segment = "TEST" if "__seg-TEST" in run_id else "TRAIN"
+        dd = (
+            0.05
+            if symbol == "AAA" and segment == "TEST"
+            else 0.25
+            if symbol == "BBB" and segment == "TEST"
+            else 0.01
+        )
+        metrics_path.write_text(
+            json.dumps(
+                {"total_return": 0.01, "max_drawdown": dd, "num_trades": 1, "total_costs": 0.0},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        manifest_path.write_text(
+            json.dumps(
+                {
+                    "git_sha": None,
+                    "pnl_method": "mark_to_market",
+                    "end_of_run_position_handling": "close_on_end",
+                    "strategy_switch_policy": "no_forced_flat_on_switch",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        decision_records_path.write_text(
+            json.dumps({"selection": {"strategy_id": "S1"}, "ts_utc": "2026-02-01T00:00:00Z"})
+            + "\n",
+            encoding="utf-8",
+        )
+        trades_path.write_bytes(b"PAR1")
+        return BacktestResult(
+            trades=pd.DataFrame(),
+            metrics={},
+            trades_path=trades_path,
+            metrics_path=metrics_path,
+            decision_records_path=decision_records_path,
+            manifest_path=manifest_path,
+        )
+
+    monkeypatch.setattr("backtest.batch.run_backtest", _stub_run_backtest)
+    df = _make_ohlcv(last_open=99.0)
+    result = run_batch_backtests(
+        {"AAA": df, "BBB": df},
+        out_dir=tmp_path,
+        timeframe="1m",
+        start_at_utc=None,
+        end_at_utc=None,
+        initial_equity=10_000.0,
+        costs={"commission_bps": 0.0, "slippage_bps": 0.0},
+        seed_run_id_prefix="ddrank",
+        split={
+            "type": "holdout",
+            "train_frac": 0.7,
+            "min_train_bars": 50,
+            "min_test_bars": 20,
+        },
+    )
+    summary_json = json.loads(result.summary_json_path.read_text(encoding="utf-8"))
+    worst = summary_json["worst_by_test_drawdown"][0]
+    assert worst["symbol"] == "BBB"
