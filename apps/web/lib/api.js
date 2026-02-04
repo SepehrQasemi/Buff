@@ -1,17 +1,27 @@
-const DEFAULT_API_BASE = "http://127.0.0.1:8000/api/v1";
+const DEFAULT_API_BASE = "http://127.0.0.1:8000";
+const API_VERSION_PATH = "/api/v1";
 
 const getRuntimeBase = () => {
   if (typeof window === "undefined") {
     return null;
   }
-  return window.__BUFF_API_BASE__ || null;
+  if (window.__RUNTIME_CONFIG__ && typeof window.__RUNTIME_CONFIG__.API_BASE === "string") {
+    return window.__RUNTIME_CONFIG__.API_BASE;
+  }
+  if (typeof window.__BUFF_API_BASE__ === "string") {
+    return window.__BUFF_API_BASE__;
+  }
+  return null;
 };
 
 const normalizeBase = (base) => {
   if (!base) {
-    return `${DEFAULT_API_BASE}/`;
+    return `${DEFAULT_API_BASE}${API_VERSION_PATH}/`;
   }
-  return base.endsWith("/") ? base : `${base}/`;
+  const trimmed = String(base).trim().replace(/\/+$/, "");
+  const hasApiVersion = /\/api\/v1(\/|$)/.test(trimmed);
+  const withVersion = hasApiVersion ? trimmed : `${trimmed}${API_VERSION_PATH}`;
+  return `${withVersion}/`;
 };
 
 const API_BASE = normalizeBase(

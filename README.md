@@ -86,7 +86,8 @@ Or use the helper scripts:
 ```
 
 Open `http://localhost:3000`. The local `./artifacts` directory is bind-mounted read-only into
-the API container at `/artifacts`.
+the API container at `/artifacts`. The browser calls the API through the host-mapped port at
+`http://localhost:8000/api/v1` (not the internal container hostname).
 
 ### Run API
 

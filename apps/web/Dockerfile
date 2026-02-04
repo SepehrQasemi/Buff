@@ -17,10 +17,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/next.config.js ./
+COPY --from=builder /app/scripts ./scripts
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "printf \"window.__BUFF_API_BASE__='%s';\" \"${NEXT_PUBLIC_API_BASE:-http://localhost:8000/api/v1}\" > /app/public/runtime-config.js && npm run start -- -p 3000"]
+CMD ["sh", "-c", "node /app/scripts/write-runtime-config.mjs && npm run start -- -p 3000"]
