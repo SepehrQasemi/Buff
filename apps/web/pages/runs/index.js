@@ -1,7 +1,16 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { getRuns } from "../../lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
+const formatError = (result, fallback) => {
+  if (!result) {
+    return fallback;
+  }
+  if (!result.status) {
+    return `${fallback}: ${result.error || "API unreachable"}`;
+  }
+  return `${result.error || fallback} (HTTP ${result.status})`;
+};
 
 export default function RunsPage() {
   const [runs, setRuns] = useState([]);
@@ -11,24 +20,17 @@ export default function RunsPage() {
   useEffect(() => {
     let active = true;
     async function load() {
-      try {
-        const response = await fetch(`${API_BASE}/api/runs`);
-        if (!response.ok) {
-          throw new Error(`Failed to load runs (${response.status})`);
-        }
-        const data = await response.json();
-        if (active) {
-          setRuns(Array.isArray(data) ? data : []);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err.message || "Failed to load runs");
-        }
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
+      const result = await getRuns();
+      if (!active) {
+        return;
       }
+      if (!result.ok) {
+        setError(formatError(result, "Failed to load runs"));
+        setLoading(false);
+        return;
+      }
+      setRuns(Array.isArray(result.data) ? result.data : []);
+      setLoading(false);
     }
     load();
     return () => {
@@ -46,11 +48,7 @@ export default function RunsPage() {
         <span className="badge info">{runs.length} runs</span>
       </header>
 
-      {error && (
-        <div className="banner">
-          {error} — check that the API is running on {API_BASE}.
-        </div>
-      )}
+      {error && <div className="banner">{error}</div>}
 
       {loading ? (
         <div className="card fade-up">Loading runs...</div>
@@ -59,7 +57,12 @@ export default function RunsPage() {
       ) : (
         <div className="grid two">
           {runs.map((run, index) => (
-            <Link key={run.id} href={`/runs/${run.id}`} className="card fade-up" style={{ animationDelay: `${index * 60}ms` }}>
+            <Link
+              key={run.id}
+              href={`/runs/${run.id}`}
+              className="card fade-up"
+              style={{ animationDelay: `${index * 60}ms` }}
+            >
               <div className="section-title">
                 <h3>{run.id}</h3>
                 <span className={`badge ${run.status === "OK" ? "ok" : "invalid"}`}>
@@ -85,7 +88,11 @@ export default function RunsPage() {
                   <strong>{run.timeframe || "n/a"}</strong>
                 </div>
               </div>
-              {run.has_trades && <span className="badge info" style={{ marginTop: "12px" }}>Trades ready</span>}
+              {run.has_trades && (
+                <span className="badge info" style={{ marginTop: "12px" }}>
+                  Trades ready
+                </span>
+              )}
             </Link>
           ))}
         </div>

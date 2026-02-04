@@ -229,20 +229,29 @@ def _scan_decision_records(decision_path: Path) -> tuple[dict[str, Any], dict[st
     counts_by_severity: dict[str, int] = {}
     malformed_lines_count = 0
     malformed_samples: list[str] = []
+    malformed_samples_detail: list[dict[str, Any]] = []
     total_errors = 0
     errors = deque(maxlen=_ERRORS_LIMIT)
 
     with decision_path.open("r", encoding="utf-8") as handle:
-        for raw_line in handle:
+        for line_number, raw_line in enumerate(handle, start=1):
             line = raw_line.strip()
             if not line:
                 continue
             try:
                 payload = json.loads(line)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
                 malformed_lines_count += 1
                 if len(malformed_samples) < _MALFORMED_SAMPLE_LIMIT:
                     malformed_samples.append(line)
+                if len(malformed_samples_detail) < _MALFORMED_SAMPLE_LIMIT:
+                    malformed_samples_detail.append(
+                        {
+                            "line_number": line_number,
+                            "error": str(exc),
+                            "raw_preview": _truncate_preview(line),
+                        }
+                    )
                 continue
             if not isinstance(payload, dict):
                 continue
@@ -275,6 +284,7 @@ def _scan_decision_records(decision_path: Path) -> tuple[dict[str, Any], dict[st
         "counts_by_severity": counts_by_severity,
         "malformed_lines_count": malformed_lines_count,
         "malformed_samples": malformed_samples,
+        "malformed_samples_detail": malformed_samples_detail,
     }
     error_list = list(errors)
     errors_payload = {
@@ -462,6 +472,12 @@ def _format_timestamp_value(value: Any) -> str | None:
         return format_ts(parse_ts(value))
     except ValueError:
         return None
+
+
+def _truncate_preview(value: str, limit: int = 300) -> str:
+    if len(value) <= limit:
+        return value
+    return f"{value[:limit]}…"
 
 
 def _is_within_root(candidate: Path, root: Path) -> bool:
