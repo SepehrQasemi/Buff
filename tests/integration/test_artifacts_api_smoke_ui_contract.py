@@ -35,6 +35,16 @@ def test_artifacts_api_smoke_ui_contract(monkeypatch, tmp_path):
     monkeypatch.setenv("ARTIFACTS_ROOT", str(artifacts_root))
     client = TestClient(app)
 
+    health = client.get("/api/health")
+    assert health.status_code == 200
+    health_data = health.json()
+    assert health_data["status"] == "ok"
+    assert health_data["api_version"] == "1"
+
+    health_v1 = client.get("/api/v1/health")
+    assert health_v1.status_code == 200
+    assert health_v1.json()["api_version"] == "1"
+
     runs = client.get("/api/runs")
     assert runs.status_code == 200
     runs_data = runs.json()

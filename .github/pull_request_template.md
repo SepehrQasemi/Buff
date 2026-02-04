@@ -6,6 +6,8 @@
 ```
 ```
 
+Note: Do not paste UI "Undo" lines; include only real command outputs.
+
 ## Safety impact (required if touching /src/risk or /src/execution)
 
 ## Red-line checks

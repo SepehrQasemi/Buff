@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Iterable
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -20,28 +20,20 @@ from .artifacts import (
 )
 from .timeutils import coerce_ts_param
 
-app = FastAPI(title="Buff Artifacts API", docs_url="/api/docs", openapi_url="/api/openapi.json")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+router = APIRouter()
 
 
-@app.get("/api/health")
+@router.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "api_version": "1"}
 
 
-@app.get("/api/runs")
+@router.get("/runs")
 def list_runs() -> list[dict[str, object]]:
     return discover_runs()
 
 
-@app.get("/api/runs/{run_id}/summary")
+@router.get("/runs/{run_id}/summary")
 def run_summary(run_id: str) -> dict[str, object]:
     run_path = resolve_run_dir(run_id, get_artifacts_root())
     decision_path = run_path / "decision_records.jsonl"
@@ -50,7 +42,7 @@ def run_summary(run_id: str) -> dict[str, object]:
     return build_summary(decision_path)
 
 
-@app.get("/api/runs/{run_id}/decisions")
+@router.get("/runs/{run_id}/decisions")
 def decisions(
     run_id: str,
     symbol: list[str] | None = Query(default=None),
@@ -87,7 +79,7 @@ def decisions(
     )
 
 
-@app.get("/api/runs/{run_id}/trades")
+@router.get("/runs/{run_id}/trades")
 def trades(
     run_id: str,
     start_ts: str | None = None,
@@ -108,7 +100,7 @@ def trades(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@app.get("/api/runs/{run_id}/errors")
+@router.get("/runs/{run_id}/errors")
 def errors(run_id: str) -> dict[str, object]:
     run_path = resolve_run_dir(run_id, get_artifacts_root())
     decision_path = run_path / "decision_records.jsonl"
@@ -117,7 +109,7 @@ def errors(run_id: str) -> dict[str, object]:
     return collect_error_records(decision_path)
 
 
-@app.get("/api/runs/{run_id}/decisions/export")
+@router.get("/runs/{run_id}/decisions/export")
 def export_decisions(
     run_id: str,
     format: str = "json",
@@ -155,7 +147,7 @@ def export_decisions(
     return _export_response(stream, media_type, f"{run_id}-decisions.{format}")
 
 
-@app.get("/api/runs/{run_id}/errors/export")
+@router.get("/runs/{run_id}/errors/export")
 def export_errors(run_id: str, format: str = "json") -> StreamingResponse:
     run_path = resolve_run_dir(run_id, get_artifacts_root())
     decision_path = run_path / "decision_records.jsonl"
@@ -169,7 +161,7 @@ def export_errors(run_id: str, format: str = "json") -> StreamingResponse:
     return _export_response(stream, media_type, f"{run_id}-errors.{format}")
 
 
-@app.get("/api/runs/{run_id}/trades/export")
+@router.get("/runs/{run_id}/trades/export")
 def export_trades(
     run_id: str,
     format: str = "json",
@@ -189,6 +181,20 @@ def export_trades(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return _export_response(stream, media_type, f"{run_id}-trades.{format}")
+
+
+app = FastAPI(title="Buff Artifacts API", docs_url="/api/docs", openapi_url="/api/openapi.json")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(router, prefix="/api", include_in_schema=False)
+app.include_router(router, prefix="/api/v1")
 
 
 def _parse_time_range(
