@@ -95,6 +95,11 @@ npm run dev
 ```
 
 To point the UI at a custom API base, set `NEXT_PUBLIC_API_BASE`.
+Smoke check (API must be running):
+
+```bash
+node apps/web/scripts/smoke.mjs
+```
 
 ### Timestamp contract
 
