@@ -60,3 +60,13 @@ Thumbs.db
 /runs/
 /.VSCodeCounter/
 src/buff.egg-info/
+
+# Local UI/build artifacts
+apps/web/.next/
+apps/web/node_modules/
+reports/
+diff.txt
+cached_diff.txt
+
+# Local UI lockfile (untracked by default)
+apps/web/package-lock.json
