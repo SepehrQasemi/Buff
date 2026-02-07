@@ -1,0 +1,6 @@
+ccxt>=1.91.0
+pandas>=1.5.0
+pyarrow>=10.0.0
+
+[dev]
+pytest>=7.0
