@@ -26,7 +26,7 @@ const truncate = (value, limit = 240) => {
   if (value.length <= limit) {
     return value;
   }
-  return `${value.slice(0, limit)}…`;
+  return `${value.slice(0, limit)}â€¦`;
 };
 
 export default function SummaryCards({ summary, loading, error }) {
