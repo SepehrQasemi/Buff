@@ -69,4 +69,4 @@ diff.txt
 cached_diff.txt
 
 # Local UI lockfile (untracked by default)
-apps/web/package-lock.json
+!apps/web/package-lock.json
