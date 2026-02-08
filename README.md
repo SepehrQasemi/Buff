@@ -67,7 +67,7 @@ Read-only UI for inspecting run artifacts (no execution or mutation). Preferred 
 ### Requirements
 
 - Python 3.10+ with dev dependencies installed (`pip install -e ".[dev]"`).
-- Node.js 18+ (npm).
+- Node.js 20.9+ (npm).
 
 ### Docker (recommended)
 
