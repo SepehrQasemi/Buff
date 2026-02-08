@@ -27,3 +27,4 @@ User-defined strategies and indicators MUST NOT appear in the UI, run in analysi
 6) A validation artifact (or status record) is written and stored.
 
 If any check fails, the item remains inactive and is not visible to users in selection lists.
+This gate is fail-closed: if validation cannot be completed successfully, the plugin is treated as invalid and excluded.
