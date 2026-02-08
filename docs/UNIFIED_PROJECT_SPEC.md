@@ -52,10 +52,10 @@ All future implementation work (including AI-generated changes) must treat `/doc
 - M3 metadata is stored next to the parquet as `market_state.meta.json`. (Evidence: `docs/feature-contract.md#L69-L80`)
 
 ## Risk Policy Contract + Schema
-- Risk policy provides a deterministic, explainable permission-to-trade state (green/yellow/red) and is permission-only (no direction prediction, no strategy selection). (Evidence: `RISK_POLICY.md#L3-L5`)
-- States and sizing: green=1.0, yellow=0.5, red=0.0. (Evidence: `RISK_POLICY.md#L7-L10`)
-- Rule summary: high severity events within the window or cooldown -> red; medium severity events within the window -> yellow; otherwise green; low severity events do not change state. (Evidence: `RISK_POLICY.md#L25-L30`)
-- Explainability outputs include reasons and event_ids. (Evidence: `RISK_POLICY.md#L32-L35`)
+- Risk policy provides a deterministic, explainable permission-to-trade state (green/yellow/red) and is permission-only (no direction prediction, no strategy selection). (Evidence: `docs/RISK_POLICY.md#L3-L5`)
+- States and sizing: green=1.0, yellow=0.5, red=0.0. (Evidence: `docs/RISK_POLICY.md#L7-L10`)
+- Rule summary: high severity events within the window or cooldown -> red; medium severity events within the window -> yellow; otherwise green; low severity events do not change state. (Evidence: `docs/RISK_POLICY.md#L25-L30`)
+- Explainability outputs include reasons and event_ids. (Evidence: `docs/RISK_POLICY.md#L32-L35`)
 - Risk permission outputs include risk_state, permission, recommended_scale, reasons, metrics. (Evidence: `docs/RISK_POLICY.md#L43-L48`)
 - Risk report schema required fields: risk_report_version, risk_state, permission, recommended_scale, reasons, thresholds, metrics, evaluated_at. (Evidence: `schemas/risk_report.schema.json#L5-L13`)
 
