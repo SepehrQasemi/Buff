@@ -50,6 +50,9 @@ const parseErrorMessage = (data, fallback) => {
   if (typeof data === "string") {
     return data;
   }
+  if (typeof data.message === "string") {
+    return data.message;
+  }
   if (typeof data.detail === "string") {
     return data.detail;
   }
@@ -106,3 +109,11 @@ export const getDecisions = (id, params) => request(`/runs/${id}/decisions`, par
 export const getTrades = (id, params) => request(`/runs/${id}/trades`, params);
 
 export const getErrors = (id, params) => request(`/runs/${id}/errors`, params);
+
+export const getOhlcv = (id, params) => request(`/runs/${id}/ohlcv`, params);
+
+export const getTradeMarkers = (id, params) => request(`/runs/${id}/trades/markers`, params);
+
+export const getMetrics = (id) => request(`/runs/${id}/metrics`);
+
+export const getTimeline = (id, params) => request(`/runs/${id}/timeline`, params);

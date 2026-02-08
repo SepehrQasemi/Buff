@@ -23,6 +23,10 @@ markers = [
     "unit: Fast unit tests that don't require I/O or network",
     "integration: Slower integration tests with fixtures like tmp_path",
 ]
+# pyarrow emits Pandas4Warning for deprecated pandas internals; this does not impact artifact correctness.
+filterwarnings = [
+    "ignore::pandas.errors.Pandas4Warning",
+]
 
 [tool.ruff]
 line-length = 100

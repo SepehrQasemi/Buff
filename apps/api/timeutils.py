@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import HTTPException
+from .errors import raise_api_error
 
 
 def parse_ts(value: Any) -> datetime | None:
@@ -51,4 +51,10 @@ def coerce_ts_param(value: Any, param_name: str) -> datetime | None:
     try:
         return parse_ts(value)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid {param_name}: {exc}") from exc
+        raise_api_error(
+            400,
+            "invalid_timestamp",
+            f"Invalid {param_name}: {exc}",
+            {"param": param_name, "value": value},
+        )
+        return None
