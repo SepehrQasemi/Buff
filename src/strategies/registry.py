@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
+from typing import Any, Mapping
 
 from strategies.base import StrategyEngine, StrategyProfile
 from strategies.engines import BreakoutEngine, MeanRevertEngine, TrendEngine
@@ -197,3 +199,130 @@ def get_profile(strategy_id: str) -> StrategyProfile | None:
         if profile.strategy_id == strategy_id:
             return profile
     return None
+
+
+_BUILTIN_REGISTRY: dict[str, object] | None = None
+_BUILTIN_SCHEMAS: list[dict[str, Any]] | None = None
+
+
+def _validate_param_schema(param: Mapping[str, Any]) -> None:
+    name = param.get("name")
+    if not isinstance(name, str) or not name:
+        raise ValueError("strategy_schema_invalid")
+    param_type = param.get("type")
+    if param_type not in {"int", "float", "bool", "string", "enum"}:
+        raise ValueError("strategy_schema_invalid")
+    if "default" not in param:
+        raise ValueError("strategy_schema_invalid")
+    if "enum" in param:
+        enum = param.get("enum")
+        if enum is not None and not isinstance(enum, list):
+            raise ValueError("strategy_schema_invalid")
+
+
+def _validate_builtin_schema(schema: Mapping[str, Any], strategy_id: str, version: str) -> None:
+    required = {
+        "id",
+        "name",
+        "version",
+        "category",
+        "description",
+        "warmup_bars",
+        "params",
+        "inputs",
+        "outputs",
+    }
+    if not required.issubset(schema.keys()):
+        raise ValueError("strategy_schema_invalid")
+    if schema.get("id") != strategy_id:
+        raise ValueError("strategy_schema_invalid")
+    if schema.get("version") != version:
+        raise ValueError("strategy_schema_invalid")
+    if not isinstance(schema.get("name"), str) or not schema.get("name"):
+        raise ValueError("strategy_schema_invalid")
+    if not isinstance(schema.get("description"), str):
+        raise ValueError("strategy_schema_invalid")
+    warmup = schema.get("warmup_bars")
+    if not isinstance(warmup, int) or isinstance(warmup, bool) or warmup < 0:
+        raise ValueError("strategy_schema_invalid")
+
+    from strategies.builtins.common import ALLOWED_CATEGORIES, ALLOWED_INTENTS, is_semver
+
+    if not is_semver(str(schema.get("version", ""))):
+        raise ValueError("strategy_schema_invalid")
+    if schema.get("category") not in ALLOWED_CATEGORIES:
+        raise ValueError("strategy_schema_invalid")
+
+    params = schema.get("params")
+    if not isinstance(params, list):
+        raise ValueError("strategy_schema_invalid")
+    for param in params:
+        if not isinstance(param, Mapping):
+            raise ValueError("strategy_schema_invalid")
+        _validate_param_schema(param)
+
+    inputs = schema.get("inputs")
+    if not isinstance(inputs, Mapping):
+        raise ValueError("strategy_schema_invalid")
+    series = inputs.get("series")
+    if not isinstance(series, list) or not all(isinstance(item, str) and item for item in series):
+        raise ValueError("strategy_schema_invalid")
+
+    outputs = schema.get("outputs")
+    if not isinstance(outputs, Mapping):
+        raise ValueError("strategy_schema_invalid")
+    intents = outputs.get("intents")
+    if not isinstance(intents, list) or not ALLOWED_INTENTS.issubset(set(intents)):
+        raise ValueError("strategy_schema_invalid")
+    if not isinstance(outputs.get("provides_confidence"), bool):
+        raise ValueError("strategy_schema_invalid")
+    if not isinstance(outputs.get("provides_tags"), bool):
+        raise ValueError("strategy_schema_invalid")
+
+
+def _ensure_builtin_registry() -> None:
+    global _BUILTIN_REGISTRY, _BUILTIN_SCHEMAS
+    if _BUILTIN_REGISTRY is not None:
+        return
+    from strategies.builtins import BUILTIN_STRATEGIES
+
+    registry: dict[str, object] = {}
+    schemas: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for definition in BUILTIN_STRATEGIES:
+        schema = definition.get_schema()
+        if not isinstance(schema, Mapping):
+            raise ValueError("strategy_schema_invalid")
+        strategy_id = str(schema.get("id", ""))
+        version = str(schema.get("version", ""))
+        _validate_builtin_schema(schema, strategy_id, version)
+        key = f"{strategy_id}@{version}"
+        if key in registry:
+            raise ValueError("strategy_duplicate_id")
+        if strategy_id in seen_ids:
+            raise ValueError("strategy_duplicate_id")
+        registry[key] = definition
+        seen_ids.add(strategy_id)
+        schemas.append(dict(schema))
+
+    schemas.sort(key=lambda item: (str(item.get("id", "")), str(item.get("version", ""))))
+    _BUILTIN_REGISTRY = registry
+    _BUILTIN_SCHEMAS = schemas
+
+
+def list_strategies() -> list[dict[str, Any]]:
+    _ensure_builtin_registry()
+    assert _BUILTIN_SCHEMAS is not None
+    return copy.deepcopy(_BUILTIN_SCHEMAS)
+
+
+def get_strategy(strategy_id_version: str):
+    if not isinstance(strategy_id_version, str) or "@" not in strategy_id_version:
+        raise ValueError("strategy_id_invalid")
+    _ensure_builtin_registry()
+    assert _BUILTIN_REGISTRY is not None
+    strategy = _BUILTIN_REGISTRY.get(strategy_id_version)
+    if strategy is None:
+        raise ValueError("strategy_not_found")
+    return strategy

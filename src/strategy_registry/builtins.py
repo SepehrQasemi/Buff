@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from strategy_registry.registry import StrategyDefinition, StrategyRegistryError, register_strategy
 from strategies.runners.mean_revert_v1 import MEAN_REVERT_V1_SPEC, mean_revert_v1_runner
 from strategies.runners.trend_follow_v1 import TREND_FOLLOW_V1_SPEC, trend_follow_v1_runner
@@ -22,4 +24,10 @@ def register_builtin_strategies() -> None:
                 raise
 
 
-__all__ = ["register_builtin_strategies", "BUILTIN_STRATEGY_IDS"]
+def list_intent_strategies() -> list[dict[str, Any]]:
+    from strategies.registry import list_strategies as list_intent_strategies
+
+    return list_intent_strategies()
+
+
+__all__ = ["register_builtin_strategies", "BUILTIN_STRATEGY_IDS", "list_intent_strategies"]
