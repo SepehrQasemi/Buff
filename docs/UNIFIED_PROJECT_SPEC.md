@@ -4,11 +4,20 @@
 - Branch: feat/mvp-smoke. (Evidence: `.git/HEAD#L1`)
 - Commit (current HEAD) is stored in `.git/refs/heads/feat/mvp-smoke`. (Evidence: `.git/refs/heads/feat/mvp-smoke#L1`)
 
+## Phase-0 Source of Truth
+
+All Phase-0 product behavior, scope, constraints, and definitions are specified in the documents under `/docs`.
+
+If any other document in the repository conflicts with `/docs`, the `/docs` specifications take precedence.
+
+All future implementation work (including AI-generated changes) must treat `/docs` as the authoritative source for Phase-0.
+
 ## Definition, Goals, Non-Goals
 - Definition: Buff is a modular crypto trading system intended for real personal use with real money in the future. (Evidence: `README.md#L6-L6`)
+- Phase-0 product scope is a TradingView-like strategy analysis lab with a read-only UI (no buy/sell, no broker connections, no live execution controls). (Evidence: `docs/PRODUCT_SPEC.md#L1-L5`, `README.md#L6-L8`)
 - Strategy invention is disallowed; users define indicators/strategies and the system only executes registered, approved strategies through a controlled pipeline. (Evidence: `README.md#L9-L10`)
-- Goals: user-defined indicators/strategies, menu-based execution, safe path to auto-trading (paper -> staged live -> production live), deterministic/auditable pipeline, canonical 1m ingest with deterministic resampling. (Evidence: `PROJECT_SCOPE.md#L3-L8`)
-- Non-goals: price prediction/forecasting, strategy generation by AI/LLMs, direct UI-triggered order placement, hidden execution logic, signal selling/trading advice, live trading (not in current scope; staged live later), guaranteed profit claims. (Evidence: `PROJECT_SCOPE.md#L10-L14`, `README.md#L30-L34`)
+- Goals: user-defined indicators/strategies, TradingView-like strategy analysis lab (chart-first, visual signals/trades/outcomes), read-only UI (no buy/sell/broker/live controls), menu-based strategy selection (no invention), deterministic/auditable pipeline, canonical 1m ingest with deterministic resampling. (Evidence: `PROJECT_SCOPE.md#L3-L9`)
+- Non-goals: price prediction/forecasting, autonomous strategy generation by AI/LLMs (chatbot provides templates based on user-defined rules), direct UI-triggered order placement or live execution controls, broker connections or live trading controls in UI, multi-tenant SaaS or hosted user accounts (v1), hidden execution logic, signal selling/trading advice, live trading (out of Phase-0 product scope; future only), guaranteed profit claims. (Evidence: `PROJECT_SCOPE.md#L11-L17`, `README.md#L30-L36`)
 
 ## Safety Principles + Invariants
 - Fail-closed everywhere: missing/invalid inputs block execution. (Evidence: `README.md#L14-L14`)
@@ -23,6 +32,7 @@
 - Planes: Core/Data (data ingest/validate/store, features, risk, selector, execution), Control (arming/disarming, approvals/limits, kill switch), Interface (UI + Chatbot, read-only for execution). (Evidence: `ARCHITECTURE.md#L5-L20`)
 - Separation of planes: sandbox authoring (no live execution), control plane (arming/approvals/kill switch), execution plane (broker interaction, risk-locked order flow). (Evidence: `PROJECT_SCOPE.md#L18-L20`)
 - Boundary: UI/chatbot are interface-only and cannot place orders directly; execution runs independently from UI; risk can veto everything. (Evidence: `PROJECT_SCOPE.md#L22-L22`, `ARCHITECTURE.md#L22-L25`)
+- Phase-0 product scope is read-only; broker/execution integrations are out of scope. (Evidence: `PROJECT_SCOPE.md#L25-L26`)
 
 ## Data Timeframes + Resampling
 - Base timeframe is 1m ingest; all higher intervals are deterministic resamples from 1m. (Evidence: `docs/data_timeframes.md#L3-L10`)
@@ -42,10 +52,10 @@
 - M3 metadata is stored next to the parquet as `market_state.meta.json`. (Evidence: `docs/feature-contract.md#L69-L80`)
 
 ## Risk Policy Contract + Schema
-- Risk policy provides a deterministic, explainable permission-to-trade state (green/yellow/red) and is permission-only (no direction prediction, no strategy selection). (Evidence: `RISK_POLICY.md#L3-L5`)
-- States and sizing: green=1.0, yellow=0.5, red=0.0. (Evidence: `RISK_POLICY.md#L7-L10`)
-- Rule summary: high severity events within the window or cooldown -> red; medium severity events within the window -> yellow; otherwise green; low severity events do not change state. (Evidence: `RISK_POLICY.md#L25-L30`)
-- Explainability outputs include reasons and event_ids. (Evidence: `RISK_POLICY.md#L32-L35`)
+- Risk policy provides a deterministic, explainable permission-to-trade state (green/yellow/red) and is permission-only (no direction prediction, no strategy selection). (Evidence: `docs/RISK_POLICY.md#L3-L5`)
+- States and sizing: green=1.0, yellow=0.5, red=0.0. (Evidence: `docs/RISK_POLICY.md#L7-L10`)
+- Rule summary: high severity events within the window or cooldown -> red; medium severity events within the window -> yellow; otherwise green; low severity events do not change state. (Evidence: `docs/RISK_POLICY.md#L25-L30`)
+- Explainability outputs include reasons and event_ids. (Evidence: `docs/RISK_POLICY.md#L32-L35`)
 - Risk permission outputs include risk_state, permission, recommended_scale, reasons, metrics. (Evidence: `docs/RISK_POLICY.md#L43-L48`)
 - Risk report schema required fields: risk_report_version, risk_state, permission, recommended_scale, reasons, thresholds, metrics, evaluated_at. (Evidence: `schemas/risk_report.schema.json#L5-L13`)
 
@@ -82,3 +92,11 @@
 
 ## Quality Gates
 - Quality gates: `ruff check .`, `pytest -q`, `ruff format --check .`. (Evidence: `README.md#L125-L130`)
+
+## Phase-0 Status
+
+Phase-0 is complete and locked.
+
+Product scope, UI behavior, extensibility rules, risk model, and AI assistant roles are frozen as specified under `/docs`.
+
+All subsequent work must be treated as Phase-1+ implementation and MUST NOT redefine Phase-0 decisions.

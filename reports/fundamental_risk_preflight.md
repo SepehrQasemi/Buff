@@ -84,7 +84,7 @@
   - src/risk/types.py
   - src/risk/__init__.py
 - `RISK_POLICY` references:
-  - RISK_POLICY.md
+  - docs/RISK_POLICY.md
 - `risk_state` references found across src/tests/schemas (existing risk/report/engine usage).
 - `permission` references found across src/tests/docs (existing risk permission layer).
 - `decision_records` references found across src/tests/docs (existing decision records subsystem).

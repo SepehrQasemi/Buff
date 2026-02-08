@@ -4,6 +4,7 @@
 ## Overview
 
 Buff is a modular crypto trading system intended for real personal use with real money in the future.
+Phase-0 product scope is a TradingView-like strategy analysis lab with a read-only UI (no buy/sell, no broker connections, no live execution controls).
 It is designed to be safety-first, audit-first, and fail-closed.
 
 Buff does NOT invent strategies. Users define indicators and strategies, and the system only executes
@@ -30,7 +31,9 @@ Invariants:
 Non-goals:
 - Price prediction / forecasting ("no prediction").
 - Signal selling or trading advice.
-- Live trading (not in current scope; staged live later).
+- Live trading (out of Phase-0 product scope; future only).
+- Broker connections or live trading controls in UI.
+- Multi-tenant SaaS or hosted user accounts (v1).
 - Guaranteed profit claims.
 
 Boundary:
@@ -49,6 +52,10 @@ Boundary:
 - `ARCHITECTURE.md`
 - `PROJECT_SCOPE.md`
 - `EXECUTION_SAFETY.md`
+
+## Product Specs
+
+Phase-0 product/spec index: [docs/README.md](docs/README.md)
 
 ## Quickstart
 
@@ -306,7 +313,7 @@ Data -> Features -> Risk -> Strategy Selection -> Execution
 - Features: preset indicators and user-approved indicators
 - Risk: permission layer (GREEN/YELLOW/RED)
 - Strategy Selection: picks only from registered strategies
-- Execution: paper trading first, staged live later
+- Execution: paper trading artifacts; staged live is out of Phase-0 product scope
 
 ## Done v1.0
 
@@ -330,7 +337,7 @@ python -m src.manual.run_manual --workspace demo --symbol BTCUSDT --timeframe 1m
 - Feature Engine
 - Risk Permission Layer
 - Strategy Selector (menu-based; no strategy invention)
-- Execution Engine (paper -> staged live)
+- Execution Engine (paper; staged live is out of Phase-0 product scope)
 - Control Plane (arming, approvals, kill switch)
 - Interface Plane (UI + Chatbot, read-only for execution)
 
