@@ -4,6 +4,14 @@
 - Branch: feat/mvp-smoke. (Evidence: `.git/HEAD#L1`)
 - Commit (current HEAD) is stored in `.git/refs/heads/feat/mvp-smoke`. (Evidence: `.git/refs/heads/feat/mvp-smoke#L1`)
 
+## Phase-0 Source of Truth
+
+All Phase-0 product behavior, scope, constraints, and definitions are specified in the documents under `/docs`.
+
+If any other document in the repository conflicts with `/docs`, the `/docs` specifications take precedence.
+
+All future implementation work (including AI-generated changes) must treat `/docs` as the authoritative source for Phase-0.
+
 ## Definition, Goals, Non-Goals
 - Definition: Buff is a modular crypto trading system intended for real personal use with real money in the future. (Evidence: `README.md#L6-L6`)
 - Phase-0 product scope is a TradingView-like strategy analysis lab with a read-only UI (no buy/sell, no broker connections, no live execution controls). (Evidence: `docs/PRODUCT_SPEC.md#L1-L5`, `README.md#L6-L8`)
