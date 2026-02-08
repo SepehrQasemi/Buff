@@ -108,6 +108,7 @@ def test_export_endpoints(monkeypatch, tmp_path):
 
     invalid = client.get("/api/runs/.hidden/decisions/export", params={"format": "json"})
     assert invalid.status_code == 400
+    assert invalid.json()["code"] == "invalid_run_id"
 
     trimmed = client.get(
         f"/api/runs/{run_id}/decisions",
@@ -121,3 +122,4 @@ def test_export_endpoints(monkeypatch, tmp_path):
         f"/api/runs/{run_id}/decisions/export", params={"format": "json", "symbol": over_limit}
     )
     assert too_many.status_code == 400
+    assert too_many.json()["code"] == "too_many_filter_values"

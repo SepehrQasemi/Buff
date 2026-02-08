@@ -10,6 +10,23 @@ It is designed to be safety-first, audit-first, and fail-closed.
 Buff does NOT invent strategies. Users define indicators and strategies, and the system only executes
 registered, approved strategies through a controlled pipeline.
 
+## Phase-1 Status (COMPLETE)
+
+Phase-1 is complete and contract-locked. It is strictly read-only and artifact-driven.
+
+Guarantees:
+- UI is read-only (no execution, no broker controls, no live trading).
+- Artifacts are the sole source of truth (no recomputation in UI or API).
+- Fail-closed on missing or corrupted data (no silent defaults).
+- Deterministic, repeatable renders for the same artifacts.
+- UI contract: `/runs/<id>` includes `data-testid="chart-workspace"` as a stable marker.
+
+Does NOT include:
+- Live trading or broker integrations.
+- Strategy invention or runtime strategy editing in UI.
+- Any API that mutates or executes trades.
+- Runtime data recomputation or derived metrics outside artifacts.
+
 ## Safety Principles
 
 - Fail-closed everywhere: if inputs are missing or invalid, execution is blocked.
@@ -70,6 +87,63 @@ python -m pip install -e ".[dev]"
 
 Read-only UI for inspecting run artifacts (no execution or mutation). Preferred API prefix is
 `/api/v1` (legacy `/api` remains supported).
+
+### Phase-1 (UI Core) Local Dev
+
+Use the Phase-1 fixtures to validate the chart-first workspace:
+
+```bash
+set ARTIFACTS_ROOT=tests/fixtures/artifacts
+uvicorn apps.api.main:app --reload
+```
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
+Open `http://localhost:3000/runs/phase1_demo`.
+
+**What success looks like (Phase-1):**
+- Candlestick chart renders OHLCV from artifacts with zoom/pan.
+- Trade entry/exit markers appear on the chart.
+- Right sidebar shows Strategy, Trades, Metrics, Timeline tabs populated from artifacts.
+- Risk panel shows level `3` with a hard-cap block reason from artifacts.
+- UI remains read-only; no execution controls are present.
+
+Proof (Phase-1 smoke):
+
+```bash
+node apps/web/scripts/ui-smoke.mjs
+```
+
+## Verify Phase-1
+
+Run the verification gate:
+
+```bash
+python scripts/verify_phase1.py --with-services
+```
+
+Prereqs:
+- Docker is not required for the gate, but Python + Node must be available.
+- The gate starts API/UI locally and uses `tests/fixtures/artifacts` automatically.
+- Use `--no-teardown` to keep services running afterward.
+
+If you already have services running, omit `--with-services`.
+
+Success means:
+- All lint/format checks pass.
+- Test suite passes.
+- UI smoke validates workspace rendering and error handling.
+
+Failure means:
+- The script exits non-zero at the first failing step with a clear label.
+
+Phase-1 completion snapshot prep:
+- Ensure `git status` is clean after committing changes.
+- Create a tag manually once clean (do not auto-tag in scripts).
 
 ### Requirements
 
@@ -139,6 +213,7 @@ environment variable only requires a container restart (no rebuild).
 ```bash
 pytest -q
 node apps/web/scripts/smoke.mjs
+node apps/web/scripts/ui-smoke.mjs
 ```
 
 ### URL filters (shareable)

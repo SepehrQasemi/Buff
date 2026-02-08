@@ -24,8 +24,20 @@ const run = async () => {
     if (!runId) {
       throw new Error("First run is missing id");
     }
-    await requestJson(`/runs/${runId}/summary`);
-    console.log("Smoke OK", { runId });
+    const summary = await requestJson(`/runs/${runId}/summary`);
+    if (runs[0].artifacts?.ohlcv) {
+      await requestJson(`/runs/${runId}/ohlcv?timeframe=${runs[0].timeframe || "1m"}`);
+    }
+    if (runs[0].artifacts?.metrics) {
+      await requestJson(`/runs/${runId}/metrics`);
+    }
+    if (runs[0].artifacts?.timeline) {
+      await requestJson(`/runs/${runId}/timeline`);
+    }
+    if (runs[0].artifacts?.trades) {
+      await requestJson(`/runs/${runId}/trades/markers`);
+    }
+    console.log("Smoke OK", { runId, summary: !!summary });
   } catch (error) {
     console.error("Smoke FAILED", error.message || error);
     process.exit(1);

@@ -43,7 +43,7 @@ export default function RunsPage() {
       <header>
         <div className="header-title">
           <h1>Runs</h1>
-          <span>Latest Buff runs discovered from artifacts.</span>
+          <span>Open a run in the chart workspace (read-only).</span>
         </div>
         <span className="badge info">{runs.length} runs</span>
       </header>
@@ -93,6 +93,9 @@ export default function RunsPage() {
                   Trades ready
                 </span>
               )}
+              <span className="badge ok" style={{ marginTop: "8px" }}>
+                Open Workspace
+              </span>
             </Link>
           ))}
         </div>

@@ -1,0 +1,2 @@
+{"timestamp": "2026-02-01T00:00:00Z", "action": "ENTER_LONG", "risk_level": 3, "risk_state": "GREEN", "permission": "ALLOW", "strategy_id": "trend_follow", "strategy_version": "1.2.0", "data_snapshot_hash": "snap-demo-001", "feature_snapshot_hash": "feat-demo-001"}
+{"timestamp": "2026-02-01T00:05:00Z", "action": "BLOCKED", "risk_level": 3, "risk_state": "RED", "permission": "BLOCK", "risk_reason": "max_daily_loss", "risk_policy_type": "hard_cap"}
