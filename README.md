@@ -50,6 +50,10 @@ Boundary:
 - `PROJECT_SCOPE.md`
 - `EXECUTION_SAFETY.md`
 
+## Product Specs
+
+Phase-0 product/spec index: [docs/README.md](docs/README.md)
+
 ## Quickstart
 
 ```bash
