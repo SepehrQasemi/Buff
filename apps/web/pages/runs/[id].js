@@ -90,7 +90,7 @@ export default function ChartWorkspace() {
   const provenance = summary?.provenance || {};
 
   return (
-    <main className="workspace-shell">
+    <main className="workspace-shell" data-testid="chart-workspace">
       <header className="workspace-header">
         <div>
           <div className="workspace-title">Chart Workspace</div>
@@ -210,7 +210,8 @@ export default function ChartWorkspace() {
             <div>
               <span>Data range:</span>
               <strong>
-                {ohlcv?.start_ts ? ohlcv.start_ts : "n/a"} ->
+                {ohlcv?.start_ts ? ohlcv.start_ts : "n/a"}
+                {" -> "}
                 {ohlcv?.end_ts ? ` ${ohlcv.end_ts}` : ""}
               </strong>
             </div>

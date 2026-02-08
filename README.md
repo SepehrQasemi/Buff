@@ -19,6 +19,7 @@ Guarantees:
 - Artifacts are the sole source of truth (no recomputation in UI or API).
 - Fail-closed on missing or corrupted data (no silent defaults).
 - Deterministic, repeatable renders for the same artifacts.
+- UI contract: `/runs/<id>` includes `data-testid="chart-workspace"` as a stable marker.
 
 Does NOT include:
 - Live trading or broker integrations.
@@ -122,12 +123,15 @@ node apps/web/scripts/ui-smoke.mjs
 Run the verification gate:
 
 ```bash
-python scripts/verify_phase1.py
+python scripts/verify_phase1.py --with-services
 ```
 
 Prereqs:
-- API and UI are running locally (or via `docker compose up --build`).
-- `ARTIFACTS_ROOT=tests/fixtures/artifacts` for Phase-1 fixtures.
+- Docker is not required for the gate, but Python + Node must be available.
+- The gate starts API/UI locally and uses `tests/fixtures/artifacts` automatically.
+- Use `--no-teardown` to keep services running afterward.
+
+If you already have services running, omit `--with-services`.
 
 Success means:
 - All lint/format checks pass.
