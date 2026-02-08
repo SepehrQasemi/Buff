@@ -123,9 +123,11 @@ def test_pagination_rejected(monkeypatch, tmp_path):
 
     response = client.get("/api/runs/run-pagination/decisions", params={"page": 0})
     assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
 
     response = client.get("/api/runs/run-pagination/decisions", params={"page_size": 1000})
     assert response.status_code == 422
+    assert response.json()["code"] == "validation_error"
 
 
 def test_time_range_rejected(monkeypatch, tmp_path):
@@ -140,12 +142,15 @@ def test_time_range_rejected(monkeypatch, tmp_path):
         params={"start_ts": "2026-01-02T00:00:00Z", "end_ts": "2026-01-01T00:00:00Z"},
     )
     assert response.status_code == 400
+    assert response.json()["code"] == "invalid_time_range"
 
     response = client.get("/api/runs/run-range/decisions", params={"start_ts": "not-a-date"})
     assert response.status_code == 400
+    assert response.json()["code"] == "invalid_timestamp"
 
     response = client.get("/api/runs/run-range/decisions", params={"end_ts": "bad"})
     assert response.status_code == 400
+    assert response.json()["code"] == "invalid_timestamp"
 
 
 def test_timestamp_contract_in_endpoints(monkeypatch, tmp_path):
