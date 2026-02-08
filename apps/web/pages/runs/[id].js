@@ -33,6 +33,7 @@ const Tabs = [
   { id: "trades", label: "Trades" },
   { id: "metrics", label: "Metrics" },
   { id: "timeline", label: "Timeline" },
+  { id: "plugins", label: "Plugin Diagnostics" },
   { id: "chat", label: "AI Chat" },
 ];
 
@@ -57,6 +58,9 @@ export default function ChartWorkspace() {
     metricsError,
     timeline,
     timelineError,
+    activePlugins,
+    failedPlugins,
+    pluginsError,
     networkError,
     symbol,
     setSymbol,
@@ -71,6 +75,7 @@ export default function ChartWorkspace() {
   const [activeTab, setActiveTab] = useState("strategy");
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [rangeDraft, setRangeDraft] = useState({ start_ts: "", end_ts: "" });
+  const [selectedStrategy, setSelectedStrategy] = useState("");
 
   useEffect(() => {
     setRangeDraft(range);
@@ -78,6 +83,31 @@ export default function ChartWorkspace() {
 
   const candles = useMemo(() => ohlcv?.candles || [], [ohlcv]);
   const tradeRows = useMemo(() => trades?.results || [], [trades]);
+  const activeStrategies = useMemo(
+    () => (activePlugins?.strategies ? activePlugins.strategies : []),
+    [activePlugins]
+  );
+  const activeIndicators = useMemo(
+    () => (activePlugins?.indicators ? activePlugins.indicators : []),
+    [activePlugins]
+  );
+  const failedStrategies = useMemo(
+    () => (failedPlugins?.strategies ? failedPlugins.strategies : []),
+    [failedPlugins]
+  );
+  const failedIndicators = useMemo(
+    () => (failedPlugins?.indicators ? failedPlugins.indicators : []),
+    [failedPlugins]
+  );
+
+  useEffect(() => {
+    if (selectedStrategy || activeStrategies.length === 0) {
+      return;
+    }
+    const runStrategy = run?.strategy;
+    const match = activeStrategies.find((item) => item.id === runStrategy);
+    setSelectedStrategy(match ? match.id : activeStrategies[0].id);
+  }, [selectedStrategy, activeStrategies, run]);
 
   const applyRange = () => {
     setRange({
@@ -106,6 +136,7 @@ export default function ChartWorkspace() {
       </header>
 
       {networkError && <div className="banner">{networkError}</div>}
+      {pluginsError && <div className="banner">{pluginsError}</div>}
       {runError && <div className="banner">{runError}</div>}
       {summaryError && <div className="banner">{summaryError}</div>}
       {ohlcvError && <div className="banner">{ohlcvError}</div>}
@@ -238,6 +269,36 @@ export default function ChartWorkspace() {
             {activeTab === "strategy" && (
               <div className="panel-stack">
                 <div className="panel-card">
+                  <h3>Strategy Selection</h3>
+                  {activeStrategies.length === 0 ? (
+                    <p className="muted">
+                      No active strategies found. Only validated (PASS) plugins are visible.
+                    </p>
+                  ) : (
+                    <label>
+                      Active Strategies
+                      <select
+                        value={selectedStrategy}
+                        onChange={(event) => setSelectedStrategy(event.target.value)}
+                      >
+                        {activeStrategies.map((strategy) => (
+                          <option key={strategy.id} value={strategy.id}>
+                            {strategy.name ? `${strategy.name} (${strategy.id})` : strategy.id}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {run?.strategy &&
+                    activeStrategies.length > 0 &&
+                    !activeStrategies.some((item) => item.id === run.strategy) && (
+                      <p className="inline-warning" style={{ marginTop: "8px" }}>
+                        Run strategy is not validated. It is hidden from selection lists.
+                      </p>
+                    )}
+                </div>
+
+                <div className="panel-card">
                   <h3>Strategy Context</h3>
                   <div className="kv-grid">
                     <div>
@@ -319,10 +380,20 @@ export default function ChartWorkspace() {
             {activeTab === "indicators" && (
               <div className="panel-card">
                 <h3>Indicators</h3>
-                <p className="muted">
-                  Indicator overlays are read from artifacts. No indicator artifacts were
-                  detected for this run.
-                </p>
+                {activeIndicators.length === 0 ? (
+                  <p className="muted">
+                    No active indicators found. Only validated (PASS) plugins are visible.
+                  </p>
+                ) : (
+                  <div className="kv-grid">
+                    {activeIndicators.map((indicator) => (
+                      <div key={indicator.id}>
+                        <span>{indicator.name || indicator.id}</span>
+                        <strong>{indicator.version || "n/a"}</strong>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -484,6 +555,59 @@ export default function ChartWorkspace() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === "plugins" && (
+              <div className="panel-stack">
+                <div className="panel-card">
+                  <h3>Plugin Diagnostics</h3>
+                  <p className="muted">
+                    Only failed plugins appear here. Active plugins are eligible for selection.
+                  </p>
+                </div>
+                <div className="panel-card">
+                  <h3>Failed Strategies</h3>
+                  {failedStrategies.length === 0 ? (
+                    <p className="muted">No failed strategies detected.</p>
+                  ) : (
+                    failedStrategies.map((item) => (
+                      <div key={item.id} className="timeline-item">
+                        <div className="timeline-time">{item.validated_at_utc || "n/a"}</div>
+                        <div>
+                          <strong>{item.id}</strong>
+                          <p className="muted">Fingerprint: {item.fingerprint || "n/a"}</p>
+                          {item.errors?.map((error, index) => (
+                            <p key={`${item.id}-${index}`} className="inline-warning">
+                              {error.rule_id}: {error.message}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <div className="panel-card">
+                  <h3>Failed Indicators</h3>
+                  {failedIndicators.length === 0 ? (
+                    <p className="muted">No failed indicators detected.</p>
+                  ) : (
+                    failedIndicators.map((item) => (
+                      <div key={item.id} className="timeline-item">
+                        <div className="timeline-time">{item.validated_at_utc || "n/a"}</div>
+                        <div>
+                          <strong>{item.id}</strong>
+                          <p className="muted">Fingerprint: {item.fingerprint || "n/a"}</p>
+                          {item.errors?.map((error, index) => (
+                            <p key={`${item.id}-${index}`} className="inline-warning">
+                              {error.rule_id}: {error.message}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             )}
 

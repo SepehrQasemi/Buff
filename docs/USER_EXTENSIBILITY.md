@@ -15,3 +15,6 @@ Validation writes `artifacts/plugins/<type>/<id>/validation.json` with PASS/FAIL
 
 ## Visibility Rule
 Only plugins with `status=PASS` are eligible for UI selection lists. Invalid plugins remain hidden and cannot be selected.
+
+## Diagnostics
+The UI reads plugin eligibility from validation artifacts. Failed plugins appear in a diagnostics panel with rule_id and message.

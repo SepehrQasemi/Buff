@@ -117,3 +117,7 @@ export const getTradeMarkers = (id, params) => request(`/runs/${id}/trades/marke
 export const getMetrics = (id) => request(`/runs/${id}/metrics`);
 
 export const getTimeline = (id, params) => request(`/runs/${id}/timeline`, params);
+
+export const getActivePlugins = () => request("/plugins/active");
+
+export const getFailedPlugins = () => request("/plugins/failed");
