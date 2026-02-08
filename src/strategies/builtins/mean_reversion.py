@@ -224,7 +224,7 @@ def zscore_reversion_get_schema() -> dict[str, Any]:
 
 
 def zscore_reversion_on_bar(ctx) -> dict[str, Any]:
-    history, params, in_warmup, _ = prepare_context(ctx, _ZSCORE_SCHEMA)
+    history, params, in_warmup, position = prepare_context(ctx, _ZSCORE_SCHEMA)
     lookback = int(params["lookback"])
     entry_z = float(params["entry_z"])
     exit_z = float(params["exit_z"])
@@ -244,9 +244,9 @@ def zscore_reversion_on_bar(ctx) -> dict[str, Any]:
         return intent_response("ENTER_LONG", confidence=0.6, tags=["zscore_low"])
     if value >= entry_z:
         return intent_response("ENTER_SHORT", confidence=0.6, tags=["zscore_high"])
-    if value >= -exit_z:
+    if position is not None and position.side == "LONG" and value >= -exit_z:
         return intent_response("EXIT_LONG", confidence=0.4, tags=["zscore_exit_long"])
-    if value <= exit_z:
+    if position is not None and position.side == "SHORT" and value <= exit_z:
         return intent_response("EXIT_SHORT", confidence=0.4, tags=["zscore_exit_short"])
     return intent_response("HOLD")
 
