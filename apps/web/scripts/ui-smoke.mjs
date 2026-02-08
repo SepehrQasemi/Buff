@@ -27,6 +27,29 @@ const requestText = async (url) => {
   return response.text();
 };
 
+const WORKSPACE_MARKER = 'data-testid="chart-workspace"';
+
+const waitForMarker = async (url, marker, timeoutMs = 30000) => {
+  const start = Date.now();
+  let lastError;
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const html = await requestText(url);
+      if (html.includes(marker)) {
+        return html;
+      }
+      lastError = new Error(`Marker not found yet: ${marker}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  throw new Error(`Timed out waiting for marker: ${marker}`);
+};
+
 const findRun = (runs) => {
   if (!Array.isArray(runs) || runs.length === 0) {
     return null;
@@ -43,10 +66,7 @@ const run = async () => {
       throw new Error("No runs returned from API");
     }
     const runId = target.id;
-    const html = await requestText(buildUrl(uiBase, `/runs/${runId}`));
-    if (!html.includes("Chart Workspace")) {
-      throw new Error("UI response missing workspace marker text");
-    }
+    await waitForMarker(buildUrl(uiBase, `/runs/${runId}`), WORKSPACE_MARKER);
     if (target.artifacts?.trades) {
       const markers = await requestJson(buildUrl(apiBase, `/runs/${runId}/trades/markers`));
       if (!Array.isArray(markers.markers) || markers.markers.length === 0) {

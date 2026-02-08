@@ -13,6 +13,12 @@ an actionable HTTP error (typically 404 for missing artifacts, 400 for invalid p
 - Fail-closed on missing or corrupted data (never return silent defaults).
 - Breaking changes require a contractVersion bump.
 
+## UI Contract (Phase-1)
+- The chart workspace root (`/runs/{run_id}`) must include
+  `data-testid="chart-workspace"` as a stable DOM marker.
+- This marker is relied upon by the Phase-1 verification gate and must not be removed
+  without a contractVersion bump.
+
 ## Base
 - Preferred prefix: `/api/v1`
 - Legacy prefix: `/api` (same handlers)
