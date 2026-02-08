@@ -13,3 +13,4 @@
 ## Approval Workflow
 - Sandbox authoring -> review -> approved registry
 - Live execution requires approved strategy_id
+Phase-0 product scope is read-only; execution governance applies to future execution paths.

@@ -1,4 +1,6 @@
-﻿# Chatbot
+# Chatbot
+
+Phase-0 product behavior for the chatbot is defined in `docs/CHATBOT_SPEC.md`. This document describes the current read-only artifact reporting implementation.
 
 ## Architecture
 - Intent router selects one of: reporting, auditing, teaching (`src/chatbot/router.py`).
@@ -28,3 +30,5 @@ python -c "from pathlib import Path; from chatbot import Chatbot, ChatbotConfig;
 - No mutation of artifacts; all responses are read-only.
 - No summaries when required artifacts are missing (returns "unknown").
 - No invention or extrapolation beyond provided artifacts.
+
+

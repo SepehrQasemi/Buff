@@ -4,6 +4,7 @@
 The risk permission layer is a deterministic gate that consumes precomputed features
 and raw OHLCV and outputs a permission decision. It does **not** generate directional
 signals or execute trades.
+Phase-0 product scope exposes 5 risk levels (1..5) as UI presets; this document describes the internal GREEN/YELLOW/RED permission layer evaluated within a selected level.
 
 ## Inputs
 - ATR feature (default: `atr_14`)

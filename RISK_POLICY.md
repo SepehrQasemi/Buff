@@ -3,6 +3,7 @@
 ## Purpose
 This layer provides a deterministic, explainable permission-to-trade state (green/yellow/red).
 This layer is permission-only: it does not predict direction and does not select strategies.
+Phase-0 product scope exposes 5 risk levels (1..5) as UI presets; this document describes the internal GREEN/YELLOW/RED permission layer evaluated within a selected level.
 
 ## States and sizing
 - green: normal permission, size_multiplier = 1.0

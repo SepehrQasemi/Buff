@@ -6,9 +6,10 @@
 
 ## Definition, Goals, Non-Goals
 - Definition: Buff is a modular crypto trading system intended for real personal use with real money in the future. (Evidence: `README.md#L6-L6`)
+- Phase-0 product scope is a TradingView-like strategy analysis lab with a read-only UI (no buy/sell, no broker connections, no live execution controls). (Evidence: `docs/PRODUCT_SPEC.md#L1-L5`, `README.md#L6-L8`)
 - Strategy invention is disallowed; users define indicators/strategies and the system only executes registered, approved strategies through a controlled pipeline. (Evidence: `README.md#L9-L10`)
-- Goals: user-defined indicators/strategies, menu-based execution, safe path to auto-trading (paper -> staged live -> production live), deterministic/auditable pipeline, canonical 1m ingest with deterministic resampling. (Evidence: `PROJECT_SCOPE.md#L3-L8`)
-- Non-goals: price prediction/forecasting, strategy generation by AI/LLMs, direct UI-triggered order placement, hidden execution logic, signal selling/trading advice, live trading (not in current scope; staged live later), guaranteed profit claims. (Evidence: `PROJECT_SCOPE.md#L10-L14`, `README.md#L30-L34`)
+- Goals: user-defined indicators/strategies, TradingView-like strategy analysis lab (chart-first, visual signals/trades/outcomes), read-only UI (no buy/sell/broker/live controls), menu-based strategy selection (no invention), deterministic/auditable pipeline, canonical 1m ingest with deterministic resampling. (Evidence: `PROJECT_SCOPE.md#L3-L9`)
+- Non-goals: price prediction/forecasting, autonomous strategy generation by AI/LLMs (chatbot provides templates based on user-defined rules), direct UI-triggered order placement or live execution controls, broker connections or live trading controls in UI, multi-tenant SaaS or hosted user accounts (v1), hidden execution logic, signal selling/trading advice, live trading (out of Phase-0 product scope; future only), guaranteed profit claims. (Evidence: `PROJECT_SCOPE.md#L11-L17`, `README.md#L30-L36`)
 
 ## Safety Principles + Invariants
 - Fail-closed everywhere: missing/invalid inputs block execution. (Evidence: `README.md#L14-L14`)
@@ -23,6 +24,7 @@
 - Planes: Core/Data (data ingest/validate/store, features, risk, selector, execution), Control (arming/disarming, approvals/limits, kill switch), Interface (UI + Chatbot, read-only for execution). (Evidence: `ARCHITECTURE.md#L5-L20`)
 - Separation of planes: sandbox authoring (no live execution), control plane (arming/approvals/kill switch), execution plane (broker interaction, risk-locked order flow). (Evidence: `PROJECT_SCOPE.md#L18-L20`)
 - Boundary: UI/chatbot are interface-only and cannot place orders directly; execution runs independently from UI; risk can veto everything. (Evidence: `PROJECT_SCOPE.md#L22-L22`, `ARCHITECTURE.md#L22-L25`)
+- Phase-0 product scope is read-only; broker/execution integrations are out of scope. (Evidence: `PROJECT_SCOPE.md#L25-L26`)
 
 ## Data Timeframes + Resampling
 - Base timeframe is 1m ingest; all higher intervals are deterministic resamples from 1m. (Evidence: `docs/data_timeframes.md#L3-L10`)
