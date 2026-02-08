@@ -1,3 +1,4 @@
+from .builtins import list_intent_strategies
 from .decision import Decision, DecisionAction, DecisionRisk
 from .execution import run_strategy
 from .registry import (
@@ -26,4 +27,5 @@ __all__ = [
     "SelectionRecord",
     "select_strategy",
     "run_strategy",
+    "list_intent_strategies",
 ]
