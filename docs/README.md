@@ -7,3 +7,4 @@
 - [INDICATOR_CONTRACT.md](INDICATOR_CONTRACT.md): User indicator files, interface, validation, and built-in coverage.
 - [RISK_MODEL_SPEC.md](RISK_MODEL_SPEC.md): Two-layer risk model and 5 risk levels.
 - [CHATBOT_SPEC.md](CHATBOT_SPEC.md): Chatbot modes, flows, and safety rules.
+- [PHASE2_CLOSURE.md](PHASE2_CLOSURE.md): Phase-2 closure summary and test status.
