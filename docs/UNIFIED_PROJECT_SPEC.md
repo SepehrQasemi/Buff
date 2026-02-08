@@ -92,3 +92,11 @@ All future implementation work (including AI-generated changes) must treat `/doc
 
 ## Quality Gates
 - Quality gates: `ruff check .`, `pytest -q`, `ruff format --check .`. (Evidence: `README.md#L125-L130`)
+
+## Phase-0 Status
+
+Phase-0 is complete and locked.
+
+Product scope, UI behavior, extensibility rules, risk model, and AI assistant roles are frozen as specified under `/docs`.
+
+All subsequent work must be treated as Phase-1+ implementation and MUST NOT redefine Phase-0 decisions.
