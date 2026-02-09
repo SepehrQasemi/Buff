@@ -29,6 +29,7 @@ from .artifacts import (
     validate_decision_records,
 )
 from .errors import build_error_payload, raise_api_error
+from .plugins import list_active_plugins, list_failed_plugins
 from .timeutils import coerce_ts_param
 
 router = APIRouter()
@@ -50,6 +51,16 @@ def list_runs() -> list[dict[str, object]]:
             {"path": str(artifacts_root)},
         )
     return discover_runs()
+
+
+@router.get("/plugins/active")
+def list_active() -> dict[str, list[dict[str, object]]]:
+    return list_active_plugins(get_artifacts_root())
+
+
+@router.get("/plugins/failed")
+def list_failed() -> dict[str, list[dict[str, object]]]:
+    return list_failed_plugins(get_artifacts_root())
 
 
 @router.get("/runs/{run_id}/summary")

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   getMetrics,
   getOhlcv,
+  getActivePlugins,
+  getFailedPlugins,
   getRunSummary,
   getRuns,
   getTimeline,
@@ -49,6 +51,9 @@ export default function useWorkspace(runId) {
   const [metricsError, setMetricsError] = useState(null);
   const [timeline, setTimeline] = useState([]);
   const [timelineError, setTimelineError] = useState(null);
+  const [activePlugins, setActivePlugins] = useState({ indicators: [], strategies: [] });
+  const [failedPlugins, setFailedPlugins] = useState({ indicators: [], strategies: [] });
+  const [pluginsError, setPluginsError] = useState(null);
   const [networkError, setNetworkError] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
 
@@ -239,6 +244,49 @@ export default function useWorkspace(runId) {
     loadTimeline();
   }, [runId, reloadToken]);
 
+  useEffect(() => {
+    if (!runId) {
+      return;
+    }
+    let active = true;
+    async function loadPlugins() {
+      const [activeResult, failedResult] = await Promise.all([
+        getActivePlugins(),
+        getFailedPlugins(),
+      ]);
+      if (!active) {
+        return;
+      }
+      const normalize = (payload) => ({
+        indicators: Array.isArray(payload?.indicators) ? payload.indicators : [],
+        strategies: Array.isArray(payload?.strategies) ? payload.strategies : [],
+      });
+
+      if (!activeResult.ok) {
+        setPluginsError(formatError(activeResult, "Failed to load active plugins"));
+        if (!activeResult.status) {
+          setNetworkError("API unreachable. Check that the backend is running.");
+        }
+      } else {
+        setActivePlugins(normalize(activeResult.data));
+        setPluginsError(null);
+      }
+
+      if (!failedResult.ok) {
+        setPluginsError(formatError(failedResult, "Failed to load plugin diagnostics"));
+        if (!failedResult.status) {
+          setNetworkError("API unreachable. Check that the backend is running.");
+        }
+      } else {
+        setFailedPlugins(normalize(failedResult.data));
+      }
+    }
+    loadPlugins();
+    return () => {
+      active = false;
+    };
+  }, [runId, reloadToken]);
+
   const availableTimeframes = useMemo(() => {
     if (run?.timeframe && !DEFAULT_TIMEFRAMES.includes(run.timeframe)) {
       return [run.timeframe, ...DEFAULT_TIMEFRAMES];
@@ -265,6 +313,9 @@ export default function useWorkspace(runId) {
     metricsError,
     timeline,
     timelineError,
+    activePlugins,
+    failedPlugins,
+    pluginsError,
     networkError,
     symbol,
     setSymbol,
