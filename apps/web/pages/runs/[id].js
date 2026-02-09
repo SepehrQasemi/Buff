@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import CandlestickChart from "../../components/workspace/CandlestickChart";
+import { getChatModes, postChat } from "../../lib/api";
 import useWorkspace from "../../lib/useWorkspace";
 
 const formatNumber = (value, digits = 2) => {
@@ -36,6 +37,19 @@ const Tabs = [
   { id: "plugins", label: "Plugin Diagnostics" },
   { id: "chat", label: "AI Chat" },
 ];
+
+const DEFAULT_CHAT_MODES = [
+  { id: "add_indicator", label: "Add Indicator" },
+  { id: "add_strategy", label: "Add Strategy" },
+  { id: "review_plugin", label: "Review Plugin" },
+  { id: "explain_trade", label: "Explain Trade" },
+];
+
+const parseCsv = (value) =>
+  String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
 
 export default function ChartWorkspace() {
   const router = useRouter();
@@ -76,10 +90,71 @@ export default function ChartWorkspace() {
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [rangeDraft, setRangeDraft] = useState({ start_ts: "", end_ts: "" });
   const [selectedStrategy, setSelectedStrategy] = useState("");
+  const [chatModes, setChatModes] = useState(DEFAULT_CHAT_MODES);
+  const [chatMode, setChatMode] = useState("add_indicator");
+  const [chatContext, setChatContext] = useState({
+    indicator_id: "",
+    indicator_name: "",
+    indicator_inputs: "close",
+    indicator_outputs: "value",
+    strategy_id: "",
+    strategy_name: "",
+    strategy_inputs: "close",
+    strategy_indicators: "",
+    plugin_kind: "indicator",
+    plugin_id: "",
+    run_id: "",
+    trade_id: "",
+    decision_id: "",
+  });
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatResponse, setChatResponse] = useState(null);
+  const [chatError, setChatError] = useState(null);
+  const [chatLoading, setChatLoading] = useState(false);
 
   useEffect(() => {
     setRangeDraft(range);
   }, [range.start_ts, range.end_ts]);
+
+  useEffect(() => {
+    if (!runId) {
+      return;
+    }
+    setChatContext((current) =>
+      current.run_id ? current : { ...current, run_id: runId }
+    );
+  }, [runId]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadChatModes() {
+      const result = await getChatModes();
+      if (!active) {
+        return;
+      }
+      if (result.ok && Array.isArray(result.data?.modes)) {
+        const normalized = result.data.modes
+          .map((mode) => ({
+            id: mode.mode,
+            label: mode.label || mode.mode,
+            description: mode.description || "",
+          }))
+          .filter((mode) => mode.id);
+        if (normalized.length > 0) {
+          setChatModes(normalized);
+          if (!normalized.some((mode) => mode.id === chatMode)) {
+            setChatMode(normalized[0].id);
+          }
+          return;
+        }
+      }
+      setChatModes(DEFAULT_CHAT_MODES);
+    }
+    loadChatModes();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const candles = useMemo(() => ohlcv?.candles || [], [ohlcv]);
   const tradeRows = useMemo(() => trades?.results || [], [trades]);
@@ -114,6 +189,61 @@ export default function ChartWorkspace() {
       start_ts: rangeDraft.start_ts,
       end_ts: rangeDraft.end_ts,
     });
+  };
+
+  const updateChatField = (field) => (event) => {
+    const value = event.target.value;
+    setChatContext((current) => ({ ...current, [field]: value }));
+  };
+
+  const submitChat = async () => {
+    setChatLoading(true);
+    setChatError(null);
+    setChatResponse(null);
+
+    const context = {};
+    const setIf = (key, value) => {
+      if (value === undefined || value === null || value === "") {
+        return;
+      }
+      context[key] = value;
+    };
+
+    if (chatMode === "add_indicator") {
+      setIf("indicator_id", chatContext.indicator_id);
+      setIf("name", chatContext.indicator_name);
+      setIf("inputs", parseCsv(chatContext.indicator_inputs));
+      setIf("outputs", parseCsv(chatContext.indicator_outputs));
+    }
+
+    if (chatMode === "add_strategy") {
+      setIf("strategy_id", chatContext.strategy_id);
+      setIf("name", chatContext.strategy_name);
+      setIf("inputs", parseCsv(chatContext.strategy_inputs));
+      setIf("indicators", parseCsv(chatContext.strategy_indicators));
+    }
+
+    if (chatMode === "review_plugin") {
+      setIf("kind", chatContext.plugin_kind);
+      setIf("id", chatContext.plugin_id);
+    }
+
+    if (chatMode === "explain_trade") {
+      setIf("run_id", chatContext.run_id || runId);
+      setIf("trade_id", chatContext.trade_id);
+      setIf("decision_id", chatContext.decision_id);
+    }
+
+    const payload = { mode: chatMode, message: chatMessage, context };
+
+    const result = await postChat(payload);
+    if (!result.ok) {
+      setChatError(result.error || "Chat request failed.");
+      setChatLoading(false);
+      return;
+    }
+    setChatResponse(result.data);
+    setChatLoading(false);
   };
 
   const risk = summary?.risk || {};
@@ -612,15 +742,284 @@ export default function ChartWorkspace() {
             )}
 
             {activeTab === "chat" && (
-              <div className="panel-card">
-                <h3>AI Chat</h3>
-                <p className="muted">
-                  Chat is read-only for Phase-1. This shell will host guided flows (add
-                  indicator, explain trade) in a later phase.
-                </p>
-                <div className="chat-shell">
-                  <div className="chat-log">Awaiting artifact-backed prompt</div>
-                  <input type="text" disabled placeholder="Chat disabled in read-only mode" />
+              <div className="panel-stack">
+                <div className="panel-card">
+                  <h3>AI Chat</h3>
+                  <p className="muted">
+                    Read-only guide and reviewer. Generates templates and explains artifacts
+                    without executing trades.
+                  </p>
+                  <div className="chat-wizard">
+                    <div className="chat-fields">
+                      <label>
+                        Mode
+                        <select
+                          value={chatMode}
+                          onChange={(event) => setChatMode(event.target.value)}
+                        >
+                          {chatModes.map((mode) => (
+                            <option key={mode.id} value={mode.id}>
+                              {mode.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {chatModes.find((mode) => mode.id === chatMode)?.description && (
+                        <p className="muted">
+                          {chatModes.find((mode) => mode.id === chatMode).description}
+                        </p>
+                      )}
+                    </div>
+
+                    {chatMode === "add_indicator" && (
+                      <div className="chat-fields">
+                        <label>
+                          Indicator ID
+                          <input
+                            type="text"
+                            value={chatContext.indicator_id}
+                            onChange={updateChatField("indicator_id")}
+                            placeholder="simple_rsi"
+                          />
+                        </label>
+                        <label>
+                          Name
+                          <input
+                            type="text"
+                            value={chatContext.indicator_name}
+                            onChange={updateChatField("indicator_name")}
+                            placeholder="Simple RSI"
+                          />
+                        </label>
+                        <label>
+                          Inputs (comma-separated)
+                          <input
+                            type="text"
+                            value={chatContext.indicator_inputs}
+                            onChange={updateChatField("indicator_inputs")}
+                          />
+                        </label>
+                        <label>
+                          Outputs (comma-separated)
+                          <input
+                            type="text"
+                            value={chatContext.indicator_outputs}
+                            onChange={updateChatField("indicator_outputs")}
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {chatMode === "add_strategy" && (
+                      <div className="chat-fields">
+                        <label>
+                          Strategy ID
+                          <input
+                            type="text"
+                            value={chatContext.strategy_id}
+                            onChange={updateChatField("strategy_id")}
+                            placeholder="simple_cross"
+                          />
+                        </label>
+                        <label>
+                          Name
+                          <input
+                            type="text"
+                            value={chatContext.strategy_name}
+                            onChange={updateChatField("strategy_name")}
+                            placeholder="Simple Cross"
+                          />
+                        </label>
+                        <label>
+                          Series Inputs (comma-separated)
+                          <input
+                            type="text"
+                            value={chatContext.strategy_inputs}
+                            onChange={updateChatField("strategy_inputs")}
+                          />
+                        </label>
+                        <label>
+                          Required Indicators (comma-separated)
+                          <input
+                            type="text"
+                            value={chatContext.strategy_indicators}
+                            onChange={updateChatField("strategy_indicators")}
+                            placeholder="rsi, ema_fast"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {chatMode === "review_plugin" && (
+                      <div className="chat-fields">
+                        <label>
+                          Plugin Type
+                          <select
+                            value={chatContext.plugin_kind}
+                            onChange={updateChatField("plugin_kind")}
+                          >
+                            <option value="indicator">Indicator</option>
+                            <option value="strategy">Strategy</option>
+                          </select>
+                        </label>
+                        <label>
+                          Plugin ID
+                          <input
+                            type="text"
+                            value={chatContext.plugin_id}
+                            onChange={updateChatField("plugin_id")}
+                            placeholder="simple_rsi"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {chatMode === "explain_trade" && (
+                      <div className="chat-fields">
+                        <label>
+                          Run ID
+                          <input
+                            type="text"
+                            value={chatContext.run_id}
+                            onChange={updateChatField("run_id")}
+                            placeholder={runId || "run-123"}
+                          />
+                        </label>
+                        <label>
+                          Trade ID
+                          <input
+                            type="text"
+                            value={chatContext.trade_id}
+                            onChange={updateChatField("trade_id")}
+                            placeholder="trade-001"
+                          />
+                        </label>
+                        <label>
+                          Decision ID (optional)
+                          <input
+                            type="text"
+                            value={chatContext.decision_id}
+                            onChange={updateChatField("decision_id")}
+                            placeholder="decision-001"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    <div className="chat-fields">
+                      <label>
+                        Message
+                        <textarea
+                          value={chatMessage}
+                          onChange={(event) => setChatMessage(event.target.value)}
+                          placeholder="Describe what you want to build or review."
+                          rows={3}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="chat-actions">
+                      <button onClick={submitChat} disabled={chatLoading}>
+                        {chatLoading ? "Generating..." : "Generate Guide"}
+                      </button>
+                      <span className="muted">No execution is triggered from this panel.</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="panel-card">
+                  <h3>Response</h3>
+                  {chatError && <p className="inline-warning">{chatError}</p>}
+                  {!chatError && !chatResponse && (
+                    <p className="muted">No response yet. Submit a request above.</p>
+                  )}
+                  {chatResponse && (
+                    <div className="chat-response">
+                      <div className="chat-section">
+                        <h4>{chatResponse.title || "Response"}</h4>
+                        {chatResponse.summary && (
+                          <p className="muted">{chatResponse.summary}</p>
+                        )}
+                        {chatResponse.blockers?.length > 0 && (
+                          <div className="chat-alert chat-alert-danger">
+                            <strong>Blockers</strong>
+                            <ul className="chat-list">
+                              {chatResponse.blockers.map((item, index) => (
+                                <li key={`blocker-${index}`}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {chatResponse.warnings?.length > 0 && (
+                          <div className="chat-alert chat-alert-warning">
+                            <strong>Warnings</strong>
+                            <ul className="chat-list">
+                              {chatResponse.warnings.map((item, index) => (
+                                <li key={`warning-${index}`}>{item}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="chat-section">
+                        <h4>Steps</h4>
+                        {chatResponse.steps?.length ? (
+                          <ul className="chat-list">
+                            {chatResponse.steps.map((item, index) => (
+                              <li key={item.id || `step-${index}`}>{item.text || item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="muted">No steps returned.</p>
+                        )}
+                      </div>
+
+                      <div className="chat-section">
+                        <h4>Files To Create</h4>
+                        {chatResponse.files_to_create?.length ? (
+                          <div className="chat-file-list">
+                            {chatResponse.files_to_create.map((file, index) => (
+                              <details key={`file-${index}`} className="chat-file">
+                                <summary className="chat-file-path">{file.path}</summary>
+                                <pre className="chat-code">{file.contents}</pre>
+                              </details>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="muted">No files for this response.</p>
+                        )}
+                      </div>
+
+                      <div className="chat-section">
+                        <h4>Commands</h4>
+                        {chatResponse.commands?.length ? (
+                          <ul className="chat-list">
+                            {chatResponse.commands.map((item, index) => (
+                              <li key={`cmd-${index}`}>
+                                <code>{item}</code>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="muted">No commands returned.</p>
+                        )}
+                      </div>
+
+                      <div className="chat-section">
+                        <h4>Success Criteria</h4>
+                        {chatResponse.success_criteria?.length ? (
+                          <ul className="chat-list">
+                            {chatResponse.success_criteria.map((item, index) => (
+                              <li key={`success-${index}`}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="muted">No success criteria returned.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

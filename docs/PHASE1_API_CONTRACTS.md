@@ -136,6 +136,7 @@ Errors are returned as a stable JSON object:
 | `invalid_time_range` | `start_ts` is after `end_ts`. |
 | `too_many_filter_values` | Filter value count exceeds limit. |
 | `invalid_export_format` | Export format is unsupported. |
+| `chat_mode_invalid` | Chat mode is unsupported or invalid. |
 | `validation_error` | Request validation failed (query/path validation). |
 | `http_error` | Unhandled HTTP errors (fallback wrapper). |
 

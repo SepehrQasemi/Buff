@@ -28,6 +28,7 @@ from .artifacts import (
     stream_trades_export,
     validate_decision_records,
 )
+from .chat import router as chat_router
 from .errors import build_error_payload, raise_api_error
 from .plugins import list_active_plugins, list_failed_plugins
 from .timeutils import coerce_ts_param
@@ -406,6 +407,8 @@ app.add_middleware(
 
 app.include_router(router, prefix="/api", include_in_schema=False)
 app.include_router(router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api", include_in_schema=False)
+app.include_router(chat_router, prefix="/api/v1")
 
 
 @app.exception_handler(HTTPException)

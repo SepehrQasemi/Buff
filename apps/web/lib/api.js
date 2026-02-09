@@ -100,6 +100,35 @@ const request = async (path, params) => {
   }
 };
 
+const post = async (path, payload) => {
+  const url = buildApiUrl(path);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    const contentType = response.headers.get("content-type") || "";
+    let data;
+    if (contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: parseErrorMessage(data, `Request failed (${response.status})`),
+        data,
+      };
+    }
+    return { ok: true, status: response.status, data };
+  } catch (error) {
+    return { ok: false, error: error?.message || "Network error" };
+  }
+};
+
 export const getRuns = () => request("/runs");
 
 export const getRunSummary = (id) => request(`/runs/${id}/summary`);
@@ -121,3 +150,7 @@ export const getTimeline = (id, params) => request(`/runs/${id}/timeline`, param
 export const getActivePlugins = () => request("/plugins/active");
 
 export const getFailedPlugins = () => request("/plugins/failed");
+
+export const getChatModes = () => request("/chat/modes");
+
+export const postChat = (payload) => post("/chat", payload);
