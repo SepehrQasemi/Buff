@@ -561,7 +561,10 @@ class _SafetyScanner(ast.NodeVisitor):
             if self._is_time_call(node.func):
                 self._add("FORBIDDEN_OPERATION", "time.time() is not allowed.")
             if self._is_datetime_now(node.func):
-                self._add("FORBIDDEN_OPERATION", "datetime.now() is not allowed.")
+                self._add(
+                    "FORBIDDEN_OPERATION",
+                    "datetime.now()/utcnow()/today() is not allowed.",
+                )
         self.generic_visit(node)
 
     def visit_Attribute(self, node: ast.Attribute) -> None:
@@ -629,7 +632,7 @@ class _SafetyScanner(ast.NodeVisitor):
         )
 
     def _is_datetime_now(self, node: ast.Attribute) -> bool:
-        if node.attr != "now":
+        if node.attr not in {"now", "utcnow", "today"}:
             return False
         if isinstance(node.value, ast.Name) and self._alias_matches(node.value.id, "datetime"):
             return True

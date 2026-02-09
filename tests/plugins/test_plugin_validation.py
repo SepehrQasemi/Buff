@@ -159,6 +159,33 @@ def compute(ctx):
     assert any(error.rule_id == "FORBIDDEN_IMPORT" for error in result.errors)
 
 
+@pytest.mark.parametrize("attr", ["now", "utcnow", "today"])
+def test_static_safety_catches_datetime_variants(tmp_path: Path, attr: str) -> None:
+    unsafe_py = f"""\
+from datetime import datetime
+
+
+def get_schema():
+    return {{}}
+
+
+def compute(ctx):
+    datetime.{attr}()
+    return {{"rsi": 50.0}}
+"""
+    plugin_id = f"unsafe_datetime_{attr}"
+    _write(
+        tmp_path / f"user_indicators/{plugin_id}/indicator.yaml",
+        VALID_INDICATOR_YAML.replace("simple_rsi", plugin_id),
+    )
+    _write(tmp_path / f"user_indicators/{plugin_id}/indicator.py", unsafe_py)
+    bad_candidate = _candidate(tmp_path, "indicator", plugin_id)
+
+    result = validate_candidate(bad_candidate)
+    assert result.status == "FAIL"
+    assert any(error.rule_id == "FORBIDDEN_OPERATION" for error in result.errors)
+
+
 def test_fail_closed_on_validator_crash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _write(tmp_path / "user_indicators/simple_rsi/indicator.yaml", VALID_INDICATOR_YAML)
     _write(tmp_path / "user_indicators/simple_rsi/indicator.py", VALID_INDICATOR_PY)
