@@ -157,8 +157,7 @@ header {
 }
 
 input,
-select,
-textarea {
+select {
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--border);
@@ -614,6 +613,14 @@ th {
 .chat-wizard {
   display: grid;
   gap: 14px;
+}
+
+.chat-wizard textarea {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: white;
+  font-size: 0.9rem;
 }
 
 .chat-fields {
