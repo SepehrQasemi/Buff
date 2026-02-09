@@ -92,6 +92,7 @@ def _load_validation(path: Path, plugin_id: str, plugin_type: str) -> dict[str, 
     else:
         errors = [] if errors is None else _normalize_errors(errors)
 
+    meta = _normalize_meta(payload.get("meta"))
     return {
         "plugin_id": payload.get("plugin_id") or plugin_id,
         "plugin_type": payload.get("plugin_type") or plugin_type,
@@ -99,9 +100,7 @@ def _load_validation(path: Path, plugin_id: str, plugin_type: str) -> dict[str, 
         "errors": errors,
         "validated_at_utc": payload.get("validated_at_utc"),
         "fingerprint": payload.get("fingerprint"),
-        "name": payload.get("name"),
-        "version": payload.get("version"),
-        "category": payload.get("category"),
+        "meta": meta,
     }
 
 
@@ -121,11 +120,12 @@ def _normalize_errors(errors: Any) -> list[dict[str, str]]:
 
 
 def _active_payload(record: dict[str, Any]) -> dict[str, Any]:
+    meta = record.get("meta") or {}
     return {
         "id": record.get("plugin_id"),
-        "name": record.get("name"),
-        "version": record.get("version"),
-        "category": record.get("category"),
+        "name": meta.get("name"),
+        "version": meta.get("version"),
+        "category": meta.get("category"),
         "validated_at_utc": record.get("validated_at_utc"),
         "fingerprint": record.get("fingerprint"),
     }
@@ -154,8 +154,30 @@ def _invalid_record(
         "errors": [{"rule_id": rule_id, "message": message}],
         "validated_at_utc": None,
         "fingerprint": None,
+        "meta": _empty_meta(),
     }
 
 
 def _empty_payload() -> dict[str, list[dict[str, Any]]]:
     return {"indicators": [], "strategies": []}
+
+
+def _normalize_meta(value: Any) -> dict[str, str | None]:
+    if not isinstance(value, dict):
+        return _empty_meta()
+    return {
+        "name": _normalize_meta_value(value.get("name")),
+        "version": _normalize_meta_value(value.get("version")),
+        "category": _normalize_meta_value(value.get("category")),
+    }
+
+
+def _normalize_meta_value(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _empty_meta() -> dict[str, str | None]:
+    return {"name": None, "version": None, "category": None}

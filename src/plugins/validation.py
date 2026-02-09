@@ -59,6 +59,7 @@ class ValidationResult:
     status: ValidationStatus
     errors: list[ValidationError]
     validated_at_utc: str
+    meta: dict[str, str | None]
 
 
 def validate_all(candidates: Iterable[PluginCandidate], out_dir: Path) -> list[ValidationResult]:
@@ -80,7 +81,7 @@ def validate_candidate(candidate: PluginCandidate) -> ValidationResult:
                 message=f"Validator crashed: {exc}",
             )
         ]
-        return _result(candidate, errors)
+        return _result(candidate, errors, _empty_meta())
 
 
 def write_validation_artifact(result: ValidationResult, out_dir: Path) -> None:
@@ -94,14 +95,17 @@ def write_validation_artifact(result: ValidationResult, out_dir: Path) -> None:
         "status": result.status,
         "errors": [error.__dict__ for error in result.errors],
         "validated_at_utc": result.validated_at_utc,
+        "meta": result.meta,
     }
     dest.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
 
 def _validate_candidate(candidate: PluginCandidate) -> ValidationResult:
     errors: list[ValidationError] = []
+    meta = _empty_meta()
     yaml_payload = _load_yaml(candidate.yaml_path, errors)
     if yaml_payload is not None:
+        meta = _extract_meta(yaml_payload)
         if candidate.plugin_type == "indicator":
             _validate_indicator_schema(candidate, yaml_payload, errors)
         else:
@@ -112,10 +116,12 @@ def _validate_candidate(candidate: PluginCandidate) -> ValidationResult:
         _validate_interface(candidate, py_tree, errors)
         _validate_static_safety(py_tree, errors)
 
-    return _result(candidate, errors)
+    return _result(candidate, errors, meta)
 
 
-def _result(candidate: PluginCandidate, errors: list[ValidationError]) -> ValidationResult:
+def _result(
+    candidate: PluginCandidate, errors: list[ValidationError], meta: dict[str, str | None]
+) -> ValidationResult:
     status: ValidationStatus = "PASS" if not errors else "FAIL"
     return ValidationResult(
         plugin_id=candidate.plugin_id,
@@ -124,6 +130,7 @@ def _result(candidate: PluginCandidate, errors: list[ValidationError]) -> Valida
         status=status,
         errors=errors,
         validated_at_utc=datetime.now(timezone.utc).isoformat(),
+        meta=meta,
     )
 
 
@@ -481,6 +488,25 @@ def _add_error(errors: list[ValidationError], rule_id: str, message: str) -> Non
     if any((err.rule_id, err.message) == key for err in errors):
         return
     errors.append(ValidationError(rule_id=rule_id, message=message))
+
+
+def _extract_meta(payload: dict[str, Any]) -> dict[str, str | None]:
+    return {
+        "name": _normalize_meta_value(payload.get("name")),
+        "version": _normalize_meta_value(payload.get("version")),
+        "category": _normalize_meta_value(payload.get("category")),
+    }
+
+
+def _normalize_meta_value(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _empty_meta() -> dict[str, str | None]:
+    return {"name": None, "version": None, "category": None}
 
 
 class _SafetyScanner(ast.NodeVisitor):

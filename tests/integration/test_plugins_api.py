@@ -24,9 +24,11 @@ def test_plugins_active_and_failed(monkeypatch, tmp_path):
             "errors": [],
             "validated_at_utc": "2026-02-01T00:00:00Z",
             "fingerprint": "abc",
-            "name": "RSI",
-            "version": "1.0.0",
-            "category": "momentum",
+            "meta": {
+                "name": "RSI",
+                "version": "1.0.0",
+                "category": "momentum",
+            },
         },
     )
 
@@ -49,6 +51,9 @@ def test_plugins_active_and_failed(monkeypatch, tmp_path):
     assert active.status_code == 200
     active_payload = active.json()
     assert active_payload["indicators"][0]["id"] == "rsi"
+    assert active_payload["indicators"][0]["name"] == "RSI"
+    assert active_payload["indicators"][0]["version"] == "1.0.0"
+    assert active_payload["indicators"][0]["category"] == "momentum"
     assert active_payload["strategies"] == []
 
     failed = client.get("/api/v1/plugins/failed")
