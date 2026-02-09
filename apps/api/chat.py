@@ -53,6 +53,7 @@ _FORBIDDEN_IMPORT_ROOTS = {
     "random",
 }
 _ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _TIMESTAMP_FIELDS = ("timestamp", "timestamp_utc", "ts_utc", "ts", "time", "date")
 
 
@@ -490,7 +491,12 @@ def _explain_trade(request: ChatRequest) -> ChatResponse:
             commands=_explain_missing_commands(run_id),
         )
 
-    run_dir, root_used = _resolve_run_dir(run_id)
+    if not _is_valid_run_id(run_id):
+        return _fail_closed_invalid_run_id(request, run_id)
+
+    run_dir, root_used, invalid = _resolve_run_dir(run_id)
+    if invalid:
+        return _fail_closed_invalid_run_id(request, run_id)
     if run_dir is None or root_used is None:
         return _fail_closed(
             request,
@@ -769,13 +775,52 @@ def _explain_missing_commands(run_id: str) -> list[str]:
     ]
 
 
-def _resolve_run_dir(run_id: str) -> tuple[Path | None, Path | None]:
+def _resolve_run_dir(run_id: str) -> tuple[Path | None, Path | None, bool]:
     candidates = [get_artifacts_root(), Path("runs"), Path("workspaces")]
+    root_used: Path | None = None
     for root in candidates:
-        run_dir = root / run_id
-        if run_dir.exists() and run_dir.is_dir():
-            return run_dir, root
-    return None, None
+        root_used = root.expanduser().resolve()
+        candidate = (root_used / run_id).resolve()
+        if not _is_within_root(candidate, root_used):
+            return None, root_used, True
+        if candidate.exists() and candidate.is_dir():
+            return candidate, root_used, False
+    return None, root_used, False
+
+
+def _is_valid_run_id(run_id: str) -> bool:
+    candidate_id = (run_id or "").strip()
+    if not candidate_id:
+        return False
+    if Path(candidate_id).is_absolute():
+        return False
+    if ".." in candidate_id:
+        return False
+    if "/" in candidate_id or "\\" in candidate_id:
+        return False
+    if not _RUN_ID_RE.match(candidate_id):
+        return False
+    return True
+
+
+def _fail_closed_invalid_run_id(request: ChatRequest, run_id: str) -> ChatResponse:
+    diagnostics = _diagnostics(request, [f"invalid_run_id={run_id}"])
+    steps = [
+        _step("invalid_run_id", "Provide a valid run_id (letters, numbers, ._- only)."),
+        *_explain_missing_steps(run_id),
+    ]
+    return ChatResponse(
+        mode="explain_trade",
+        title="invalid run id",
+        summary="The provided run_id is invalid; no artifacts were read.",
+        steps=steps,
+        files_to_create=[],
+        commands=_explain_missing_commands(run_id),
+        success_criteria=[],
+        warnings=[],
+        blockers=["invalid_run_id"],
+        diagnostics=diagnostics,
+    )
 
 
 def _resolve_plugin_paths(
@@ -1388,6 +1433,15 @@ def _is_within_repo(candidate: Path, repo_root: Path) -> bool:
         return candidate.resolve().is_relative_to(repo_root.resolve())
     except AttributeError:
         return repo_root.resolve() in candidate.resolve().parents
+
+
+def _is_within_root(candidate: Path, root: Path) -> bool:
+    try:
+        return candidate.resolve().is_relative_to(root.resolve())
+    except AttributeError:
+        resolved = candidate.resolve()
+        root_resolved = root.resolve()
+        return resolved == root_resolved or root_resolved in resolved.parents
 
 
 def _empty_response(mode: str, title: str) -> ChatResponse:

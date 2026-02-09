@@ -115,3 +115,53 @@ def test_explain_trade_missing_artifacts():
     data = response.json()
     assert "insufficient_artifacts" in data["blockers"]
     assert data["files_to_create"] == []
+
+
+def test_explain_trade_invalid_run_id_parent():
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat",
+        json={
+            "mode": "explain_trade",
+            "message": "explain trade",
+            "context": {"run_id": "../..", "trade_id": "trade-1"},
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "invalid_run_id" in data["blockers"]
+    assert data["files_to_create"] == []
+
+
+def test_explain_trade_invalid_run_id_separators():
+    client = TestClient(app)
+    for invalid_id in ("a/b", "a\\b"):
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "mode": "explain_trade",
+                "message": "explain trade",
+                "context": {"run_id": invalid_id, "trade_id": "trade-1"},
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "invalid_run_id" in data["blockers"]
+        assert data["files_to_create"] == []
+
+
+def test_explain_trade_valid_run_id_missing_artifacts():
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat",
+        json={
+            "mode": "explain_trade",
+            "message": "explain trade",
+            "context": {"run_id": "abc123", "trade_id": "trade-1"},
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "invalid_run_id" not in data["blockers"]
+    assert "insufficient_artifacts" in data["blockers"]
+    assert data["files_to_create"] == []
