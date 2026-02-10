@@ -31,13 +31,49 @@ const findNearestIndex = (sortedTimes, target) => {
   return clamp(low, 0, sortedTimes.length - 1);
 };
 
-export default function CandlestickChart({ data, markers, height = 420 }) {
+const MARKER_PALETTE = [
+  { entry: "var(--accent)", exit: "var(--accent-2)" },
+  { entry: "var(--chart-up)", exit: "var(--chart-down)" },
+  { entry: "rgba(80, 125, 220, 0.9)", exit: "rgba(231, 129, 94, 0.9)" },
+];
+
+export default function CandlestickChart({ data, markers, markerSets, height = 420 }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const [size, setSize] = useState({ width: 0, height });
   const [view, setView] = useState({ start: 0, end: 0 });
+  const [hoverInfo, setHoverInfo] = useState(null);
   const dragRef = useRef(null);
   const candleWidthRef = useRef(6);
+  const markerHitboxesRef = useRef([]);
+
+  const normalizedMarkerSets = useMemo(() => {
+    if (Array.isArray(markerSets) && markerSets.length) {
+      return markerSets;
+    }
+    if (Array.isArray(markers) && markers.length) {
+      return [{ label: "Run", markers }];
+    }
+    return [];
+  }, [markerSets, markers]);
+
+  const resolvedMarkers = useMemo(() => {
+    if (!normalizedMarkerSets.length) {
+      return [];
+    }
+    return normalizedMarkerSets.flatMap((set, index) => {
+      const palette = MARKER_PALETTE[index % MARKER_PALETTE.length];
+      const entryColor = set.entryColor || palette.entry;
+      const exitColor = set.exitColor || palette.exit;
+      return (set.markers || []).map((marker) => ({
+        ...marker,
+        __runId: set.runId,
+        __label: set.label,
+        __entryColor: entryColor,
+        __exitColor: exitColor,
+      }));
+    });
+  }, [normalizedMarkerSets]);
 
   const times = useMemo(
     () => (Array.isArray(data) ? data.map((item) => toTime(item.ts)) : []),
@@ -162,8 +198,10 @@ export default function CandlestickChart({ data, markers, height = 420 }) {
       ctx.fillRect(xCenter - bodyWidth / 2, bodyTop, bodyWidth, bodyHeight);
     });
 
-    if (Array.isArray(markers) && markers.length) {
-      markers.forEach((marker) => {
+    const hitboxes = [];
+
+    if (resolvedMarkers.length) {
+      resolvedMarkers.forEach((marker) => {
         const markerTime = toTime(marker.timestamp);
         const index = data.findIndex((item) => item.ts === marker.timestamp);
         const resolvedIndex = index >= 0 ? index : findNearestIndex(times, markerTime);
@@ -178,7 +216,7 @@ export default function CandlestickChart({ data, markers, height = 420 }) {
         const yPos = price ? priceToY(price) : padding.top;
         const type = marker.marker_type || "event";
         const isEntry = type === "entry";
-        const color = isEntry ? "var(--accent)" : "var(--accent-2)";
+        const color = isEntry ? marker.__entryColor : marker.__exitColor;
 
         ctx.fillStyle = color;
         ctx.beginPath();
@@ -193,9 +231,25 @@ export default function CandlestickChart({ data, markers, height = 420 }) {
         }
         ctx.closePath();
         ctx.fill();
+
+        hitboxes.push({
+          x: xCenter,
+          y: yPos,
+          radius: 10,
+          runId: marker.__runId,
+          label: marker.__label,
+          type,
+          timestamp: marker.timestamp,
+          price,
+        });
       });
     }
-  }, [data, markers, size, view, height, times]);
+
+    markerHitboxesRef.current = hitboxes;
+    if (hitboxes.length === 0 && hoverInfo) {
+      setHoverInfo(null);
+    }
+  }, [data, resolvedMarkers, size, view, height, times, hoverInfo]);
 
   const handleWheel = (event) => {
     event.preventDefault();
@@ -223,19 +277,65 @@ export default function CandlestickChart({ data, markers, height = 420 }) {
   };
 
   const handlePointerMove = (event) => {
-    if (!dragRef.current || !data || data.length === 0) {
+    if (!data || data.length === 0) {
       return;
     }
-    const dx = event.clientX - dragRef.current.startX;
-    const candleShift = Math.round(-dx / (candleWidthRef.current || 1));
-    const visibleCount = Math.max(view.end - view.start, 1);
-    let start = dragRef.current.startView.start + candleShift;
-    start = clamp(start, 0, data.length - visibleCount);
-    setView({ start, end: start + visibleCount });
+    if (dragRef.current) {
+      const dx = event.clientX - dragRef.current.startX;
+      const candleShift = Math.round(-dx / (candleWidthRef.current || 1));
+      const visibleCount = Math.max(view.end - view.start, 1);
+      let start = dragRef.current.startView.start + candleShift;
+      start = clamp(start, 0, data.length - visibleCount);
+      setView({ start, end: start + visibleCount });
+      return;
+    }
+    const hitboxes = markerHitboxesRef.current || [];
+    if (!hitboxes.length) {
+      if (hoverInfo) {
+        setHoverInfo(null);
+      }
+      return;
+    }
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    let closest = null;
+    let closestDist = Number.POSITIVE_INFINITY;
+    hitboxes.forEach((hitbox) => {
+      const dx = x - hitbox.x;
+      const dy = y - hitbox.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= hitbox.radius && dist < closestDist) {
+        closest = hitbox;
+        closestDist = dist;
+      }
+    });
+    if (!closest) {
+      if (hoverInfo) {
+        setHoverInfo(null);
+      }
+      return;
+    }
+    setHoverInfo({
+      ...closest,
+      screenX: x,
+      screenY: y,
+    });
   };
 
   const handlePointerUp = () => {
     dragRef.current = null;
+  };
+
+  const handlePointerLeave = () => {
+    dragRef.current = null;
+    if (hoverInfo) {
+      setHoverInfo(null);
+    }
   };
 
   if (!data || data.length === 0) {
@@ -250,14 +350,44 @@ export default function CandlestickChart({ data, markers, height = 420 }) {
     <div
       className="chart-frame"
       ref={containerRef}
-      style={{ height }}
+      style={{ height, position: "relative" }}
       onWheel={handleWheel}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
     >
       <canvas ref={canvasRef} />
+      {hoverInfo && (
+        <div
+          style={{
+            position: "absolute",
+            left: Math.max(
+              8,
+              Math.min((hoverInfo.screenX || 0) + 12, (size.width || 0) - 220)
+            ),
+            top: Math.max(
+              8,
+              Math.min((hoverInfo.screenY || 0) + 12, (size.height || 0) - 80)
+            ),
+            background: "rgba(18, 22, 26, 0.9)",
+            color: "white",
+            padding: "8px 10px",
+            borderRadius: "8px",
+            fontSize: "0.75rem",
+            pointerEvents: "none",
+            maxWidth: "220px",
+            lineHeight: 1.3,
+          }}
+        >
+          <div style={{ fontWeight: 600 }}>
+            {hoverInfo.runId || hoverInfo.label || "Run"}
+          </div>
+          <div>
+            {hoverInfo.type || "event"} | {hoverInfo.timestamp || "n/a"}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

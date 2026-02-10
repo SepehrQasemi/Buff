@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getRunSummary, getRuns } from "../../lib/api";
+import CandlestickChart from "../../components/workspace/CandlestickChart";
+import { getMetrics, getOhlcv, getRunSummary, getRuns, getTradeMarkers } from "../../lib/api";
 
 const formatValue = (value) => {
   if (value === null || value === undefined || value === "") {
@@ -96,6 +97,25 @@ const buildMetadataRows = ({ runId, runMeta, summary }) => {
   ];
 };
 
+const RUN_MARKER_STYLES = {
+  runA: { entry: "var(--accent)", exit: "var(--accent-2)" },
+  runB: { entry: "var(--chart-up)", exit: "var(--chart-down)" },
+};
+
+const isScalarMetric = (value) =>
+  value === null ||
+  value === undefined ||
+  ["string", "number", "boolean"].includes(typeof value);
+
+const collectMetricKeys = (metrics) => {
+  if (!metrics || typeof metrics !== "object") {
+    return [];
+  }
+  return Object.entries(metrics)
+    .filter(([, value]) => isScalarMetric(value))
+    .map(([key]) => key);
+};
+
 export default function CompareRunsPage() {
   const router = useRouter();
   const runAId = normalizeParam(router.query.runA);
@@ -107,7 +127,19 @@ export default function CompareRunsPage() {
   const [summaryB, setSummaryB] = useState(null);
   const [summaryErrorA, setSummaryErrorA] = useState(null);
   const [summaryErrorB, setSummaryErrorB] = useState(null);
+  const [metricsA, setMetricsA] = useState(null);
+  const [metricsB, setMetricsB] = useState(null);
+  const [metricsErrorA, setMetricsErrorA] = useState(null);
+  const [metricsErrorB, setMetricsErrorB] = useState(null);
+  const [markersA, setMarkersA] = useState([]);
+  const [markersB, setMarkersB] = useState([]);
+  const [markersErrorA, setMarkersErrorA] = useState(null);
+  const [markersErrorB, setMarkersErrorB] = useState(null);
+  const [ohlcv, setOhlcv] = useState(null);
+  const [ohlcvError, setOhlcvError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [showRunAMarkers, setShowRunAMarkers] = useState(true);
+  const [showRunBMarkers, setShowRunBMarkers] = useState(true);
 
   const requestIdRef = useRef(0);
   const abortRef = useRef(null);
@@ -118,6 +150,21 @@ export default function CompareRunsPage() {
     }
     if (!runAId || !runBId || runAId === runBId) {
       setLoading(false);
+      setRunsError(null);
+      setSummaryA(null);
+      setSummaryB(null);
+      setSummaryErrorA(null);
+      setSummaryErrorB(null);
+      setMetricsA(null);
+      setMetricsB(null);
+      setMetricsErrorA(null);
+      setMetricsErrorB(null);
+      setMarkersA([]);
+      setMarkersB([]);
+      setMarkersErrorA(null);
+      setMarkersErrorB(null);
+      setOhlcv(null);
+      setOhlcvError(null);
       return;
     }
     const requestId = requestIdRef.current + 1;
@@ -131,27 +178,67 @@ export default function CompareRunsPage() {
     setRunsError(null);
     setSummaryErrorA(null);
     setSummaryErrorB(null);
+    setMetricsErrorA(null);
+    setMetricsErrorB(null);
+    setMarkersErrorA(null);
+    setMarkersErrorB(null);
+    setOhlcvError(null);
     setSummaryA(null);
     setSummaryB(null);
+    setMetricsA(null);
+    setMetricsB(null);
+    setMarkersA([]);
+    setMarkersB([]);
+    setOhlcv(null);
     async function load() {
-      const [runsResult, summaryAResult, summaryBResult] = await Promise.all([
-        getRuns({ signal: controller.signal, cache: true }),
-        getRunSummary(runAId, { signal: controller.signal, cache: true }),
-        getRunSummary(runBId, { signal: controller.signal, cache: true }),
-      ]);
-      if (
-        requestIdRef.current !== requestId ||
-        runsResult.aborted ||
-        summaryAResult.aborted ||
-        summaryBResult.aborted
-      ) {
+      const runsResult = await getRuns({ signal: controller.signal, cache: true });
+      if (requestIdRef.current !== requestId || runsResult.aborted) {
         return;
       }
 
+      let runIndex = [];
       if (runsResult.ok) {
-        setRunsIndex(Array.isArray(runsResult.data) ? runsResult.data : []);
+        runIndex = Array.isArray(runsResult.data) ? runsResult.data : [];
+        setRunsIndex(runIndex);
       } else {
         setRunsError(formatError(runsResult, "Failed to load run index"));
+      }
+
+      const runMetaA = runIndex.find((run) => run.id === runAId);
+      const ohlcvParams = { limit: 2000 };
+      if (runMetaA?.timeframe) {
+        ohlcvParams.timeframe = runMetaA.timeframe;
+      }
+
+      const [
+        summaryAResult,
+        summaryBResult,
+        metricsAResult,
+        metricsBResult,
+        markersAResult,
+        markersBResult,
+        ohlcvResult,
+      ] = await Promise.all([
+        getRunSummary(runAId, { signal: controller.signal, cache: true }),
+        getRunSummary(runBId, { signal: controller.signal, cache: true }),
+        getMetrics(runAId, { signal: controller.signal, cache: true }),
+        getMetrics(runBId, { signal: controller.signal, cache: true }),
+        getTradeMarkers(runAId, {}, { signal: controller.signal, cache: true }),
+        getTradeMarkers(runBId, {}, { signal: controller.signal, cache: true }),
+        getOhlcv(runAId, ohlcvParams, { signal: controller.signal, cache: true }),
+      ]);
+
+      if (
+        requestIdRef.current !== requestId ||
+        summaryAResult.aborted ||
+        summaryBResult.aborted ||
+        metricsAResult.aborted ||
+        metricsBResult.aborted ||
+        markersAResult.aborted ||
+        markersBResult.aborted ||
+        ohlcvResult.aborted
+      ) {
+        return;
       }
 
       if (summaryAResult.ok) {
@@ -165,6 +252,41 @@ export default function CompareRunsPage() {
       } else {
         setSummaryErrorB(formatError(summaryBResult, "Failed to load run B summary"));
       }
+
+      if (metricsAResult.ok) {
+        setMetricsA(metricsAResult.data);
+      } else {
+        setMetricsErrorA(formatError(metricsAResult, "Failed to load run A metrics"));
+      }
+
+      if (metricsBResult.ok) {
+        setMetricsB(metricsBResult.data);
+      } else {
+        setMetricsErrorB(formatError(metricsBResult, "Failed to load run B metrics"));
+      }
+
+      if (markersAResult.ok) {
+        setMarkersA(
+          Array.isArray(markersAResult.data?.markers) ? markersAResult.data.markers : []
+        );
+      } else {
+        setMarkersErrorA(formatError(markersAResult, "Failed to load run A markers"));
+      }
+
+      if (markersBResult.ok) {
+        setMarkersB(
+          Array.isArray(markersBResult.data?.markers) ? markersBResult.data.markers : []
+        );
+      } else {
+        setMarkersErrorB(formatError(markersBResult, "Failed to load run B markers"));
+      }
+
+      if (ohlcvResult.ok) {
+        setOhlcv(ohlcvResult.data);
+      } else {
+        setOhlcvError(formatError(ohlcvResult, "Failed to load run A OHLCV"));
+      }
+
       setLoading(false);
     }
     load();
@@ -182,6 +304,37 @@ export default function CompareRunsPage() {
     [runsIndex, runBId]
   );
 
+  const candles = useMemo(() => (ohlcv?.candles ? ohlcv.candles : []), [ohlcv]);
+  const metricKeys = useMemo(() => {
+    const keys = new Set();
+    collectMetricKeys(metricsA).forEach((key) => keys.add(key));
+    collectMetricKeys(metricsB).forEach((key) => keys.add(key));
+    return Array.from(keys).sort();
+  }, [metricsA, metricsB]);
+
+  const markerSets = useMemo(() => {
+    const sets = [];
+    if (showRunAMarkers) {
+      sets.push({
+        runId: runAId,
+        label: "Run A",
+        markers: markersA,
+        entryColor: RUN_MARKER_STYLES.runA.entry,
+        exitColor: RUN_MARKER_STYLES.runA.exit,
+      });
+    }
+    if (showRunBMarkers) {
+      sets.push({
+        runId: runBId,
+        label: "Run B",
+        markers: markersB,
+        entryColor: RUN_MARKER_STYLES.runB.entry,
+        exitColor: RUN_MARKER_STYLES.runB.exit,
+      });
+    }
+    return sets;
+  }, [showRunAMarkers, showRunBMarkers, markersA, markersB, runAId, runBId]);
+
   const invalidParams = !router.isReady
     ? null
     : !runAId || !runBId
@@ -195,7 +348,7 @@ export default function CompareRunsPage() {
       <header>
         <div className="header-title">
           <h1>Compare Runs</h1>
-          <span>Metadata-only view. Artifacts remain the source of truth.</span>
+          <span>Artifact-only compare view. Artifacts remain the source of truth.</span>
         </div>
         <Link href="/runs" className="badge info">
           Back to Runs
@@ -204,6 +357,154 @@ export default function CompareRunsPage() {
 
       {invalidParams && <div className="banner">{invalidParams}</div>}
       {runsError && <div className="banner">{runsError}</div>}
+
+      {!invalidParams && (
+        <section className="chart-panel" style={{ marginBottom: "24px" }}>
+          <div className="chart-toolbar" style={{ justifyContent: "space-between" }}>
+            <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
+              <label>
+                Run A markers
+                <input
+                  type="checkbox"
+                  checked={showRunAMarkers}
+                  onChange={(event) => setShowRunAMarkers(event.target.checked)}
+                />
+              </label>
+              <label>
+                Run B markers
+                <input
+                  type="checkbox"
+                  checked={showRunBMarkers}
+                  onChange={(event) => setShowRunBMarkers(event.target.checked)}
+                />
+              </label>
+            </div>
+            <div className="muted" style={{ fontSize: "0.8rem" }}>
+              Entry markers point up. Exit markers point down.
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "16px", flexWrap: "wrap", marginBottom: "8px" }}>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <span style={{ fontWeight: 600 }}>Run A</span>
+              <span
+                style={{
+                  width: "10px",
+                  height: "10px",
+                  background: RUN_MARKER_STYLES.runA.entry,
+                  display: "inline-block",
+                  borderRadius: "2px",
+                }}
+              />
+              <span className="muted" style={{ fontSize: "0.75rem" }}>
+                entry
+              </span>
+              <span
+                style={{
+                  width: "10px",
+                  height: "10px",
+                  background: RUN_MARKER_STYLES.runA.exit,
+                  display: "inline-block",
+                  borderRadius: "2px",
+                }}
+              />
+              <span className="muted" style={{ fontSize: "0.75rem" }}>
+                exit
+              </span>
+              <span className="muted" style={{ fontSize: "0.75rem" }}>
+                {formatValue(runAId)}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <span style={{ fontWeight: 600 }}>Run B</span>
+              <span
+                style={{
+                  width: "10px",
+                  height: "10px",
+                  background: RUN_MARKER_STYLES.runB.entry,
+                  display: "inline-block",
+                  borderRadius: "2px",
+                }}
+              />
+              <span className="muted" style={{ fontSize: "0.75rem" }}>
+                entry
+              </span>
+              <span
+                style={{
+                  width: "10px",
+                  height: "10px",
+                  background: RUN_MARKER_STYLES.runB.exit,
+                  display: "inline-block",
+                  borderRadius: "2px",
+                }}
+              />
+              <span className="muted" style={{ fontSize: "0.75rem" }}>
+                exit
+              </span>
+              <span className="muted" style={{ fontSize: "0.75rem" }}>
+                {formatValue(runBId)}
+              </span>
+            </div>
+          </div>
+          {ohlcvError && <p className="inline-warning">{ohlcvError}</p>}
+          {markersErrorA && (
+            <p className="inline-warning">{`Run A markers: ${markersErrorA}`}</p>
+          )}
+          {markersErrorB && (
+            <p className="inline-warning">{`Run B markers: ${markersErrorB}`}</p>
+          )}
+          <CandlestickChart data={candles} markerSets={markerSets} height={360} />
+          <div className="chart-status">
+            <div>
+              <span>Baseline OHLCV:</span>{" "}
+              <strong>{formatValue(runAId || "n/a")}</strong>
+            </div>
+            <div>
+              <span>Bars:</span> <strong>{ohlcv?.count ?? 0}</strong>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {!invalidParams && (
+        <div className="card" style={{ marginBottom: "24px" }}>
+          <div className="section-title">
+            <h3>Metrics (artifact)</h3>
+            <span className="badge info">Run A vs Run B</span>
+          </div>
+          {metricsErrorA && (
+            <p className="inline-warning">{`Run A metrics: ${metricsErrorA}`}</p>
+          )}
+          {metricsErrorB && (
+            <p className="inline-warning">{`Run B metrics: ${metricsErrorB}`}</p>
+          )}
+          {loading ? (
+            <p className="muted">Loading metrics...</p>
+          ) : metricKeys.length === 0 ? (
+            <p className="muted">No scalar metrics available.</p>
+          ) : (
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Metric</th>
+                    <th>{`Run A (${formatValue(runAId)})`}</th>
+                    <th>{`Run B (${formatValue(runBId)})`}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {metricKeys.map((key) => (
+                    <tr key={key}>
+                      <td>{key}</td>
+                      <td>{formatValue(metricsA?.[key])}</td>
+                      <td>{formatValue(metricsB?.[key])}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid two">
         {[
