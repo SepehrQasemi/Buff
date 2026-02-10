@@ -79,6 +79,7 @@ const DEFAULT_CHAT_MODES = [
   { id: "add_indicator", label: "Add Indicator" },
   { id: "add_strategy", label: "Add Strategy" },
   { id: "review_plugin", label: "Review Plugin" },
+  { id: "troubleshoot_errors", label: "Troubleshoot Errors" },
   { id: "explain_trade", label: "Explain Trade" },
 ];
 const TRADE_PAGE_SIZES = [50, 100, 250, 500];
@@ -145,6 +146,7 @@ export default function ChartWorkspace() {
     strategy_indicators: "",
     plugin_kind: "indicator",
     plugin_id: "",
+    error_text: "",
     run_id: "",
     trade_id: "",
     decision_id: "",
@@ -357,6 +359,13 @@ export default function ChartWorkspace() {
     if (chatMode === "review_plugin") {
       setIf("kind", chatContext.plugin_kind);
       setIf("id", chatContext.plugin_id);
+    }
+
+    if (chatMode === "troubleshoot_errors") {
+      setIf("error_text", chatContext.error_text || chatMessage);
+      setIf("plugin_type", chatContext.plugin_kind);
+      setIf("plugin_id", chatContext.plugin_id);
+      setIf("run_id", chatContext.run_id || runId);
     }
 
     if (chatMode === "explain_trade") {
@@ -1117,6 +1126,48 @@ export default function ChartWorkspace() {
                             value={chatContext.plugin_id}
                             onChange={updateChatField("plugin_id")}
                             placeholder="simple_rsi"
+                          />
+                        </label>
+                      </div>
+                    )}
+
+                    {chatMode === "troubleshoot_errors" && (
+                      <div className="chat-fields">
+                        <label>
+                          Error Text
+                          <textarea
+                            value={chatContext.error_text}
+                            onChange={updateChatField("error_text")}
+                            placeholder="Paste validation errors or traceback here."
+                            rows={4}
+                          />
+                        </label>
+                        <label>
+                          Plugin Type (optional)
+                          <select
+                            value={chatContext.plugin_kind}
+                            onChange={updateChatField("plugin_kind")}
+                          >
+                            <option value="indicator">Indicator</option>
+                            <option value="strategy">Strategy</option>
+                          </select>
+                        </label>
+                        <label>
+                          Plugin ID (optional)
+                          <input
+                            type="text"
+                            value={chatContext.plugin_id}
+                            onChange={updateChatField("plugin_id")}
+                            placeholder="simple_rsi"
+                          />
+                        </label>
+                        <label>
+                          Run ID (optional)
+                          <input
+                            type="text"
+                            value={chatContext.run_id}
+                            onChange={updateChatField("run_id")}
+                            placeholder={runId || "run-123"}
                           />
                         </label>
                       </div>
