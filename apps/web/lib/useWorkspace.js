@@ -24,6 +24,8 @@ const DEFAULT_TIMEFRAMES = [
   "1w",
   "1M",
 ];
+const DEFAULT_TRADES_PAGE_SIZE = 250;
+const MAX_TRADES_PAGE_SIZE = 500;
 
 const formatError = (result, fallback) => {
   if (!result) {
@@ -48,6 +50,8 @@ export default function useWorkspace(runId) {
   const [markersError, setMarkersError] = useState(null);
   const [trades, setTrades] = useState({ results: [] });
   const [tradesError, setTradesError] = useState(null);
+  const [tradesPage, setTradesPage] = useState(1);
+  const [tradesPageSize, setTradesPageSize] = useState(DEFAULT_TRADES_PAGE_SIZE);
   const [metrics, setMetrics] = useState(null);
   const [metricsError, setMetricsError] = useState(null);
   const [timeline, setTimeline] = useState([]);
@@ -78,6 +82,43 @@ export default function useWorkspace(runId) {
   const timelineAbortRef = useRef(null);
   const pluginsRequestId = useRef(0);
   const pluginsAbortRef = useRef(null);
+
+  const normalizeTradesPageSize = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return DEFAULT_TRADES_PAGE_SIZE;
+    }
+    return Math.min(parsed, MAX_TRADES_PAGE_SIZE);
+  };
+
+  const normalizeTradesPage = (value) => {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 1) {
+      return 1;
+    }
+    return parsed;
+  };
+
+  const effectiveTradesPageSize = useMemo(
+    () => normalizeTradesPageSize(tradesPageSize),
+    [tradesPageSize]
+  );
+  const effectiveTradesPage = useMemo(
+    () => normalizeTradesPage(tradesPage),
+    [tradesPage]
+  );
+
+  useEffect(() => {
+    if (effectiveTradesPageSize !== tradesPageSize) {
+      setTradesPageSize(effectiveTradesPageSize);
+    }
+  }, [effectiveTradesPageSize, tradesPageSize]);
+
+  useEffect(() => {
+    if (effectiveTradesPage !== tradesPage) {
+      setTradesPage(effectiveTradesPage);
+    }
+  }, [effectiveTradesPage, tradesPage]);
 
   useEffect(() => {
     if (!runId) {
@@ -257,6 +298,31 @@ export default function useWorkspace(runId) {
     if (!runId) {
       return;
     }
+    setTradesPage(1);
+  }, [runId]);
+
+  useEffect(() => {
+    if (!runId) {
+      return;
+    }
+    setTradesPage(1);
+  }, [effectiveTradesPageSize, runId]);
+
+  useEffect(() => {
+    const total = trades?.total;
+    if (total === null || total === undefined) {
+      return;
+    }
+    const maxPage = Math.max(1, Math.ceil(total / effectiveTradesPageSize));
+    if (effectiveTradesPage > maxPage) {
+      setTradesPage(maxPage);
+    }
+  }, [trades?.total, effectiveTradesPage, effectiveTradesPageSize]);
+
+  useEffect(() => {
+    if (!runId) {
+      return;
+    }
     const requestId = tradesRequestId.current + 1;
     tradesRequestId.current = requestId;
     if (tradesAbortRef.current) {
@@ -267,7 +333,7 @@ export default function useWorkspace(runId) {
     async function loadTrades() {
       const result = await getTrades(
         runId,
-        { page: 1, page_size: 250 },
+        { page: effectiveTradesPage, page_size: effectiveTradesPageSize },
         {
           signal: controller.signal,
           cache: true,
@@ -287,7 +353,7 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, reloadToken]);
+  }, [runId, reloadToken, effectiveTradesPage, effectiveTradesPageSize]);
 
   useEffect(() => {
     if (!runId) {
@@ -436,6 +502,10 @@ export default function useWorkspace(runId) {
     markersError,
     trades,
     tradesError,
+    tradesPage: effectiveTradesPage,
+    setTradesPage,
+    tradesPageSize: effectiveTradesPageSize,
+    setTradesPageSize,
     metrics,
     metricsError,
     timeline,
