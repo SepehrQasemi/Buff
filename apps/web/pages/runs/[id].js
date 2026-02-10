@@ -33,6 +33,36 @@ const formatMetricValue = (value) => {
   return String(value);
 };
 
+const normalizeTimelineSeverity = (value) => {
+  const normalized =
+    value === null || value === undefined || value === ""
+      ? "INFO"
+      : String(value).toUpperCase();
+  if (normalized.startsWith("ERR")) {
+    return { filterBucket: "ERROR", label: "ERROR", alwaysVisible: false };
+  }
+  if (normalized.startsWith("WARN")) {
+    return { filterBucket: "WARN", label: "WARN", alwaysVisible: false };
+  }
+  if (normalized.startsWith("INFO")) {
+    return { filterBucket: "INFO", label: "INFO", alwaysVisible: false };
+  }
+  return {
+    filterBucket: "INFO",
+    label: normalized,
+    alwaysVisible: true,
+  };
+};
+
+const extractTimelineDate = (value) => {
+  if (!value) {
+    return "Unknown date";
+  }
+  const text = String(value);
+  const dateToken = text.includes("T") ? text.split("T")[0] : text.split(" ")[0];
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateToken) ? dateToken : "Unknown date";
+};
+
 const formatDate = (value) => (value ? String(value) : "n/a");
 
 const Tabs = [
@@ -123,6 +153,11 @@ export default function ChartWorkspace() {
   const [chatResponse, setChatResponse] = useState(null);
   const [chatError, setChatError] = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
+  const [timelineFilters, setTimelineFilters] = useState({
+    INFO: true,
+    WARN: true,
+    ERROR: true,
+  });
 
   useEffect(() => {
     setRangeDraft(range);
@@ -207,6 +242,36 @@ export default function ChartWorkspace() {
       })
     );
   }, [timeBreakdown]);
+  const filteredTimeline = useMemo(() => {
+    if (!Array.isArray(timeline)) {
+      return [];
+    }
+    return timeline
+      .map((event, index) => ({
+        event,
+        index,
+        severity: normalizeTimelineSeverity(event?.severity),
+        dateKey: extractTimelineDate(event?.timestamp),
+      }))
+      .filter((item) => {
+        if (item.severity?.alwaysVisible) {
+          return true;
+        }
+        return timelineFilters[item.severity?.filterBucket] !== false;
+      });
+  }, [timeline, timelineFilters]);
+  const timelineGroups = useMemo(() => {
+    const groups = [];
+    const indexByDate = new Map();
+    filteredTimeline.forEach((item) => {
+      if (!indexByDate.has(item.dateKey)) {
+        indexByDate.set(item.dateKey, groups.length);
+        groups.push({ dateKey: item.dateKey, items: [] });
+      }
+      groups[indexByDate.get(item.dateKey)].items.push(item);
+    });
+    return groups;
+  }, [filteredTimeline]);
   const activeStrategies = useMemo(
     () => (activePlugins?.strategies ? activePlugins.strategies : []),
     [activePlugins]
@@ -818,19 +883,54 @@ export default function ChartWorkspace() {
                   <p className="inline-warning">{timelineError}</p>
                 ) : (
                   <div className="timeline-list">
-                    {timeline.length === 0 && (
+                    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+                      {["INFO", "WARN", "ERROR"].map((level) => (
+                        <label
+                          key={level}
+                          className="muted"
+                          style={{ display: "flex", gap: "6px", alignItems: "center" }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={timelineFilters[level]}
+                            onChange={(event) =>
+                              setTimelineFilters((current) => ({
+                                ...current,
+                                [level]: event.target.checked,
+                              }))
+                            }
+                          />
+                          {level}
+                        </label>
+                      ))}
+                    </div>
+                    {timeline.length === 0 ? (
                       <p className="muted">No timeline events found in artifacts.</p>
-                    )}
-                    {timeline.map((event, index) => (
-                      <div key={`${event.timestamp}-${index}`} className="timeline-item">
-                        <div className="timeline-time">{event.timestamp}</div>
-                        <div>
-                          <strong>{event.title || event.type}</strong>
-                          {event.detail && <p className="muted">{event.detail}</p>}
-                          <span className="pill">{event.severity || "INFO"}</span>
-                        </div>
+                    ) : filteredTimeline.length === 0 ? (
+                      <p className="muted">No timeline events match the selected severities.</p>
+                    ) : (
+                      timelineGroups.map((group) => (
+                      <div key={`timeline-${group.dateKey}`}>
+                        <h4 style={{ margin: "12px 0 6px 0" }}>{group.dateKey}</h4>
+                        {group.items.map((item) => {
+                          const event = item.event || {};
+                          return (
+                            <div
+                              key={`${event.timestamp}-${item.index}`}
+                              className="timeline-item"
+                            >
+                              <div className="timeline-time">{event.timestamp}</div>
+                              <div>
+                                <strong>{event.title || event.type}</strong>
+                                {event.detail && <p className="muted">{event.detail}</p>}
+                                <span className="pill">{item.severity?.label || "INFO"}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
+                      ))
+                    )}
                   </div>
                 )}
               </div>
