@@ -75,6 +75,12 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
     });
   }, [normalizedMarkerSets]);
 
+  useEffect(() => {
+    if (hoverInfo) {
+      setHoverInfo(null);
+    }
+  }, [normalizedMarkerSets, markers]);
+
   const times = useMemo(
     () => (Array.isArray(data) ? data.map((item) => toTime(item.ts)) : []),
     [data]
