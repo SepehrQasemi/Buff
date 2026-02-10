@@ -42,6 +42,9 @@ htmlcov/
 
 # Temp report artifacts
 /.tmp_report/
+# Temp files
+.tmp_*
+*.tmp
 # Allow golden fixtures
 !tests/goldens/
 !tests/goldens/*.csv
