@@ -144,6 +144,13 @@ Minimum blocking tasks:
 Phase-4 must PASS before any release or go/no-go milestone.
 Phase-5 PRs may proceed in parallel as long as UI stays read-only and artifact-driven.
 
+**Phase-4 PASS Criteria (Required for Release)**
+- [ ] Troubleshoot Errors flow implemented and exposed in UI. Suggested files: `apps/api/chat.py`, `apps/web/pages/runs/[id].js`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
+- [ ] Review Mode expanded checks (warmup/NaN + basic overfitting smells). Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
+- [ ] Explain Trade references artifacts (markers/decisions/trades) and has an integration test. Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
+- [ ] Integration tests for all Phase-4 modes exist and pass. Suggested files: `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
+- [ ] UI shows all modes in AI Chat tab and each mode returns structured output. Suggested files: `apps/web/pages/runs/[id].js`, `apps/api/chat.py`. Verify: `python scripts/verify_phase1.py --with-services` (open `/runs/phase1_demo` and confirm all modes render and return structured sections).
+
 **Verification Scripts / Tests (Phase-1/Phase-2 relevant)**
 Recommended:
 - `python scripts/verify_phase1.py --with-services`
@@ -168,6 +175,7 @@ Latest run (2026-02-10):
 - Docs / Quickstart: user extensibility quickstart; compare and metrics breakdown docs.
 
 **Phase-5 PR Execution Plan**
+PR order rationale: stabilize data fetching and paging (PR-01/PR-02) before adding compare flows to reduce UI regression risk and ensure baseline performance. Compare features build on reliable artifact loading, while docs follow feature shape to avoid churn.
 Order: PR-01 -> PR-02 -> PR-03 -> PR-04 -> PR-05 -> PR-06 -> PR-07 -> PR-08.
 
 **Performance / Smooth UX**
