@@ -119,10 +119,10 @@ Note: Run `python scripts/verify_phase1.py --with-services` without output pipin
 - Metrics UI: `apps/web/pages/runs/[id].js` renders `metrics` from `useWorkspace`.
 - Timeline UI: `apps/web/pages/runs/[id].js` renders `timeline` from `useWorkspace`.
 - Run Explorer UI: `apps/web/pages/runs/index.js` lists runs and links to `/runs/[id]`.
-- Compare UI/API: no compare page under `apps/web/pages` and no compare endpoints in `apps/api`.
+- Compare UI: `apps/web/pages/runs/compare.js` loads run summaries, metrics, trade markers, and Run A OHLCV using existing API endpoints; no compare-specific API endpoints required.
 - Plugin validation gate: `src/plugins/validate.py` + `src/plugins/validation.py` write `artifacts/plugins/<type>/<id>/validation.json` and fail-closed on errors; `apps/api/plugins.py` exposes active/failed lists from validation artifacts.
 - UI uses validated plugins only: `apps/web/pages/runs/[id].js` renders strategies/indicators from `activePlugins` and shows failed diagnostics.
-- Chatbot flows exist in API: `apps/api/chat.py` modes `add_indicator`, `add_strategy`, `review_plugin`, `explain_trade`; UI wiring in `apps/web/pages/runs/[id].js` using `getChatModes`/`postChat` in `apps/web/lib/api.js`.
+- Chatbot flows exist in API: `apps/api/chat.py` modes `add_indicator`, `add_strategy`, `review_plugin`, `explain_trade`, `troubleshoot_errors`; UI wiring in `apps/web/pages/runs/[id].js` using `getChatModes`/`postChat` in `apps/web/lib/api.js`.
 
 **Phase-3 (User Extensibility) Status: PASS**
 Evidence:
@@ -131,25 +131,25 @@ Evidence:
 - UI surfaces validated plugins and hides invalid: `apps/web/lib/useWorkspace.js`, `apps/web/pages/runs/[id].js`.
 - Tests: `tests/plugins/test_plugin_validation.py`, `tests/integration/test_plugins_api.py`.
 
-**Phase-4 (AI Chatbot) Status: FAIL**
+**Phase-4 (AI Chatbot) Status: PASS**
 Evidence:
-- Existing modes: `apps/api/chat.py` `_MODE_INDEX` and handlers; UI wired in `apps/web/pages/runs/[id].js`.
-- Tests cover only current modes: `tests/integration/test_chatbot_api_phase4.py`.
+- Modes include Troubleshoot Errors: `apps/api/chat.py` `_MODE_INDEX` and handlers; UI wired in `apps/web/pages/runs/[id].js`.
+- Review Mode expanded checks: `apps/api/chat.py` `_review_plugin` warmup/NaN + overfitting smells.
+- Integration tests for all modes: `tests/integration/test_chatbot_api_phase4.py`.
 
 Minimum blocking tasks:
-- Add Troubleshoot Errors flow (spec Flow 4) with exact steps, edits, rerun commands. Suggested files: `apps/api/chat.py` (new mode + handler), `apps/web/pages/runs/[id].js` (new form inputs), `tests/integration/test_chatbot_api_phase4.py` (new tests).
-- Expand Review Mode checks to include explicit warmup/NaN handling and basic overfitting-smell heuristics per spec. Suggested files: `apps/api/chat.py` (`_review_plugin` helpers), `tests/integration/test_chatbot_api_phase4.py`.
+- None. Phase-4 PASS criteria met.
 
 **Release Gate**
-Phase-4 must PASS before any release or go/no-go milestone.
+Phase-4 must PASS before any release or go/no-go milestone. Phase-4 PASS achieved (see criteria below).
 Phase-5 PRs may proceed in parallel as long as UI stays read-only and artifact-driven.
 
 **Phase-4 PASS Criteria (Required for Release)**
-- [ ] Troubleshoot Errors flow implemented and exposed in UI. Suggested files: `apps/api/chat.py`, `apps/web/pages/runs/[id].js`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [ ] Review Mode expanded checks (warmup/NaN + basic overfitting smells). Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [ ] Explain Trade references artifacts (markers/decisions/trades) and has an integration test. Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [ ] Integration tests for all Phase-4 modes exist and pass. Suggested files: `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [ ] UI shows all modes in AI Chat tab and each mode returns structured output. Suggested files: `apps/web/pages/runs/[id].js`, `apps/api/chat.py`. Verify: `python scripts/verify_phase1.py --with-services` (open `/runs/phase1_demo` and confirm all modes render and return structured sections).
+- [x] Troubleshoot Errors flow implemented and exposed in UI. Suggested files: `apps/api/chat.py`, `apps/web/pages/runs/[id].js`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
+- [x] Review Mode expanded checks (warmup/NaN + basic overfitting smells). Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
+- [x] Explain Trade references artifacts (markers/decisions/trades) and has an integration test. Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
+- [x] Integration tests for all Phase-4 modes exist and pass. Suggested files: `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
+- [x] UI shows all modes in AI Chat tab and each mode returns structured output. Suggested files: `apps/web/pages/runs/[id].js`, `apps/api/chat.py`. Verify: `python scripts/verify_phase1.py --with-services` (open `/runs/phase1_demo` and confirm all modes render and return structured sections).
 
 **Verification Scripts / Tests (Phase-1/Phase-2 relevant)**
 Recommended:
@@ -165,7 +165,7 @@ Latest run (2026-02-10):
 - `python scripts/verify_phase1.py --with-services` -> PASS
 - `python -m ruff check .` -> PASS
 - `python -m ruff format --check .` -> PASS
-- `pytest -q` -> PASS (509 passed)
+- `pytest -q` -> PASS (511 passed)
 
 **Phase-5 Backlog (Summary)**
 - Performance / Smooth UX: request cancellation + cache for artifact fetches; trades pagination for large trade sets.
@@ -176,6 +176,7 @@ Latest run (2026-02-10):
 
 **Phase-5 PR Execution Plan**
 PR order rationale: stabilize data fetching and paging (PR-01/PR-02) before adding compare flows to reduce UI regression risk and ensure baseline performance. Compare features build on reliable artifact loading, while docs follow feature shape to avoid churn.
+Status: PR-01 through PR-08 merged (PRs #144–#151). Hygiene PR #153 merged.
 Order: PR-01 -> PR-02 -> PR-03 -> PR-04 -> PR-05 -> PR-06 -> PR-07 -> PR-08.
 
 **Performance / Smooth UX**
