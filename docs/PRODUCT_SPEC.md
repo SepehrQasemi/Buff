@@ -19,6 +19,10 @@ Buff is **read-only** in the UI: it does not provide Buy/Sell buttons, broker co
 - Strategy selection + parameter editing.
 - Indicator selection + configuration and overlay.
 - Run/result explorer: compare runs, inspect trades, metrics, and decision timeline.
+#### Metrics Artifacts (UI)
+- Metrics artifacts may include metrics.time_breakdown: an array of period buckets (e.g., monthly/weekly).
+- UI behavior: when present, render a time breakdown table; when absent, show \"Time breakdown not available.\"
+- No UI recomputation; values are displayed as-is from artifacts.
 
 ### Strategy Catalog
 - Built-in pack of **20 well-known strategies** (rule-based) with documented rules and parameters.

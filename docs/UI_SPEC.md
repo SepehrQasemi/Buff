@@ -113,6 +113,24 @@ Features:
   - compare key metrics
 - Open run in Chart Workspace (loads its artifacts)
 
+### 3.1 Compare Runs
+Access:
+- From /runs by selecting exactly two runs and clicking Compare.
+- Direct link: /runs/compare?runA=<id>&runB=<id>.
+
+Behavior (read-only, artifact-driven):
+- Compares summaries + metrics + trade marker overlays for Run A vs Run B.
+- Baseline OHLCV uses Run A; Run B markers overlay on the Run A baseline chart.
+- Legend shows both run_ids. Toggles can hide/show Run A or Run B markers.
+- Marker tooltips include the originating run_id and marker type.
+- No recomputation: values render as provided by artifacts only.
+
+Error handling:
+- Missing run ids -> show actionable error message.
+- Same run id for runA/runB -> show actionable error message.
+- Symbol/timeframe mismatch -> show warning:
+  \"Runs differ in symbol/timeframe; marker alignment may be inaccurate.\"
+
 ### 4) Strategy Library
 - Built-in strategies list (20)
 - User strategies list
