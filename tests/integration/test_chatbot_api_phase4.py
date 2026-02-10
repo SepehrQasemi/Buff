@@ -1,3 +1,6 @@
+from pathlib import Path
+import shutil
+
 from fastapi.testclient import TestClient
 import yaml
 
@@ -6,6 +9,11 @@ from apps.api.main import app
 
 def _file_map(files):
     return {item["path"]: item["contents"] for item in files}
+
+
+def _write(path, contents):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(contents, encoding="utf-8")
 
 
 def test_chat_modes():
@@ -17,6 +25,7 @@ def test_chat_modes():
     assert "add_indicator" in modes
     assert "add_strategy" in modes
     assert "review_plugin" in modes
+    assert "troubleshoot_errors" in modes
     assert "explain_trade" in modes
 
 
@@ -165,3 +174,137 @@ def test_explain_trade_valid_run_id_missing_artifacts():
     assert "invalid_run_id" not in data["blockers"]
     assert "insufficient_artifacts" in data["blockers"]
     assert data["files_to_create"] == []
+
+
+def test_troubleshoot_errors_flow():
+    client = TestClient(app)
+    response = client.post(
+        "/api/v1/chat",
+        json={
+            "mode": "troubleshoot_errors",
+            "message": "help",
+            "context": {
+                "error_text": "forbidden_import: os\nmissing_field: warmup_bars",
+                "plugin_type": "indicator",
+                "plugin_id": "demo_review",
+            },
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["mode"] == "troubleshoot_errors"
+    step_ids = {item["id"] for item in data.get("steps", [])}
+    assert "root_causes" in step_ids
+    assert "exact_edits" in step_ids
+    assert "rerun_commands" in step_ids
+    assert "ui_success" in step_ids
+    assert any("src.plugins.validate" in cmd for cmd in data.get("commands", []))
+    assert any("UI" in item or "Plugin" in item for item in data.get("success_criteria", []))
+
+
+def test_review_plugin_includes_warmup_nan_and_overfit_sections():
+    client = TestClient(app)
+    repo_root = Path(__file__).resolve().parents[2]
+    plugin_dir = repo_root / "tests" / "tmp_chatbot_review" / "user_indicators" / "demo_review"
+    yaml_path = plugin_dir / "indicator.yaml"
+    py_path = plugin_dir / "indicator.py"
+    try:
+        _write(
+            yaml_path,
+            "\n".join(
+                [
+                    "id: demo_review",
+                    "name: Demo Review",
+                    "version: 1.0.0",
+                    "category: momentum",
+                    "inputs:",
+                    "  - close",
+                    "outputs:",
+                    "  - value",
+                    "params:",
+                    "  - name: length",
+                    "    type: int",
+                    "    default: 14",
+                    "    min: 2",
+                    "    max: 200",
+                    "    step: 1",
+                    "    description: length",
+                    "  - name: threshold",
+                    "    type: float",
+                    "    default: 0.1",
+                    "    min: 0.0",
+                    "    max: 1.0",
+                    "    step: 0.01",
+                    "    description: threshold",
+                    "  - name: offset",
+                    "    type: int",
+                    "    default: 3",
+                    "    min: 0",
+                    "    max: 10",
+                    "    step: 1",
+                    "    description: offset",
+                    "  - name: alpha",
+                    "    type: float",
+                    "    default: 0.5",
+                    "    min: 0.0",
+                    "    max: 1.0",
+                    "    step: 0.1",
+                    "    description: alpha",
+                    "  - name: beta",
+                    "    type: float",
+                    "    default: 0.25",
+                    "    min: 0.0",
+                    "    max: 1.0",
+                    "    step: 0.05",
+                    "    description: beta",
+                    "  - name: gamma",
+                    "    type: float",
+                    "    default: 0.75",
+                    "    min: 0.0",
+                    "    max: 1.0",
+                    "    step: 0.05",
+                    "    description: gamma",
+                    "warmup_bars: 0",
+                    "nan_policy: fill",
+                    "",
+                ]
+            ),
+        )
+        _write(
+            py_path,
+            "\n".join(
+                [
+                    "def get_schema():",
+                    "    return {}",
+                    "",
+                    "",
+                    "def compute(ctx):",
+                    "    value = 0.1234",
+                    '    return {"value": value}',
+                    "",
+                ]
+            ),
+        )
+        relative_path = plugin_dir.relative_to(repo_root).as_posix()
+        response = client.post(
+            "/api/v1/chat",
+            json={
+                "mode": "review_plugin",
+                "message": "review plugin",
+                "context": {
+                    "kind": "indicator",
+                    "id": "demo_review",
+                    "path_optional": relative_path,
+                },
+            },
+        )
+        assert response.status_code == 200
+        data = response.json()
+        step_ids = {item["id"] for item in data.get("steps", [])}
+        assert "warmup_nan_checks" in step_ids
+        assert "overfitting_smells" in step_ids
+        assert any("warmup" in warning for warning in data.get("warnings", []))
+        assert any("overfit_smell" in warning for warning in data.get("warnings", []))
+    finally:
+        if plugin_dir.exists():
+            shutil.rmtree(plugin_dir.parent.parent, ignore_errors=True)

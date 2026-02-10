@@ -126,6 +126,13 @@ _MODE_INDEX = [
         "optional_context": ["path_optional"],
     },
     {
+        "mode": "troubleshoot_errors",
+        "label": "Troubleshoot Errors",
+        "description": "Analyze validation/runtime errors and propose targeted fixes.",
+        "required_context": ["error_text"],
+        "optional_context": ["plugin_type", "plugin_id", "run_id"],
+    },
+    {
         "mode": "explain_trade",
         "required_context": ["run_id", "trade_id_or_decision_id"],
         "optional_context": [],
@@ -156,6 +163,8 @@ def chat(request: ChatRequest) -> ChatResponse:
         return _add_strategy(request)
     if mode == "review_plugin":
         return _review_plugin(request)
+    if mode == "troubleshoot_errors":
+        return _troubleshoot_errors(request)
     if mode == "explain_trade":
         return _explain_trade(request)
 
@@ -450,11 +459,21 @@ def _review_plugin(request: ChatRequest) -> ChatResponse:
         warnings.extend(_scan_lookahead(py_source or ""))
         warnings.extend(_scan_non_determinism(py_source or ""))
 
+    warmup_report, warmup_warnings = _review_warmup_nan_report(kind, yaml_payload)
+    overfit_report, overfit_warnings = _review_overfit_report(
+        kind, yaml_payload, py_source or "", plugin_dir
+    )
+    warnings.extend(warmup_warnings)
+    warnings.extend(overfit_warnings)
+
     suggestions = _review_suggestions(kind)
     notes.extend(suggestions)
 
+    warnings = _dedupe(warnings)
     summary = _review_summary(blockers, warnings)
     steps = [_step("review_summary", "Review completed against contract and safety rules.")]
+    steps.append(_step("warmup_nan_checks", warmup_report))
+    steps.append(_step("overfitting_smells", overfit_report))
     for idx, suggestion in enumerate(suggestions, start=1):
         steps.append(_step(f"suggestion_{idx}", suggestion))
 
@@ -469,6 +488,100 @@ def _review_plugin(request: ChatRequest) -> ChatResponse:
         success_criteria=["Resolve blockers and rerun validator until PASS."],
         warnings=warnings,
         blockers=blockers,
+        diagnostics=diagnostics,
+    )
+
+
+def _troubleshoot_errors(request: ChatRequest) -> ChatResponse:
+    context = request.context or {}
+    notes: list[str] = []
+    warnings: list[str] = []
+
+    error_text = _pick_value(context, ["error_text", "error", "message"], "").strip()
+    plugin_type = _pick_value(context, ["plugin_type", "kind", "plugin_kind", "type"], "").strip()
+    plugin_id = _pick_value(context, ["plugin_id", "id", "indicator_id", "strategy_id"], "").strip()
+    run_id = _pick_value(context, ["run_id"], "").strip()
+
+    if plugin_type and plugin_type.lower() not in {"indicator", "strategy"}:
+        warnings.append("plugin_type_unrecognized")
+        plugin_type = ""
+
+    if not error_text:
+        diagnostics = _diagnostics(request, ["missing_error_text"])
+        steps = [
+            _step(
+                "provide_error_text",
+                "Provide error_text from validation output or a traceback snippet.",
+            ),
+            _step(
+                "optional_context",
+                "Optional: include plugin_type, plugin_id, or run_id for targeted edits.",
+            ),
+        ]
+        return ChatResponse(
+            mode="troubleshoot_errors",
+            title="Troubleshoot Errors",
+            summary="error_text is required to diagnose failures.",
+            steps=steps,
+            files_to_create=[],
+            commands=[],
+            success_criteria=[],
+            warnings=warnings,
+            blockers=["missing_error_text"],
+            diagnostics=diagnostics,
+        )
+
+    yaml_hint, py_hint = _plugin_path_hints(plugin_type.lower(), plugin_id)
+    hypotheses = _diagnose_error_text(error_text)
+    edits = _build_troubleshoot_edits(error_text, yaml_hint=yaml_hint, py_hint=py_hint)
+
+    steps = [
+        _step(
+            "root_causes",
+            "Root cause hypotheses (ranked): " + "; ".join(hypotheses),
+        ),
+        _step("exact_edits", "Exact edits: " + "; ".join(edits)),
+        _step(
+            "rerun_commands",
+            "Rerun commands: python -m src.plugins.validate --out artifacts/plugins; "
+            "python -m ruff check .; python -m pytest",
+        ),
+        _step(
+            "ui_success",
+            "What success looks like in UI: validation PASS in artifacts/plugins, "
+            "plugin appears in selection lists, and failures are cleared from "
+            "Plugin Diagnostics.",
+        ),
+    ]
+
+    commands = [
+        "python -m src.plugins.validate --out artifacts/plugins",
+        "python -m ruff check .",
+        "python -m pytest",
+    ]
+    success = [
+        "Validation returns PASS for the plugin.",
+        "Plugin appears in the UI (validated plugins only).",
+        "No new errors appear under Plugin Diagnostics.",
+    ]
+
+    if run_id:
+        notes.append(f"run_id={run_id}")
+
+    warnings.append("Chatbot is read-only; do not disable risk caps or attempt live deployment.")
+    warnings = _dedupe(warnings)
+
+    diagnostics = _diagnostics(request, notes)
+    return ChatResponse(
+        mode="troubleshoot_errors",
+        title="Troubleshoot Errors",
+        summary="Structured diagnosis and remediation steps based on the error text.",
+        steps=steps,
+        files_to_create=[],
+        commands=commands,
+        success_criteria=success,
+        warnings=warnings,
+        blockers=[],
         diagnostics=diagnostics,
     )
 
@@ -1287,6 +1400,195 @@ def _review_suggestions(kind: str) -> list[str]:
 
 def _review_summary(blockers: list[str], warnings: list[str]) -> str:
     return f"Review complete: blockers={len(blockers)}, warnings={len(warnings)}."
+
+
+def _review_warmup_nan_report(
+    kind: str, yaml_payload: dict[str, Any] | None
+) -> tuple[str, list[str]]:
+    warnings: list[str] = []
+    details: list[str] = []
+    warmup_bars = yaml_payload.get("warmup_bars") if isinstance(yaml_payload, dict) else None
+    if isinstance(warmup_bars, int):
+        details.append(f"warmup_bars={warmup_bars}")
+        if warmup_bars == 0:
+            warnings.append("warmup_bars_zero")
+        elif warmup_bars < 5:
+            warnings.append("warmup_bars_low")
+    else:
+        details.append("warmup_bars=missing")
+        warnings.append("warmup_bars_missing")
+
+    if kind == "indicator":
+        nan_policy = yaml_payload.get("nan_policy") if isinstance(yaml_payload, dict) else None
+        if isinstance(nan_policy, str):
+            details.append(f"nan_policy={nan_policy}")
+            if nan_policy not in _ALLOWED_NAN_POLICIES:
+                warnings.append("nan_policy_invalid")
+            elif nan_policy == "fill":
+                warnings.append("nan_policy_fill_discouraged")
+        else:
+            details.append("nan_policy=missing")
+            warnings.append("nan_policy_missing")
+    else:
+        details.append("nan_policy=n/a")
+
+    text = "Warmup/NaN checks: " + ", ".join(details) + "."
+    if warnings:
+        text += " Flags: " + ", ".join(_dedupe(warnings)) + "."
+    return text, warnings
+
+
+def _review_overfit_report(
+    kind: str,
+    yaml_payload: dict[str, Any] | None,
+    py_source: str,
+    plugin_dir: Path | None,
+) -> tuple[str, list[str]]:
+    warnings: list[str] = []
+    params = yaml_payload.get("params") if isinstance(yaml_payload, dict) else None
+    param_count = len(params) if isinstance(params, list) else 0
+    indicators: list[str] = []
+    if kind == "strategy" and isinstance(yaml_payload, dict):
+        inputs = yaml_payload.get("inputs")
+        if isinstance(inputs, dict) and isinstance(inputs.get("indicators"), list):
+            indicators = [str(item) for item in inputs.get("indicators") if item]
+
+    if param_count >= 6:
+        warnings.append("overfit_smell_many_params")
+    if kind == "strategy" and len(indicators) >= 5:
+        warnings.append("overfit_smell_many_indicators")
+    if py_source and re.search(r"\b\d+\.\d{3,}\b", py_source):
+        warnings.append("overfit_smell_overly_specific_thresholds")
+
+    if plugin_dir is not None:
+        readme_path = plugin_dir / "README.md"
+        if not readme_path.exists():
+            warnings.append("overfit_smell_no_validation_notes")
+        else:
+            try:
+                readme_text = readme_path.read_text(encoding="utf-8").lower()
+            except OSError:
+                warnings.append("overfit_smell_no_validation_notes")
+            else:
+                if not any(
+                    token in readme_text
+                    for token in ("validation", "out-of-sample", "holdout", "walk-forward")
+                ):
+                    warnings.append("overfit_smell_no_validation_notes")
+
+    detail = f"params={param_count}"
+    if kind == "strategy":
+        detail += f", indicators={len(indicators)}"
+    text = f"Overfitting smell checks: {detail}."
+    if warnings:
+        text += " Flags: " + ", ".join(_dedupe(warnings)) + "."
+    else:
+        text += " No obvious smells detected from static scan."
+    return text, warnings
+
+
+def _diagnose_error_text(error_text: str) -> list[str]:
+    text = error_text.lower()
+    hypotheses: list[str] = []
+
+    def add(condition: bool, message: str) -> None:
+        if condition and message not in hypotheses:
+            hypotheses.append(message)
+
+    add(
+        "forbidden_import" in text or "forbidden import" in text,
+        "Forbidden import detected; remove prohibited modules (os/sys/subprocess/network).",
+    )
+    add(
+        "missing_field" in text or "missing field" in text,
+        "Required YAML field missing or misspelled in indicator.yaml/strategy.yaml.",
+    )
+    add(
+        "nan_policy" in text,
+        "nan_policy missing or invalid; set to propagate/fill/error in indicator.yaml.",
+    )
+    add(
+        "warmup" in text,
+        "warmup_bars missing/zero or too low for indicator lookbacks.",
+    )
+    add(
+        "id_directory_mismatch" in text or "invalid_id" in text,
+        "YAML id does not match directory name or violates id format.",
+    )
+    add(
+        "syntaxerror" in text or "indentationerror" in text,
+        "Python syntax error in plugin file; fix formatting or indentation.",
+    )
+    add(
+        "missing_compute" in text or "missing_on_bar" in text,
+        "Required interface method missing (compute/on_bar).",
+    )
+    add(
+        "params" in text and "invalid" in text,
+        "params schema invalid or empty; ensure list of parameter objects.",
+    )
+    add(
+        "schema" in text,
+        "YAML schema mismatch; validate types and required fields.",
+    )
+
+    if not hypotheses:
+        hypotheses = [
+            "YAML schema mismatch or missing required fields.",
+            "Python interface or syntax issue in the plugin file.",
+            "Forbidden imports or non-deterministic logic detected.",
+        ]
+    return hypotheses
+
+
+def _build_troubleshoot_edits(error_text: str, *, yaml_hint: str, py_hint: str) -> list[str]:
+    text = error_text.lower()
+    edits: list[str] = []
+
+    if "missing_field" in text or "schema" in text:
+        edits.append(
+            f"Edit {yaml_hint}: add missing required fields and ensure types match the contract."
+        )
+    if "nan_policy" in text:
+        edits.append(f"Edit {yaml_hint}: set nan_policy to propagate/fill/error.")
+    if "warmup" in text:
+        edits.append(f"Edit {yaml_hint}: set warmup_bars to a value >= longest lookback.")
+    if "forbidden_import" in text or "forbidden import" in text:
+        edits.append(f"Edit {py_hint}: remove forbidden imports and side effects.")
+    if "missing_compute" in text or "missing_on_bar" in text:
+        edits.append(f"Edit {py_hint}: implement the required compute/on_bar function.")
+    if "syntaxerror" in text or "indentationerror" in text:
+        edits.append(f"Edit {py_hint}: fix syntax/indentation errors.")
+
+    if not edits:
+        edits = [
+            f"Edit {yaml_hint}: verify required fields (id/name/version/category/inputs/params).",
+            f"Edit {py_hint}: verify interface (get_schema + compute/on_bar) and remove forbidden imports.",
+        ]
+    return edits
+
+
+def _plugin_path_hints(plugin_type: str, plugin_id: str) -> tuple[str, str]:
+    if plugin_type in {"indicator", "strategy"} and plugin_id:
+        base = f"user_{plugin_type}s/{plugin_id}"
+        yaml_hint = f"{base}/{plugin_type}.yaml"
+        py_hint = f"{base}/{plugin_type}.py"
+        return yaml_hint, py_hint
+    return (
+        "user_indicators/<id>/indicator.yaml or user_strategies/<id>/strategy.yaml",
+        "user_indicators/<id>/indicator.py or user_strategies/<id>/strategy.py",
+    )
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        result.append(item)
+    return result
 
 
 def _load_trade_events(trade_path: Path, trade_id: str) -> list[dict[str, Any]]:
