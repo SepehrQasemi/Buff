@@ -71,7 +71,8 @@ export default function RunsPage() {
     });
   };
 
-  const handleSelectionChange = (event, runId) => {
+  const handleSelectionClick = (event, runId) => {
+    event.preventDefault();
     event.stopPropagation();
     toggleSelection(runId);
   };
@@ -125,13 +126,12 @@ export default function RunsPage() {
                     <label
                       className="muted"
                       style={{ display: "flex", gap: "6px", alignItems: "center" }}
-                      onClick={(event) => event.stopPropagation()}
+                      onClick={(event) => handleSelectionClick(event, run.id)}
                     >
                       <input
                         type="checkbox"
                         checked={selected}
-                        onChange={(event) => handleSelectionChange(event, run.id)}
-                        onClick={(event) => event.stopPropagation()}
+                        readOnly
                       />
                       Compare
                     </label>
