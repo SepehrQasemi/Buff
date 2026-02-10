@@ -9,3 +9,4 @@
 - [CHATBOT_SPEC.md](CHATBOT_SPEC.md): Chatbot modes, flows, and safety rules.
 - [USER_EXTENSIBILITY.md](USER_EXTENSIBILITY.md): User extensibility quickstart, validation, and visibility rules.
 - [PHASE2_CLOSURE.md](PHASE2_CLOSURE.md): Phase-2 closure summary and test status.
+- [WIP_BRANCH_POLICY.md](WIP_BRANCH_POLICY.md): WIP branch do-not-merge rule and cleanup guidance.
