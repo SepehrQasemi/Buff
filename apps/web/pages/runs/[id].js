@@ -34,20 +34,24 @@ const formatMetricValue = (value) => {
 };
 
 const normalizeTimelineSeverity = (value) => {
-  if (!value) {
-    return "INFO";
-  }
-  const normalized = String(value).toUpperCase();
+  const normalized =
+    value === null || value === undefined || value === ""
+      ? "INFO"
+      : String(value).toUpperCase();
   if (normalized.startsWith("ERR")) {
-    return "ERROR";
+    return { filterBucket: "ERROR", label: "ERROR", alwaysVisible: false };
   }
   if (normalized.startsWith("WARN")) {
-    return "WARN";
+    return { filterBucket: "WARN", label: "WARN", alwaysVisible: false };
   }
   if (normalized.startsWith("INFO")) {
-    return "INFO";
+    return { filterBucket: "INFO", label: "INFO", alwaysVisible: false };
   }
-  return "INFO";
+  return {
+    filterBucket: "INFO",
+    label: normalized,
+    alwaysVisible: true,
+  };
 };
 
 const extractTimelineDate = (value) => {
@@ -249,7 +253,12 @@ export default function ChartWorkspace() {
         severity: normalizeTimelineSeverity(event?.severity),
         dateKey: extractTimelineDate(event?.timestamp),
       }))
-      .filter((item) => timelineFilters[item.severity] !== false);
+      .filter((item) => {
+        if (item.severity?.alwaysVisible) {
+          return true;
+        }
+        return timelineFilters[item.severity?.filterBucket] !== false;
+      });
   }, [timeline, timelineFilters]);
   const timelineGroups = useMemo(() => {
     const groups = [];
@@ -914,7 +923,7 @@ export default function ChartWorkspace() {
                               <div>
                                 <strong>{event.title || event.type}</strong>
                                 {event.detail && <p className="muted">{event.detail}</p>}
-                                <span className="pill">{item.severity}</span>
+                                <span className="pill">{item.severity?.label || "INFO"}</span>
                               </div>
                             </div>
                           );
