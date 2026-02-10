@@ -116,6 +116,16 @@ const collectMetricKeys = (metrics) => {
     .map(([key]) => key);
 };
 
+const normalizeSymbolKey = (value) => {
+  if (!value) {
+    return "";
+  }
+  if (Array.isArray(value)) {
+    return value.slice().sort().join("|");
+  }
+  return String(value);
+};
+
 export default function CompareRunsPage() {
   const router = useRouter();
   const runAId = normalizeParam(router.query.runA);
@@ -304,6 +314,24 @@ export default function CompareRunsPage() {
     [runsIndex, runBId]
   );
 
+  const symbolMismatch = useMemo(() => {
+    const keyA = normalizeSymbolKey(runMetaA?.symbols);
+    const keyB = normalizeSymbolKey(runMetaB?.symbols);
+    if (!keyA || !keyB) {
+      return false;
+    }
+    return keyA !== keyB;
+  }, [runMetaA?.symbols, runMetaB?.symbols]);
+
+  const timeframeMismatch = useMemo(() => {
+    const tfA = runMetaA?.timeframe ? String(runMetaA.timeframe) : "";
+    const tfB = runMetaB?.timeframe ? String(runMetaB.timeframe) : "";
+    if (!tfA || !tfB) {
+      return false;
+    }
+    return tfA !== tfB;
+  }, [runMetaA?.timeframe, runMetaB?.timeframe]);
+
   const candles = useMemo(() => (ohlcv?.candles ? ohlcv.candles : []), [ohlcv]);
   const metricKeys = useMemo(() => {
     const keys = new Set();
@@ -357,6 +385,11 @@ export default function CompareRunsPage() {
 
       {invalidParams && <div className="banner">{invalidParams}</div>}
       {runsError && <div className="banner">{runsError}</div>}
+      {(symbolMismatch || timeframeMismatch) && (
+        <div className="banner">
+          Runs differ in symbol/timeframe; marker alignment may be inaccurate.
+        </div>
+      )}
 
       {!invalidParams && (
         <section className="chart-panel" style={{ marginBottom: "24px" }}>
