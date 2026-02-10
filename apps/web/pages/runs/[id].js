@@ -44,6 +44,7 @@ const DEFAULT_CHAT_MODES = [
   { id: "review_plugin", label: "Review Plugin" },
   { id: "explain_trade", label: "Explain Trade" },
 ];
+const TRADE_PAGE_SIZES = [50, 100, 250, 500];
 
 const parseCsv = (value) =>
   String(value || "")
@@ -68,6 +69,10 @@ export default function ChartWorkspace() {
     markersError,
     trades,
     tradesError,
+    tradesPage,
+    setTradesPage,
+    tradesPageSize,
+    setTradesPageSize,
     metrics,
     metricsError,
     timeline,
@@ -158,6 +163,18 @@ export default function ChartWorkspace() {
 
   const candles = useMemo(() => ohlcv?.candles || [], [ohlcv]);
   const tradeRows = useMemo(() => trades?.results || [], [trades]);
+  const tradesTotal = Number.isFinite(trades?.total) ? trades.total : null;
+  const tradesStart =
+    tradeRows.length === 0 ? 0 : (tradesPage - 1) * tradesPageSize + 1;
+  const tradesEnd =
+    tradeRows.length === 0 ? 0 : tradesStart + tradeRows.length - 1;
+  const tradesMaxPage =
+    tradesTotal === null
+      ? null
+      : Math.max(1, Math.ceil(tradesTotal / tradesPageSize));
+  const tradesCanPrev = tradesPage > 1;
+  const tradesCanNext =
+    tradesTotal === null ? tradeRows.length > 0 : tradesPage < tradesMaxPage;
   const activeStrategies = useMemo(
     () => (activePlugins?.strategies ? activePlugins.strategies : []),
     [activePlugins]
@@ -183,6 +200,23 @@ export default function ChartWorkspace() {
     const match = activeStrategies.find((item) => item.id === runStrategy);
     setSelectedStrategy(match ? match.id : activeStrategies[0].id);
   }, [selectedStrategy, activeStrategies, run]);
+
+  useEffect(() => {
+    if (!selectedTrade) {
+      return;
+    }
+    const selectedId = selectedTrade.trade_id || selectedTrade.id;
+    const stillVisible = tradeRows.some((trade) => {
+      const tradeId = trade.trade_id || trade.id;
+      if (selectedId && tradeId) {
+        return tradeId === selectedId;
+      }
+      return trade === selectedTrade;
+    });
+    if (!stillVisible) {
+      setSelectedTrade(null);
+    }
+  }, [tradeRows, selectedTrade]);
 
   const applyRange = () => {
     setRange({
@@ -538,6 +572,57 @@ export default function ChartWorkspace() {
                   <>
                     <div className="panel-card">
                       <h3>Trades</h3>
+                      <div
+                        className="chart-toolbar"
+                        style={{ justifyContent: "space-between", marginBottom: "8px" }}
+                      >
+                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                          <button
+                            className="secondary"
+                            disabled={!tradesCanPrev}
+                            onClick={() =>
+                              setTradesPage((value) => Math.max(1, value - 1))
+                            }
+                          >
+                            Prev
+                          </button>
+                          <span className="muted" style={{ fontSize: "0.8rem" }}>
+                            Page {tradesPage}
+                            {tradesMaxPage ? ` of ${tradesMaxPage}` : ""}
+                          </span>
+                          <button
+                            className="secondary"
+                            disabled={!tradesCanNext}
+                            onClick={() =>
+                              setTradesPage((value) =>
+                                tradesMaxPage ? Math.min(tradesMaxPage, value + 1) : value + 1
+                              )
+                            }
+                          >
+                            Next
+                          </button>
+                        </div>
+                        <label>
+                          Page size
+                          <select
+                            value={tradesPageSize}
+                            onChange={(event) =>
+                              setTradesPageSize(Number(event.target.value))
+                            }
+                          >
+                            {TRADE_PAGE_SIZES.map((size) => (
+                              <option key={size} value={size}>
+                                {size}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {tradesTotal !== null && (
+                          <div className="muted" style={{ fontSize: "0.8rem" }}>
+                            Showing {tradesStart}–{tradesEnd} of {tradesTotal}
+                          </div>
+                        )}
+                      </div>
                       <div className="table-wrap">
                         <table>
                           <thead>
