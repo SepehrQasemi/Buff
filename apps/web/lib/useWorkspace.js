@@ -9,6 +9,7 @@ import {
   getTimeline,
   getTradeMarkers,
   getTrades,
+  invalidateCache,
 } from "./api";
 
 const DEFAULT_TIMEFRAMES = [
@@ -61,17 +62,38 @@ export default function useWorkspace(runId) {
   const [timeframe, setTimeframe] = useState("");
   const [range, setRange] = useState({ start_ts: "", end_ts: "" });
 
-  const requestId = useRef(0);
+  const runsRequestId = useRef(0);
+  const runsAbortRef = useRef(null);
+  const summaryRequestId = useRef(0);
+  const summaryAbortRef = useRef(null);
+  const ohlcvRequestId = useRef(0);
+  const ohlcvAbortRef = useRef(null);
+  const markersRequestId = useRef(0);
+  const markersAbortRef = useRef(null);
+  const tradesRequestId = useRef(0);
+  const tradesAbortRef = useRef(null);
+  const metricsRequestId = useRef(0);
+  const metricsAbortRef = useRef(null);
+  const timelineRequestId = useRef(0);
+  const timelineAbortRef = useRef(null);
+  const pluginsRequestId = useRef(0);
+  const pluginsAbortRef = useRef(null);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    let active = true;
+    const requestId = runsRequestId.current + 1;
+    runsRequestId.current = requestId;
+    if (runsAbortRef.current) {
+      runsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    runsAbortRef.current = controller;
     setRunError(null);
     async function loadRun() {
-      const result = await getRuns();
-      if (!active) {
+      const result = await getRuns({ signal: controller.signal });
+      if (runsRequestId.current !== requestId || result.aborted) {
         return;
       }
       if (!result.ok) {
@@ -91,7 +113,7 @@ export default function useWorkspace(runId) {
     }
     loadRun();
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [runId, reloadToken]);
 
@@ -114,12 +136,21 @@ export default function useWorkspace(runId) {
     if (!runId) {
       return;
     }
-    let active = true;
+    const requestId = summaryRequestId.current + 1;
+    summaryRequestId.current = requestId;
+    if (summaryAbortRef.current) {
+      summaryAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    summaryAbortRef.current = controller;
     setSummaryLoading(true);
     setSummaryError(null);
     async function loadSummary() {
-      const result = await getRunSummary(runId);
-      if (!active) {
+      const result = await getRunSummary(runId, {
+        signal: controller.signal,
+        cache: true,
+      });
+      if (summaryRequestId.current !== requestId || result.aborted) {
         return;
       }
       if (!result.ok) {
@@ -136,7 +167,7 @@ export default function useWorkspace(runId) {
     }
     loadSummary();
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [runId, reloadToken]);
 
@@ -144,8 +175,13 @@ export default function useWorkspace(runId) {
     if (!runId) {
       return;
     }
-    const currentId = requestId.current + 1;
-    requestId.current = currentId;
+    const currentId = ohlcvRequestId.current + 1;
+    ohlcvRequestId.current = currentId;
+    if (ohlcvAbortRef.current) {
+      ohlcvAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    ohlcvAbortRef.current = controller;
     setOhlcvError(null);
     async function loadOhlcv() {
       setOhlcvLoading(true);
@@ -156,8 +192,11 @@ export default function useWorkspace(runId) {
         end_ts: range.end_ts || undefined,
         limit: 2000,
       };
-      const result = await getOhlcv(runId, params);
-      if (requestId.current !== currentId) {
+      const result = await getOhlcv(runId, params, {
+        signal: controller.signal,
+        cache: true,
+      });
+      if (ohlcvRequestId.current !== currentId || result.aborted) {
         return;
       }
       if (!result.ok) {
@@ -173,18 +212,34 @@ export default function useWorkspace(runId) {
     } else {
       setOhlcvLoading(false);
     }
+    return () => {
+      controller.abort();
+    };
   }, [runId, symbol, timeframe, range, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
+    const requestId = markersRequestId.current + 1;
+    markersRequestId.current = requestId;
+    if (markersAbortRef.current) {
+      markersAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    markersAbortRef.current = controller;
     async function loadMarkers() {
       const params = {
         start_ts: range.start_ts || undefined,
         end_ts: range.end_ts || undefined,
       };
-      const result = await getTradeMarkers(runId, params);
+      const result = await getTradeMarkers(runId, params, {
+        signal: controller.signal,
+        cache: true,
+      });
+      if (markersRequestId.current !== requestId || result.aborted) {
+        return;
+      }
       if (!result.ok) {
         setMarkersError(formatError(result, "Failed to load trade markers"));
         return;
@@ -193,14 +248,34 @@ export default function useWorkspace(runId) {
       setMarkersError(null);
     }
     loadMarkers();
+    return () => {
+      controller.abort();
+    };
   }, [runId, range, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
+    const requestId = tradesRequestId.current + 1;
+    tradesRequestId.current = requestId;
+    if (tradesAbortRef.current) {
+      tradesAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    tradesAbortRef.current = controller;
     async function loadTrades() {
-      const result = await getTrades(runId, { page: 1, page_size: 250 });
+      const result = await getTrades(
+        runId,
+        { page: 1, page_size: 250 },
+        {
+          signal: controller.signal,
+          cache: true,
+        }
+      );
+      if (tradesRequestId.current !== requestId || result.aborted) {
+        return;
+      }
       if (!result.ok) {
         setTradesError(formatError(result, "Failed to load trades"));
         return;
@@ -209,14 +284,30 @@ export default function useWorkspace(runId) {
       setTradesError(null);
     }
     loadTrades();
+    return () => {
+      controller.abort();
+    };
   }, [runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
+    const requestId = metricsRequestId.current + 1;
+    metricsRequestId.current = requestId;
+    if (metricsAbortRef.current) {
+      metricsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    metricsAbortRef.current = controller;
     async function loadMetrics() {
-      const result = await getMetrics(runId);
+      const result = await getMetrics(runId, {
+        signal: controller.signal,
+        cache: true,
+      });
+      if (metricsRequestId.current !== requestId || result.aborted) {
+        return;
+      }
       if (!result.ok) {
         setMetricsError(formatError(result, "Failed to load metrics"));
         return;
@@ -225,14 +316,34 @@ export default function useWorkspace(runId) {
       setMetricsError(null);
     }
     loadMetrics();
+    return () => {
+      controller.abort();
+    };
   }, [runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
+    const requestId = timelineRequestId.current + 1;
+    timelineRequestId.current = requestId;
+    if (timelineAbortRef.current) {
+      timelineAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    timelineAbortRef.current = controller;
     async function loadTimeline() {
-      const result = await getTimeline(runId, { source: "auto" });
+      const result = await getTimeline(
+        runId,
+        { source: "auto" },
+        {
+          signal: controller.signal,
+          cache: true,
+        }
+      );
+      if (timelineRequestId.current !== requestId || result.aborted) {
+        return;
+      }
       if (!result.ok) {
         setTimelineError(formatError(result, "Failed to load timeline"));
         return;
@@ -242,19 +353,32 @@ export default function useWorkspace(runId) {
       setTimelineError(null);
     }
     loadTimeline();
+    return () => {
+      controller.abort();
+    };
   }, [runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    let active = true;
+    const requestId = pluginsRequestId.current + 1;
+    pluginsRequestId.current = requestId;
+    if (pluginsAbortRef.current) {
+      pluginsAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    pluginsAbortRef.current = controller;
     async function loadPlugins() {
       const [activeResult, failedResult] = await Promise.all([
-        getActivePlugins(),
-        getFailedPlugins(),
+        getActivePlugins({ signal: controller.signal }),
+        getFailedPlugins({ signal: controller.signal }),
       ]);
-      if (!active) {
+      if (
+        pluginsRequestId.current !== requestId ||
+        activeResult.aborted ||
+        failedResult.aborted
+      ) {
         return;
       }
       const normalize = (payload) => ({
@@ -283,7 +407,7 @@ export default function useWorkspace(runId) {
     }
     loadPlugins();
     return () => {
-      active = false;
+      controller.abort();
     };
   }, [runId, reloadToken]);
 
@@ -294,7 +418,10 @@ export default function useWorkspace(runId) {
     return DEFAULT_TIMEFRAMES;
   }, [run]);
 
-  const reload = () => setReloadToken((value) => value + 1);
+  const reload = () => {
+    invalidateCache({ runId });
+    setReloadToken((value) => value + 1);
+  };
 
   return {
     run,
