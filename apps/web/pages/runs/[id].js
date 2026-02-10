@@ -26,6 +26,13 @@ const formatPercent = (value) => {
   return `${(num * 100).toFixed(2)}%`;
 };
 
+const formatMetricValue = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return "n/a";
+  }
+  return String(value);
+};
+
 const formatDate = (value) => (value ? String(value) : "n/a");
 
 const Tabs = [
@@ -175,6 +182,31 @@ export default function ChartWorkspace() {
   const tradesCanPrev = tradesPage > 1;
   const tradesCanNext =
     tradesTotal === null ? tradeRows.length > 0 : tradesPage < tradesMaxPage;
+  const timeBreakdown = useMemo(
+    () => (Array.isArray(metrics?.time_breakdown) ? metrics.time_breakdown : []),
+    [metrics]
+  );
+  const timeBreakdownColumns = useMemo(() => {
+    if (!timeBreakdown.length) {
+      return [];
+    }
+    const columns = [
+      { key: "period", label: "Period" },
+      { key: "total_return", label: "Total Return" },
+      { key: "max_drawdown", label: "Max Drawdown" },
+      { key: "win_rate", label: "Win Rate" },
+      { key: "num_trades", label: "Trades" },
+    ];
+    return columns.filter((column) =>
+      timeBreakdown.some((row) => {
+        if (!row || typeof row !== "object") {
+          return false;
+        }
+        const value = row[column.key];
+        return value !== undefined && value !== null && value !== "";
+      })
+    );
+  }, [timeBreakdown]);
   const activeStrategies = useMemo(
     () => (activePlugins?.strategies ? activePlugins.strategies : []),
     [activePlugins]
@@ -716,32 +748,63 @@ export default function ChartWorkspace() {
                 {metricsError ? (
                   <p className="inline-warning">{metricsError}</p>
                 ) : metrics ? (
-                  <div className="stat-grid">
-                    <div className="stat-card">
-                      <span>Total Return</span>
-                      <strong>{formatPercent(metrics.total_return)}</strong>
+                  <>
+                    <div className="stat-grid">
+                      <div className="stat-card">
+                        <span>Total Return</span>
+                        <strong>{formatPercent(metrics.total_return)}</strong>
+                      </div>
+                      <div className="stat-card">
+                        <span>Max Drawdown</span>
+                        <strong>{formatPercent(metrics.max_drawdown)}</strong>
+                      </div>
+                      <div className="stat-card">
+                        <span>Win Rate</span>
+                        <strong>{formatPercent(metrics.win_rate)}</strong>
+                      </div>
+                      <div className="stat-card">
+                        <span>Avg Win</span>
+                        <strong>{formatNumber(metrics.avg_win)}</strong>
+                      </div>
+                      <div className="stat-card">
+                        <span>Avg Loss</span>
+                        <strong>{formatNumber(metrics.avg_loss)}</strong>
+                      </div>
+                      <div className="stat-card">
+                        <span>Trades</span>
+                        <strong>{metrics.num_trades ?? "n/a"}</strong>
+                      </div>
                     </div>
-                    <div className="stat-card">
-                      <span>Max Drawdown</span>
-                      <strong>{formatPercent(metrics.max_drawdown)}</strong>
+                    <div style={{ marginTop: "16px" }}>
+                      <h4 style={{ margin: "0 0 8px 0" }}>Time Breakdown</h4>
+                      {timeBreakdown.length > 0 && timeBreakdownColumns.length > 0 ? (
+                        <div className="table-wrap">
+                          <table>
+                            <thead>
+                              <tr>
+                                {timeBreakdownColumns.map((column) => (
+                                  <th key={column.key}>{column.label}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {timeBreakdown.map((row, index) => (
+                                <tr key={`breakdown-${index}`}>
+                                  {timeBreakdownColumns.map((column) => (
+                                    <td key={`${column.key}-${index}`}>
+                                      {formatMetricValue(row?.[column.key])}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : (
+                        <p className="muted">Time breakdown not available.</p>
+                      )}
                     </div>
-                    <div className="stat-card">
-                      <span>Win Rate</span>
-                      <strong>{formatPercent(metrics.win_rate)}</strong>
-                    </div>
-                    <div className="stat-card">
-                      <span>Avg Win</span>
-                      <strong>{formatNumber(metrics.avg_win)}</strong>
-                    </div>
-                    <div className="stat-card">
-                      <span>Avg Loss</span>
-                      <strong>{formatNumber(metrics.avg_loss)}</strong>
-                    </div>
-                    <div className="stat-card">
-                      <span>Trades</span>
-                      <strong>{metrics.num_trades ?? "n/a"}</strong>
-                    </div>
-                  </div>
+                  </>
                 ) : (
                   <p className="muted">Metrics artifact not available.</p>
                 )}
