@@ -119,10 +119,10 @@ Note: Run `python scripts/verify_phase1.py --with-services` without output pipin
 - Metrics UI: `apps/web/pages/runs/[id].js` renders `metrics` from `useWorkspace`.
 - Timeline UI: `apps/web/pages/runs/[id].js` renders `timeline` from `useWorkspace`.
 - Run Explorer UI: `apps/web/pages/runs/index.js` lists runs and links to `/runs/[id]`.
-- Compare UI: `apps/web/pages/runs/compare.js` loads run summaries, metrics, trade markers, and Run A OHLCV using existing API endpoints; no compare-specific API endpoints required.
+- Compare UI/API: no compare page under `apps/web/pages` and no compare endpoints in `apps/api`.
 - Plugin validation gate: `src/plugins/validate.py` + `src/plugins/validation.py` write `artifacts/plugins/<type>/<id>/validation.json` and fail-closed on errors; `apps/api/plugins.py` exposes active/failed lists from validation artifacts.
 - UI uses validated plugins only: `apps/web/pages/runs/[id].js` renders strategies/indicators from `activePlugins` and shows failed diagnostics.
-- Chatbot flows exist in API: `apps/api/chat.py` modes `add_indicator`, `add_strategy`, `review_plugin`, `explain_trade`, `troubleshoot_errors`; UI wiring in `apps/web/pages/runs/[id].js` using `getChatModes`/`postChat` in `apps/web/lib/api.js`.
+- Chatbot flows exist in API: `apps/api/chat.py` modes `add_indicator`, `add_strategy`, `review_plugin`, `explain_trade`; UI wiring in `apps/web/pages/runs/[id].js` using `getChatModes`/`postChat` in `apps/web/lib/api.js`.
 
 **Phase-3 (User Extensibility) Status: PASS**
 Evidence:
@@ -131,25 +131,14 @@ Evidence:
 - UI surfaces validated plugins and hides invalid: `apps/web/lib/useWorkspace.js`, `apps/web/pages/runs/[id].js`.
 - Tests: `tests/plugins/test_plugin_validation.py`, `tests/integration/test_plugins_api.py`.
 
-**Phase-4 (AI Chatbot) Status: PASS**
+**Phase-4 (AI Chatbot) Status: FAIL**
 Evidence:
-- Modes include Troubleshoot Errors: `apps/api/chat.py` `_MODE_INDEX` and handlers; UI wired in `apps/web/pages/runs/[id].js`.
-- Review Mode expanded checks: `apps/api/chat.py` `_review_plugin` warmup/NaN + overfitting smells.
-- Integration tests for all modes: `tests/integration/test_chatbot_api_phase4.py`.
+- Existing modes: `apps/api/chat.py` `_MODE_INDEX` and handlers; UI wired in `apps/web/pages/runs/[id].js`.
+- Tests cover only current modes: `tests/integration/test_chatbot_api_phase4.py`.
 
 Minimum blocking tasks:
-- None. Phase-4 PASS criteria met.
-
-**Release Gate**
-Phase-4 must PASS before any release or go/no-go milestone. Phase-4 PASS achieved (see criteria below).
-Phase-5 PRs may proceed in parallel as long as UI stays read-only and artifact-driven.
-
-**Phase-4 PASS Criteria (Required for Release)**
-- [x] Troubleshoot Errors flow implemented and exposed in UI. Suggested files: `apps/api/chat.py`, `apps/web/pages/runs/[id].js`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [x] Review Mode expanded checks (warmup/NaN + basic overfitting smells). Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [x] Explain Trade references artifacts (markers/decisions/trades) and has an integration test. Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [x] Integration tests for all Phase-4 modes exist and pass. Suggested files: `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [x] UI shows all modes in AI Chat tab and each mode returns structured output. Suggested files: `apps/web/pages/runs/[id].js`, `apps/api/chat.py`. Verify: `python scripts/verify_phase1.py --with-services` (open `/runs/phase1_demo` and confirm all modes render and return structured sections).
+- Add Troubleshoot Errors flow (spec Flow 4) with exact steps, edits, rerun commands. Suggested files: `apps/api/chat.py` (new mode + handler), `apps/web/pages/runs/[id].js` (new form inputs), `tests/integration/test_chatbot_api_phase4.py` (new tests).
+- Expand Review Mode checks to include explicit warmup/NaN handling and basic overfitting-smell heuristics per spec. Suggested files: `apps/api/chat.py` (`_review_plugin` helpers), `tests/integration/test_chatbot_api_phase4.py`.
 
 **Verification Scripts / Tests (Phase-1/Phase-2 relevant)**
 Recommended:
@@ -165,7 +154,7 @@ Latest run (2026-02-10):
 - `python scripts/verify_phase1.py --with-services` -> PASS
 - `python -m ruff check .` -> PASS
 - `python -m ruff format --check .` -> PASS
-- `pytest -q` -> PASS (511 passed)
+- `pytest -q` -> PASS (509 passed)
 
 **Phase-5 Backlog (Summary)**
 - Performance / Smooth UX: request cancellation + cache for artifact fetches; trades pagination for large trade sets.
@@ -175,17 +164,12 @@ Latest run (2026-02-10):
 - Docs / Quickstart: user extensibility quickstart; compare and metrics breakdown docs.
 
 **Phase-5 PR Execution Plan**
-PR order rationale: stabilize data fetching and paging (PR-01/PR-02) before adding compare flows to reduce UI regression risk and ensure baseline performance. Compare features build on reliable artifact loading, while docs follow feature shape to avoid churn.
-Status: PR-01 through PR-08 merged (PRs #144–#151). Hygiene PR #153 merged.
 Order: PR-01 -> PR-02 -> PR-03 -> PR-04 -> PR-05 -> PR-06 -> PR-07 -> PR-08.
 
 **Performance / Smooth UX**
 **PR-01: Add request cache and abort for workspace artifacts**
 Depends on: none.
-Scope: Add AbortController support and a small in-memory cache keyed by run_id, timeframe, and range for OHLCV, markers, trades, metrics, and timeline requests.
-Does NOT change:
-- API contracts or endpoints.
-- Artifact truth, server-side computations, or UI write controls.
+Scope: Add AbortController support and a small in-memory cache keyed by run_id, timeframe, and range for OHLCV, markers, trades, metrics, and timeline requests. Does not change API contracts, artifact truth, or UI write controls.
 Acceptance criteria:
 - [ ] Switching run, symbol, or timeframe cancels in-flight requests and prevents stale updates.
 - [ ] Re-loading the same run/timeframe/range reuses cached payloads unless Refresh is clicked.
@@ -204,16 +188,12 @@ Rollback plan:
 - Revert PR-01 to remove cache and abort logic.
 
 **PR-02: Add trades pagination controls in workspace**
-Depends on: none. (Optional: pairs with PR-01 for request cancellation.)
-Scope: Add page/page_size controls for trades in `runs/[id]` and wire through `useWorkspace` to `/runs/{id}/trades`. API already supports `page` and `page_size` in `apps/api/main.py` `trades()` and `apps/api/artifacts.py` `load_trades()`.
-Does NOT change:
-- API pagination parameters or backend ordering semantics.
-- Artifact formats, trade computation, or decision records.
+Depends on: PR-01 (optional, for request cancellation).
+Scope: Add page/page_size controls for trades in `runs/[id]` and wire through `useWorkspace` to `/runs/{id}/trades`. Does not change API, contracts, or trade artifact format.
 Acceptance criteria:
 - [ ] Trades table supports paging in fixed increments (default 250).
-- [ ] Requests include `page` and `page_size`; `total`, `page`, and `page_size` from the response drive UI controls.
-- [ ] Selection and trade detail operate on the currently displayed page only.
-- [ ] No client-side recomputation of trades.
+- [ ] Page controls update API requests with `page` and `page_size`.
+- [ ] Selection and trade detail still map to artifact rows.
 Target files:
 - `apps/web/pages/runs/[id].js`
 - `apps/web/lib/useWorkspace.js`
@@ -223,17 +203,14 @@ Test plan:
 - `pytest -q`
 - `node apps/web/scripts/ui-smoke.mjs`
 Risk notes:
-- Backend ordering is implicit to artifacts; detect mismatched expectations by paging through and confirming `total` is stable.
+- Pagination may hide expected rows; detect by comparing total counts and paging through.
 Rollback plan:
 - Revert PR-02 to restore single-page trade list.
 
 **Run Comparison**
 **PR-03: Add compare selection and baseline compare page**
 Depends on: none.
-Scope: Add two-run selection on `/runs` and create a compare page that loads both run summaries and shows metadata side-by-side.
-Does NOT change:
-- API contracts, artifact formats, or metric computation.
-- Existing run workspace behavior.
+Scope: Add two-run selection on `/runs` and create a compare page that loads both run summaries and shows metadata side-by-side. Does not change API contracts or compute new metrics.
 Acceptance criteria:
 - [ ] User can select exactly two runs and navigate to compare view.
 - [ ] Compare view loads both run summaries from artifacts and shows run_id, strategy, symbols, timeframe, and created_at.
@@ -247,7 +224,6 @@ Test plan:
 - `python -m ruff format --check .`
 - `pytest -q`
 - `node apps/web/scripts/ui-smoke.mjs`
-- Manual: open compare view for two runs and verify metadata fields render for both run_ids.
 Risk notes:
 - Query parameter handling could break deep links; detect by reloading the compare page.
 Rollback plan:
@@ -255,15 +231,10 @@ Rollback plan:
 
 **PR-04: Add compare metrics and trade marker overlays**
 Depends on: PR-03.
-Scope: Extend compare view to load metrics and trade markers for both runs and render side-by-side metrics plus overlay markers with run identification.
-Does NOT change:
-- Artifact formats, metrics computation, or trade generation.
-- Existing single-run workspace behavior.
+Scope: Extend compare view to load metrics and trade markers for both runs and render side-by-side metrics plus overlay markers with distinct styling. Does not change artifact formats or compute new metrics.
 Acceptance criteria:
 - [ ] Compare view shows metrics for both runs using `metrics.json` only.
-- [ ] Legend maps Run A and Run B to marker styles and displays each run_id.
-- [ ] Toggles allow showing/hiding markers for each run independently.
-- [ ] Marker tooltips or labels include the originating run_id.
+- [ ] Trade markers are rendered for both runs with distinct colors or labels.
 - [ ] Links allow opening each run in the standard workspace.
 Target files:
 - `apps/web/pages/runs/compare.js`
@@ -274,7 +245,6 @@ Test plan:
 - `python -m ruff format --check .`
 - `pytest -q`
 - `node apps/web/scripts/ui-smoke.mjs`
-- Manual: open compare view, verify legend/run_id labels, and toggle Run A/Run B markers.
 Risk notes:
 - Overlay markers could confuse directions if styling is ambiguous; detect by comparing legend and marker colors.
 Rollback plan:
@@ -283,10 +253,7 @@ Rollback plan:
 **Metrics time breakdown**
 **PR-05: Render metrics time breakdown table**
 Depends on: none.
-Scope: When `metrics.json` includes `time_breakdown` as a list of period objects, render a simple table in the Metrics tab.
-Does NOT change:
-- Metric calculations, aggregation logic, or artifact formats.
-- Any non-metrics tabs or chart behavior.
+Scope: When `metrics.json` includes `time_breakdown` as a list of period objects, render a simple table in the Metrics tab. Does not compute or derive metrics in UI.
 Acceptance criteria:
 - [ ] If `metrics.time_breakdown` exists, render a table with period, total_return, max_drawdown, win_rate, and num_trades when present.
 - [ ] If the field is missing, show a clear “not available” message.
@@ -307,10 +274,7 @@ Rollback plan:
 **Timeline readability**
 **PR-06: Group timeline by date and add severity filters**
 Depends on: none.
-Scope: Group timeline events by date and provide INFO/WARN/ERROR filter controls.
-Does NOT change:
-- Timeline event content, ordering within artifacts, or server-side generation.
-- Any non-timeline tabs or artifact loading.
+Scope: Group timeline events by date and provide INFO/WARN/ERROR filter controls. Does not alter timeline events or their ordering in artifacts.
 Acceptance criteria:
 - [ ] Timeline events are grouped under date headers.
 - [ ] Filters show only matching severities and default to showing all.
@@ -331,10 +295,7 @@ Rollback plan:
 **Docs / Quickstart**
 **PR-07: Add user extensibility quickstart**
 Depends on: none.
-Scope: Add a concise quickstart for user strategies/indicators and validation gate steps that mirror chatbot outputs.
-Does NOT change:
-- Strategy/indicator contracts or validation behavior.
-- UI runtime behavior.
+Scope: Add a concise quickstart for user strategies/indicators and validation gate steps that mirror chatbot outputs. Does not change contracts.
 Acceptance criteria:
 - [ ] Quickstart includes exact file paths, required fields, validation command, and UI success criteria.
 - [ ] Mentions fail-closed behavior if validation fails.
@@ -352,10 +313,7 @@ Rollback plan:
 
 **PR-08: Document compare view and metrics breakdown fields**
 Depends on: PR-03 and PR-05.
-Scope: Update specs to document compare view usage and the optional `metrics.time_breakdown` field schema.
-Does NOT change:
-- Product scope, contracts, or runtime behavior.
-- Validation gates or artifact truth rules.
+Scope: Update specs to document compare view usage and the optional `metrics.time_breakdown` field schema. Does not change product scope.
 Acceptance criteria:
 - [ ] `docs/UI_SPEC.md` includes compare view behavior and artifact truth notes.
 - [ ] `docs/PRODUCT_SPEC.md` describes the optional metrics breakdown field and usage.
