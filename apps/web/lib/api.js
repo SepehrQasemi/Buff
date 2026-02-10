@@ -1,48 +1,5 @@
 const DEFAULT_API_BASE = "http://127.0.0.1:8000";
 const API_VERSION_PATH = "/api/v1";
-const CACHE_MAX_ENTRIES = 50;
-
-class LruCache {
-  constructor(maxEntries) {
-    this.maxEntries = maxEntries;
-    this.entries = new Map();
-  }
-
-  get(key) {
-    if (!this.entries.has(key)) {
-      return null;
-    }
-    const value = this.entries.get(key);
-    this.entries.delete(key);
-    this.entries.set(key, value);
-    return value;
-  }
-
-  set(key, value) {
-    if (this.entries.has(key)) {
-      this.entries.delete(key);
-    }
-    this.entries.set(key, value);
-    while (this.entries.size > this.maxEntries) {
-      const oldestKey = this.entries.keys().next().value;
-      this.entries.delete(oldestKey);
-    }
-  }
-
-  delete(key) {
-    this.entries.delete(key);
-  }
-
-  clear() {
-    this.entries.clear();
-  }
-
-  keys() {
-    return this.entries.keys();
-  }
-}
-
-const REQUEST_CACHE = new LruCache(CACHE_MAX_ENTRIES);
 
 const getRuntimeBase = () => {
   if (typeof window === "undefined") {
@@ -86,49 +43,6 @@ const buildQuery = (params = {}) => {
   return query.toString();
 };
 
-const buildStableQuery = (params = {}) => {
-  const query = new URLSearchParams();
-  Object.keys(params)
-    .sort()
-    .forEach((key) => {
-      const value = params[key];
-      if (value === undefined || value === null || value === "") {
-        return;
-      }
-      if (Array.isArray(value)) {
-        value.forEach((item) => query.append(key, item));
-        return;
-      }
-      query.append(key, value);
-    });
-  return query.toString();
-};
-
-const buildCacheKey = (path, params) => {
-  const normalizedPath = String(path || "").replace(/^\/+/, "");
-  const query = buildStableQuery(params);
-  return `${API_BASE}${normalizedPath}${query ? `?${query}` : ""}`;
-};
-
-export const invalidateCache = ({ runId, prefixes } = {}) => {
-  const needles = [];
-  if (runId) {
-    needles.push(`/runs/${runId}`);
-  }
-  if (Array.isArray(prefixes)) {
-    needles.push(...prefixes.filter(Boolean));
-  }
-  if (needles.length === 0) {
-    REQUEST_CACHE.clear();
-    return;
-  }
-  for (const key of REQUEST_CACHE.keys()) {
-    if (needles.some((needle) => key.includes(needle))) {
-      REQUEST_CACHE.delete(key);
-    }
-  }
-};
-
 const parseErrorMessage = (data, fallback) => {
   if (!data) {
     return fallback;
@@ -158,25 +72,14 @@ export const buildApiUrl = (path, params) => {
   return url.toString();
 };
 
-const request = async (path, params, options = {}) => {
-  const { signal, cache = false, bypassCache = false } = options;
-  const cacheKey = cache ? buildCacheKey(path, params) : null;
-
-  if (cache && !bypassCache && cacheKey) {
-    const cached = REQUEST_CACHE.get(cacheKey);
-    if (cached) {
-      return { ok: true, status: 200, data: cached.data, cached: true };
-    }
-  }
-
+const request = async (path, params) => {
   const url = buildApiUrl(path, params);
 
   try {
-    const response = await fetch(url, { signal });
+    const response = await fetch(url);
     const contentType = response.headers.get("content-type") || "";
-    const isJson = contentType.includes("application/json");
     let data;
-    if (isJson) {
+    if (contentType.includes("application/json")) {
       data = await response.json();
     } else {
       data = await response.text();
@@ -191,14 +94,8 @@ const request = async (path, params, options = {}) => {
       };
     }
 
-    if (cache && cacheKey && isJson) {
-      REQUEST_CACHE.set(cacheKey, { data });
-    }
     return { ok: true, status: response.status, data };
   } catch (error) {
-    if (error?.name === "AbortError") {
-      return { ok: false, aborted: true };
-    }
     return { ok: false, error: error?.message || "Network error" };
   }
 };
@@ -232,34 +129,27 @@ const post = async (path, payload) => {
   }
 };
 
-export const getRuns = (options) => request("/runs", undefined, options);
+export const getRuns = () => request("/runs");
 
-export const getRunSummary = (id, options) =>
-  request(`/runs/${id}/summary`, undefined, options);
+export const getRunSummary = (id) => request(`/runs/${id}/summary`);
 
-export const getDecisions = (id, params, options) =>
-  request(`/runs/${id}/decisions`, params, options);
+export const getDecisions = (id, params) => request(`/runs/${id}/decisions`, params);
 
-export const getTrades = (id, params, options) =>
-  request(`/runs/${id}/trades`, params, options);
+export const getTrades = (id, params) => request(`/runs/${id}/trades`, params);
 
-export const getErrors = (id, params, options) =>
-  request(`/runs/${id}/errors`, params, options);
+export const getErrors = (id, params) => request(`/runs/${id}/errors`, params);
 
-export const getOhlcv = (id, params, options) =>
-  request(`/runs/${id}/ohlcv`, params, options);
+export const getOhlcv = (id, params) => request(`/runs/${id}/ohlcv`, params);
 
-export const getTradeMarkers = (id, params, options) =>
-  request(`/runs/${id}/trades/markers`, params, options);
+export const getTradeMarkers = (id, params) => request(`/runs/${id}/trades/markers`, params);
 
-export const getMetrics = (id, options) => request(`/runs/${id}/metrics`, undefined, options);
+export const getMetrics = (id) => request(`/runs/${id}/metrics`);
 
-export const getTimeline = (id, params, options) =>
-  request(`/runs/${id}/timeline`, params, options);
+export const getTimeline = (id, params) => request(`/runs/${id}/timeline`, params);
 
-export const getActivePlugins = (options) => request("/plugins/active", undefined, options);
+export const getActivePlugins = () => request("/plugins/active");
 
-export const getFailedPlugins = (options) => request("/plugins/failed", undefined, options);
+export const getFailedPlugins = () => request("/plugins/failed");
 
 export const getChatModes = () => request("/chat/modes");
 

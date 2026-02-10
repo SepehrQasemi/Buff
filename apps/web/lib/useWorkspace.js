@@ -9,7 +9,6 @@ import {
   getTimeline,
   getTradeMarkers,
   getTrades,
-  invalidateCache,
 } from "./api";
 
 const DEFAULT_TIMEFRAMES = [
@@ -24,8 +23,6 @@ const DEFAULT_TIMEFRAMES = [
   "1w",
   "1M",
 ];
-const DEFAULT_TRADES_PAGE_SIZE = 250;
-const MAX_TRADES_PAGE_SIZE = 500;
 
 const formatError = (result, fallback) => {
   if (!result) {
@@ -50,8 +47,6 @@ export default function useWorkspace(runId) {
   const [markersError, setMarkersError] = useState(null);
   const [trades, setTrades] = useState({ results: [] });
   const [tradesError, setTradesError] = useState(null);
-  const [tradesPage, setTradesPage] = useState(1);
-  const [tradesPageSize, setTradesPageSize] = useState(DEFAULT_TRADES_PAGE_SIZE);
   const [metrics, setMetrics] = useState(null);
   const [metricsError, setMetricsError] = useState(null);
   const [timeline, setTimeline] = useState([]);
@@ -66,75 +61,17 @@ export default function useWorkspace(runId) {
   const [timeframe, setTimeframe] = useState("");
   const [range, setRange] = useState({ start_ts: "", end_ts: "" });
 
-  const runsRequestId = useRef(0);
-  const runsAbortRef = useRef(null);
-  const summaryRequestId = useRef(0);
-  const summaryAbortRef = useRef(null);
-  const ohlcvRequestId = useRef(0);
-  const ohlcvAbortRef = useRef(null);
-  const markersRequestId = useRef(0);
-  const markersAbortRef = useRef(null);
-  const tradesRequestId = useRef(0);
-  const tradesAbortRef = useRef(null);
-  const metricsRequestId = useRef(0);
-  const metricsAbortRef = useRef(null);
-  const timelineRequestId = useRef(0);
-  const timelineAbortRef = useRef(null);
-  const pluginsRequestId = useRef(0);
-  const pluginsAbortRef = useRef(null);
-
-  const normalizeTradesPageSize = (value) => {
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed) || parsed < 1) {
-      return DEFAULT_TRADES_PAGE_SIZE;
-    }
-    return Math.min(parsed, MAX_TRADES_PAGE_SIZE);
-  };
-
-  const normalizeTradesPage = (value) => {
-    const parsed = Number.parseInt(value, 10);
-    if (!Number.isFinite(parsed) || parsed < 1) {
-      return 1;
-    }
-    return parsed;
-  };
-
-  const effectiveTradesPageSize = useMemo(
-    () => normalizeTradesPageSize(tradesPageSize),
-    [tradesPageSize]
-  );
-  const effectiveTradesPage = useMemo(
-    () => normalizeTradesPage(tradesPage),
-    [tradesPage]
-  );
-
-  useEffect(() => {
-    if (effectiveTradesPageSize !== tradesPageSize) {
-      setTradesPageSize(effectiveTradesPageSize);
-    }
-  }, [effectiveTradesPageSize, tradesPageSize]);
-
-  useEffect(() => {
-    if (effectiveTradesPage !== tradesPage) {
-      setTradesPage(effectiveTradesPage);
-    }
-  }, [effectiveTradesPage, tradesPage]);
+  const requestId = useRef(0);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    const requestId = runsRequestId.current + 1;
-    runsRequestId.current = requestId;
-    if (runsAbortRef.current) {
-      runsAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    runsAbortRef.current = controller;
+    let active = true;
     setRunError(null);
     async function loadRun() {
-      const result = await getRuns({ signal: controller.signal });
-      if (runsRequestId.current !== requestId || result.aborted) {
+      const result = await getRuns();
+      if (!active) {
         return;
       }
       if (!result.ok) {
@@ -154,7 +91,7 @@ export default function useWorkspace(runId) {
     }
     loadRun();
     return () => {
-      controller.abort();
+      active = false;
     };
   }, [runId, reloadToken]);
 
@@ -177,21 +114,12 @@ export default function useWorkspace(runId) {
     if (!runId) {
       return;
     }
-    const requestId = summaryRequestId.current + 1;
-    summaryRequestId.current = requestId;
-    if (summaryAbortRef.current) {
-      summaryAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    summaryAbortRef.current = controller;
+    let active = true;
     setSummaryLoading(true);
     setSummaryError(null);
     async function loadSummary() {
-      const result = await getRunSummary(runId, {
-        signal: controller.signal,
-        cache: true,
-      });
-      if (summaryRequestId.current !== requestId || result.aborted) {
+      const result = await getRunSummary(runId);
+      if (!active) {
         return;
       }
       if (!result.ok) {
@@ -208,7 +136,7 @@ export default function useWorkspace(runId) {
     }
     loadSummary();
     return () => {
-      controller.abort();
+      active = false;
     };
   }, [runId, reloadToken]);
 
@@ -216,13 +144,8 @@ export default function useWorkspace(runId) {
     if (!runId) {
       return;
     }
-    const currentId = ohlcvRequestId.current + 1;
-    ohlcvRequestId.current = currentId;
-    if (ohlcvAbortRef.current) {
-      ohlcvAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    ohlcvAbortRef.current = controller;
+    const currentId = requestId.current + 1;
+    requestId.current = currentId;
     setOhlcvError(null);
     async function loadOhlcv() {
       setOhlcvLoading(true);
@@ -233,11 +156,8 @@ export default function useWorkspace(runId) {
         end_ts: range.end_ts || undefined,
         limit: 2000,
       };
-      const result = await getOhlcv(runId, params, {
-        signal: controller.signal,
-        cache: true,
-      });
-      if (ohlcvRequestId.current !== currentId || result.aborted) {
+      const result = await getOhlcv(runId, params);
+      if (requestId.current !== currentId) {
         return;
       }
       if (!result.ok) {
@@ -253,34 +173,18 @@ export default function useWorkspace(runId) {
     } else {
       setOhlcvLoading(false);
     }
-    return () => {
-      controller.abort();
-    };
   }, [runId, symbol, timeframe, range, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    const requestId = markersRequestId.current + 1;
-    markersRequestId.current = requestId;
-    if (markersAbortRef.current) {
-      markersAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    markersAbortRef.current = controller;
     async function loadMarkers() {
       const params = {
         start_ts: range.start_ts || undefined,
         end_ts: range.end_ts || undefined,
       };
-      const result = await getTradeMarkers(runId, params, {
-        signal: controller.signal,
-        cache: true,
-      });
-      if (markersRequestId.current !== requestId || result.aborted) {
-        return;
-      }
+      const result = await getTradeMarkers(runId, params);
       if (!result.ok) {
         setMarkersError(formatError(result, "Failed to load trade markers"));
         return;
@@ -289,59 +193,14 @@ export default function useWorkspace(runId) {
       setMarkersError(null);
     }
     loadMarkers();
-    return () => {
-      controller.abort();
-    };
   }, [runId, range, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    setTradesPage(1);
-  }, [runId]);
-
-  useEffect(() => {
-    if (!runId) {
-      return;
-    }
-    setTradesPage(1);
-  }, [effectiveTradesPageSize, runId]);
-
-  useEffect(() => {
-    const total = trades?.total;
-    if (total === null || total === undefined) {
-      return;
-    }
-    const maxPage = Math.max(1, Math.ceil(total / effectiveTradesPageSize));
-    if (effectiveTradesPage > maxPage) {
-      setTradesPage(maxPage);
-    }
-  }, [trades?.total, effectiveTradesPage, effectiveTradesPageSize]);
-
-  useEffect(() => {
-    if (!runId) {
-      return;
-    }
-    const requestId = tradesRequestId.current + 1;
-    tradesRequestId.current = requestId;
-    if (tradesAbortRef.current) {
-      tradesAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    tradesAbortRef.current = controller;
     async function loadTrades() {
-      const result = await getTrades(
-        runId,
-        { page: effectiveTradesPage, page_size: effectiveTradesPageSize },
-        {
-          signal: controller.signal,
-          cache: true,
-        }
-      );
-      if (tradesRequestId.current !== requestId || result.aborted) {
-        return;
-      }
+      const result = await getTrades(runId, { page: 1, page_size: 250 });
       if (!result.ok) {
         setTradesError(formatError(result, "Failed to load trades"));
         return;
@@ -350,30 +209,14 @@ export default function useWorkspace(runId) {
       setTradesError(null);
     }
     loadTrades();
-    return () => {
-      controller.abort();
-    };
-  }, [runId, reloadToken, effectiveTradesPage, effectiveTradesPageSize]);
+  }, [runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    const requestId = metricsRequestId.current + 1;
-    metricsRequestId.current = requestId;
-    if (metricsAbortRef.current) {
-      metricsAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    metricsAbortRef.current = controller;
     async function loadMetrics() {
-      const result = await getMetrics(runId, {
-        signal: controller.signal,
-        cache: true,
-      });
-      if (metricsRequestId.current !== requestId || result.aborted) {
-        return;
-      }
+      const result = await getMetrics(runId);
       if (!result.ok) {
         setMetricsError(formatError(result, "Failed to load metrics"));
         return;
@@ -382,34 +225,14 @@ export default function useWorkspace(runId) {
       setMetricsError(null);
     }
     loadMetrics();
-    return () => {
-      controller.abort();
-    };
   }, [runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    const requestId = timelineRequestId.current + 1;
-    timelineRequestId.current = requestId;
-    if (timelineAbortRef.current) {
-      timelineAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    timelineAbortRef.current = controller;
     async function loadTimeline() {
-      const result = await getTimeline(
-        runId,
-        { source: "auto" },
-        {
-          signal: controller.signal,
-          cache: true,
-        }
-      );
-      if (timelineRequestId.current !== requestId || result.aborted) {
-        return;
-      }
+      const result = await getTimeline(runId, { source: "auto" });
       if (!result.ok) {
         setTimelineError(formatError(result, "Failed to load timeline"));
         return;
@@ -419,32 +242,19 @@ export default function useWorkspace(runId) {
       setTimelineError(null);
     }
     loadTimeline();
-    return () => {
-      controller.abort();
-    };
   }, [runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
       return;
     }
-    const requestId = pluginsRequestId.current + 1;
-    pluginsRequestId.current = requestId;
-    if (pluginsAbortRef.current) {
-      pluginsAbortRef.current.abort();
-    }
-    const controller = new AbortController();
-    pluginsAbortRef.current = controller;
+    let active = true;
     async function loadPlugins() {
       const [activeResult, failedResult] = await Promise.all([
-        getActivePlugins({ signal: controller.signal }),
-        getFailedPlugins({ signal: controller.signal }),
+        getActivePlugins(),
+        getFailedPlugins(),
       ]);
-      if (
-        pluginsRequestId.current !== requestId ||
-        activeResult.aborted ||
-        failedResult.aborted
-      ) {
+      if (!active) {
         return;
       }
       const normalize = (payload) => ({
@@ -473,7 +283,7 @@ export default function useWorkspace(runId) {
     }
     loadPlugins();
     return () => {
-      controller.abort();
+      active = false;
     };
   }, [runId, reloadToken]);
 
@@ -484,10 +294,7 @@ export default function useWorkspace(runId) {
     return DEFAULT_TIMEFRAMES;
   }, [run]);
 
-  const reload = () => {
-    invalidateCache({ runId });
-    setReloadToken((value) => value + 1);
-  };
+  const reload = () => setReloadToken((value) => value + 1);
 
   return {
     run,
@@ -502,10 +309,6 @@ export default function useWorkspace(runId) {
     markersError,
     trades,
     tradesError,
-    tradesPage: effectiveTradesPage,
-    setTradesPage,
-    tradesPageSize: effectiveTradesPageSize,
-    setTradesPageSize,
     metrics,
     metricsError,
     timeline,

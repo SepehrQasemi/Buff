@@ -26,43 +26,6 @@ const formatPercent = (value) => {
   return `${(num * 100).toFixed(2)}%`;
 };
 
-const formatMetricValue = (value) => {
-  if (value === null || value === undefined || value === "") {
-    return "n/a";
-  }
-  return String(value);
-};
-
-const normalizeTimelineSeverity = (value) => {
-  const normalized =
-    value === null || value === undefined || value === ""
-      ? "INFO"
-      : String(value).toUpperCase();
-  if (normalized.startsWith("ERR")) {
-    return { filterBucket: "ERROR", label: "ERROR", alwaysVisible: false };
-  }
-  if (normalized.startsWith("WARN")) {
-    return { filterBucket: "WARN", label: "WARN", alwaysVisible: false };
-  }
-  if (normalized.startsWith("INFO")) {
-    return { filterBucket: "INFO", label: "INFO", alwaysVisible: false };
-  }
-  return {
-    filterBucket: "INFO",
-    label: normalized,
-    alwaysVisible: true,
-  };
-};
-
-const extractTimelineDate = (value) => {
-  if (!value) {
-    return "Unknown date";
-  }
-  const text = String(value);
-  const dateToken = text.includes("T") ? text.split("T")[0] : text.split(" ")[0];
-  return /^\d{4}-\d{2}-\d{2}$/.test(dateToken) ? dateToken : "Unknown date";
-};
-
 const formatDate = (value) => (value ? String(value) : "n/a");
 
 const Tabs = [
@@ -79,10 +42,8 @@ const DEFAULT_CHAT_MODES = [
   { id: "add_indicator", label: "Add Indicator" },
   { id: "add_strategy", label: "Add Strategy" },
   { id: "review_plugin", label: "Review Plugin" },
-  { id: "troubleshoot_errors", label: "Troubleshoot Errors" },
   { id: "explain_trade", label: "Explain Trade" },
 ];
-const TRADE_PAGE_SIZES = [50, 100, 250, 500];
 
 const parseCsv = (value) =>
   String(value || "")
@@ -107,10 +68,6 @@ export default function ChartWorkspace() {
     markersError,
     trades,
     tradesError,
-    tradesPage,
-    setTradesPage,
-    tradesPageSize,
-    setTradesPageSize,
     metrics,
     metricsError,
     timeline,
@@ -146,7 +103,6 @@ export default function ChartWorkspace() {
     strategy_indicators: "",
     plugin_kind: "indicator",
     plugin_id: "",
-    error_text: "",
     run_id: "",
     trade_id: "",
     decision_id: "",
@@ -155,11 +111,6 @@ export default function ChartWorkspace() {
   const [chatResponse, setChatResponse] = useState(null);
   const [chatError, setChatError] = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
-  const [timelineFilters, setTimelineFilters] = useState({
-    INFO: true,
-    WARN: true,
-    ERROR: true,
-  });
 
   useEffect(() => {
     setRangeDraft(range);
@@ -207,73 +158,6 @@ export default function ChartWorkspace() {
 
   const candles = useMemo(() => ohlcv?.candles || [], [ohlcv]);
   const tradeRows = useMemo(() => trades?.results || [], [trades]);
-  const tradesTotal = Number.isFinite(trades?.total) ? trades.total : null;
-  const tradesStart =
-    tradeRows.length === 0 ? 0 : (tradesPage - 1) * tradesPageSize + 1;
-  const tradesEnd =
-    tradeRows.length === 0 ? 0 : tradesStart + tradeRows.length - 1;
-  const tradesMaxPage =
-    tradesTotal === null
-      ? null
-      : Math.max(1, Math.ceil(tradesTotal / tradesPageSize));
-  const tradesCanPrev = tradesPage > 1;
-  const tradesCanNext =
-    tradesTotal === null ? tradeRows.length > 0 : tradesPage < tradesMaxPage;
-  const timeBreakdown = useMemo(
-    () => (Array.isArray(metrics?.time_breakdown) ? metrics.time_breakdown : []),
-    [metrics]
-  );
-  const timeBreakdownColumns = useMemo(() => {
-    if (!timeBreakdown.length) {
-      return [];
-    }
-    const columns = [
-      { key: "period", label: "Period" },
-      { key: "total_return", label: "Total Return" },
-      { key: "max_drawdown", label: "Max Drawdown" },
-      { key: "win_rate", label: "Win Rate" },
-      { key: "num_trades", label: "Trades" },
-    ];
-    return columns.filter((column) =>
-      timeBreakdown.some((row) => {
-        if (!row || typeof row !== "object") {
-          return false;
-        }
-        const value = row[column.key];
-        return value !== undefined && value !== null && value !== "";
-      })
-    );
-  }, [timeBreakdown]);
-  const filteredTimeline = useMemo(() => {
-    if (!Array.isArray(timeline)) {
-      return [];
-    }
-    return timeline
-      .map((event, index) => ({
-        event,
-        index,
-        severity: normalizeTimelineSeverity(event?.severity),
-        dateKey: extractTimelineDate(event?.timestamp),
-      }))
-      .filter((item) => {
-        if (item.severity?.alwaysVisible) {
-          return true;
-        }
-        return timelineFilters[item.severity?.filterBucket] !== false;
-      });
-  }, [timeline, timelineFilters]);
-  const timelineGroups = useMemo(() => {
-    const groups = [];
-    const indexByDate = new Map();
-    filteredTimeline.forEach((item) => {
-      if (!indexByDate.has(item.dateKey)) {
-        indexByDate.set(item.dateKey, groups.length);
-        groups.push({ dateKey: item.dateKey, items: [] });
-      }
-      groups[indexByDate.get(item.dateKey)].items.push(item);
-    });
-    return groups;
-  }, [filteredTimeline]);
   const activeStrategies = useMemo(
     () => (activePlugins?.strategies ? activePlugins.strategies : []),
     [activePlugins]
@@ -299,23 +183,6 @@ export default function ChartWorkspace() {
     const match = activeStrategies.find((item) => item.id === runStrategy);
     setSelectedStrategy(match ? match.id : activeStrategies[0].id);
   }, [selectedStrategy, activeStrategies, run]);
-
-  useEffect(() => {
-    if (!selectedTrade) {
-      return;
-    }
-    const selectedId = selectedTrade.trade_id || selectedTrade.id;
-    const stillVisible = tradeRows.some((trade) => {
-      const tradeId = trade.trade_id || trade.id;
-      if (selectedId && tradeId) {
-        return tradeId === selectedId;
-      }
-      return trade === selectedTrade;
-    });
-    if (!stillVisible) {
-      setSelectedTrade(null);
-    }
-  }, [tradeRows, selectedTrade]);
 
   const applyRange = () => {
     setRange({
@@ -359,13 +226,6 @@ export default function ChartWorkspace() {
     if (chatMode === "review_plugin") {
       setIf("kind", chatContext.plugin_kind);
       setIf("id", chatContext.plugin_id);
-    }
-
-    if (chatMode === "troubleshoot_errors") {
-      setIf("error_text", chatContext.error_text || chatMessage);
-      setIf("plugin_type", chatContext.plugin_kind);
-      setIf("plugin_id", chatContext.plugin_id);
-      setIf("run_id", chatContext.run_id || runId);
     }
 
     if (chatMode === "explain_trade") {
@@ -678,57 +538,6 @@ export default function ChartWorkspace() {
                   <>
                     <div className="panel-card">
                       <h3>Trades</h3>
-                      <div
-                        className="chart-toolbar"
-                        style={{ justifyContent: "space-between", marginBottom: "8px" }}
-                      >
-                        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                          <button
-                            className="secondary"
-                            disabled={!tradesCanPrev}
-                            onClick={() =>
-                              setTradesPage((value) => Math.max(1, value - 1))
-                            }
-                          >
-                            Prev
-                          </button>
-                          <span className="muted" style={{ fontSize: "0.8rem" }}>
-                            Page {tradesPage}
-                            {tradesMaxPage ? ` of ${tradesMaxPage}` : ""}
-                          </span>
-                          <button
-                            className="secondary"
-                            disabled={!tradesCanNext}
-                            onClick={() =>
-                              setTradesPage((value) =>
-                                tradesMaxPage ? Math.min(tradesMaxPage, value + 1) : value + 1
-                              )
-                            }
-                          >
-                            Next
-                          </button>
-                        </div>
-                        <label>
-                          Page size
-                          <select
-                            value={tradesPageSize}
-                            onChange={(event) =>
-                              setTradesPageSize(Number(event.target.value))
-                            }
-                          >
-                            {TRADE_PAGE_SIZES.map((size) => (
-                              <option key={size} value={size}>
-                                {size}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        {tradesTotal !== null && (
-                          <div className="muted" style={{ fontSize: "0.8rem" }}>
-                            Showing {tradesStart}–{tradesEnd} of {tradesTotal}
-                          </div>
-                        )}
-                      </div>
                       <div className="table-wrap">
                         <table>
                           <thead>
@@ -822,63 +631,32 @@ export default function ChartWorkspace() {
                 {metricsError ? (
                   <p className="inline-warning">{metricsError}</p>
                 ) : metrics ? (
-                  <>
-                    <div className="stat-grid">
-                      <div className="stat-card">
-                        <span>Total Return</span>
-                        <strong>{formatPercent(metrics.total_return)}</strong>
-                      </div>
-                      <div className="stat-card">
-                        <span>Max Drawdown</span>
-                        <strong>{formatPercent(metrics.max_drawdown)}</strong>
-                      </div>
-                      <div className="stat-card">
-                        <span>Win Rate</span>
-                        <strong>{formatPercent(metrics.win_rate)}</strong>
-                      </div>
-                      <div className="stat-card">
-                        <span>Avg Win</span>
-                        <strong>{formatNumber(metrics.avg_win)}</strong>
-                      </div>
-                      <div className="stat-card">
-                        <span>Avg Loss</span>
-                        <strong>{formatNumber(metrics.avg_loss)}</strong>
-                      </div>
-                      <div className="stat-card">
-                        <span>Trades</span>
-                        <strong>{metrics.num_trades ?? "n/a"}</strong>
-                      </div>
+                  <div className="stat-grid">
+                    <div className="stat-card">
+                      <span>Total Return</span>
+                      <strong>{formatPercent(metrics.total_return)}</strong>
                     </div>
-                    <div style={{ marginTop: "16px" }}>
-                      <h4 style={{ margin: "0 0 8px 0" }}>Time Breakdown</h4>
-                      {timeBreakdown.length > 0 && timeBreakdownColumns.length > 0 ? (
-                        <div className="table-wrap">
-                          <table>
-                            <thead>
-                              <tr>
-                                {timeBreakdownColumns.map((column) => (
-                                  <th key={column.key}>{column.label}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {timeBreakdown.map((row, index) => (
-                                <tr key={`breakdown-${index}`}>
-                                  {timeBreakdownColumns.map((column) => (
-                                    <td key={`${column.key}-${index}`}>
-                                      {formatMetricValue(row?.[column.key])}
-                                    </td>
-                                  ))}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : (
-                        <p className="muted">Time breakdown not available.</p>
-                      )}
+                    <div className="stat-card">
+                      <span>Max Drawdown</span>
+                      <strong>{formatPercent(metrics.max_drawdown)}</strong>
                     </div>
-                  </>
+                    <div className="stat-card">
+                      <span>Win Rate</span>
+                      <strong>{formatPercent(metrics.win_rate)}</strong>
+                    </div>
+                    <div className="stat-card">
+                      <span>Avg Win</span>
+                      <strong>{formatNumber(metrics.avg_win)}</strong>
+                    </div>
+                    <div className="stat-card">
+                      <span>Avg Loss</span>
+                      <strong>{formatNumber(metrics.avg_loss)}</strong>
+                    </div>
+                    <div className="stat-card">
+                      <span>Trades</span>
+                      <strong>{metrics.num_trades ?? "n/a"}</strong>
+                    </div>
+                  </div>
                 ) : (
                   <p className="muted">Metrics artifact not available.</p>
                 )}
@@ -892,54 +670,19 @@ export default function ChartWorkspace() {
                   <p className="inline-warning">{timelineError}</p>
                 ) : (
                   <div className="timeline-list">
-                    <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-                      {["INFO", "WARN", "ERROR"].map((level) => (
-                        <label
-                          key={level}
-                          className="muted"
-                          style={{ display: "flex", gap: "6px", alignItems: "center" }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={timelineFilters[level]}
-                            onChange={(event) =>
-                              setTimelineFilters((current) => ({
-                                ...current,
-                                [level]: event.target.checked,
-                              }))
-                            }
-                          />
-                          {level}
-                        </label>
-                      ))}
-                    </div>
-                    {timeline.length === 0 ? (
+                    {timeline.length === 0 && (
                       <p className="muted">No timeline events found in artifacts.</p>
-                    ) : filteredTimeline.length === 0 ? (
-                      <p className="muted">No timeline events match the selected severities.</p>
-                    ) : (
-                      timelineGroups.map((group) => (
-                      <div key={`timeline-${group.dateKey}`}>
-                        <h4 style={{ margin: "12px 0 6px 0" }}>{group.dateKey}</h4>
-                        {group.items.map((item) => {
-                          const event = item.event || {};
-                          return (
-                            <div
-                              key={`${event.timestamp}-${item.index}`}
-                              className="timeline-item"
-                            >
-                              <div className="timeline-time">{event.timestamp}</div>
-                              <div>
-                                <strong>{event.title || event.type}</strong>
-                                {event.detail && <p className="muted">{event.detail}</p>}
-                                <span className="pill">{item.severity?.label || "INFO"}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      ))
                     )}
+                    {timeline.map((event, index) => (
+                      <div key={`${event.timestamp}-${index}`} className="timeline-item">
+                        <div className="timeline-time">{event.timestamp}</div>
+                        <div>
+                          <strong>{event.title || event.type}</strong>
+                          {event.detail && <p className="muted">{event.detail}</p>}
+                          <span className="pill">{event.severity || "INFO"}</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1126,48 +869,6 @@ export default function ChartWorkspace() {
                             value={chatContext.plugin_id}
                             onChange={updateChatField("plugin_id")}
                             placeholder="simple_rsi"
-                          />
-                        </label>
-                      </div>
-                    )}
-
-                    {chatMode === "troubleshoot_errors" && (
-                      <div className="chat-fields">
-                        <label>
-                          Error Text
-                          <textarea
-                            value={chatContext.error_text}
-                            onChange={updateChatField("error_text")}
-                            placeholder="Paste validation errors or traceback here."
-                            rows={4}
-                          />
-                        </label>
-                        <label>
-                          Plugin Type (optional)
-                          <select
-                            value={chatContext.plugin_kind}
-                            onChange={updateChatField("plugin_kind")}
-                          >
-                            <option value="indicator">Indicator</option>
-                            <option value="strategy">Strategy</option>
-                          </select>
-                        </label>
-                        <label>
-                          Plugin ID (optional)
-                          <input
-                            type="text"
-                            value={chatContext.plugin_id}
-                            onChange={updateChatField("plugin_id")}
-                            placeholder="simple_rsi"
-                          />
-                        </label>
-                        <label>
-                          Run ID (optional)
-                          <input
-                            type="text"
-                            value={chatContext.run_id}
-                            onChange={updateChatField("run_id")}
-                            placeholder={runId || "run-123"}
                           />
                         </label>
                       </div>
