@@ -10,3 +10,9 @@
 - [USER_EXTENSIBILITY.md](USER_EXTENSIBILITY.md): User extensibility quickstart, validation, and visibility rules.
 - [PHASE2_CLOSURE.md](PHASE2_CLOSURE.md): Phase-2 closure summary and test status.
 - [WIP_BRANCH_POLICY.md](WIP_BRANCH_POLICY.md): WIP branch do-not-merge rule and cleanup guidance.
+
+## Roadmap / Next
+
+- [PHASE6_USABLE_PRODUCT.md](PHASE6_USABLE_PRODUCT.md): Phase-6 plan to make Buff actually usable.
+
+Current status: Phase-1 verification + release gate pass; Phase-6 not started (Stage 1 next).
