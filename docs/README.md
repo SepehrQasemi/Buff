@@ -13,6 +13,6 @@
 
 ## Roadmap / Next
 
-- [PHASE6_USABLE_PRODUCT.md](PHASE6_USABLE_PRODUCT.md): Phase-6 plan to make Buff actually usable.
+- [phase6/README.md](phase6/README.md): Phase-6 plan to make Buff actually usable.
 
 Current status: Phase-1 verification + release gate pass; Phase-6 not started (Stage 1 next).
