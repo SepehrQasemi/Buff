@@ -328,6 +328,13 @@ pytest -q
 ruff format --check .
 ```
 
+## Release Preflight (Local)
+
+```bash
+python -m tools.release_preflight
+python -m tools.release_gate --strict
+```
+
 ## Governance / Safety
 
 See GITHUB_SETTINGS_CHECKLIST.md for required GitHub UI settings.
