@@ -76,7 +76,7 @@ Phase-0 product/spec index: [docs/README.md](docs/README.md)
 
 ## Roadmap / Next
 
-- Phase-6: Make Buff Actually Usable (`docs/PHASE6_USABLE_PRODUCT.md`).
+- Phase-6: Make Buff Actually Usable (`docs/phase6/README.md`).
 
 Current status: Phase-1 verification + release gate pass; Phase-6 not started (Stage 1 next).
 
