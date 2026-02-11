@@ -14,9 +14,9 @@ from pathlib import Path
 
 
 STEPS = [
-    ("ruff check", ["ruff", "check", "."]),
-    ("ruff format", ["ruff", "format", "--check", "."]),
-    ("pytest", ["pytest", "-q"]),
+    ("ruff check", [sys.executable, "-m", "ruff", "check", "."]),
+    ("ruff format", [sys.executable, "-m", "ruff", "format", "--check", "."]),
+    ("pytest", [sys.executable, "-m", "pytest", "-q"]),
     ("ui smoke", ["node", "apps/web/scripts/ui-smoke.mjs"]),
 ]
 
@@ -25,9 +25,28 @@ DEFAULT_UI_PORT = 3000
 UI_WORKSPACE_MARKER = 'data-testid="chart-workspace"'
 
 
+def _in_venv() -> bool:
+    return getattr(sys, "base_prefix", sys.prefix) != sys.prefix
+
+
+def _ensure_env(base_env: dict[str, str] | None = None) -> dict[str, str]:
+    env = dict(base_env) if base_env is not None else os.environ.copy()
+    exe_dir = str(Path(sys.executable).resolve().parent)
+    path = env.get("PATH", "")
+    env["PATH"] = f"{exe_dir}{os.pathsep}{path}" if path else exe_dir
+    if _in_venv():
+        env["VIRTUAL_ENV"] = sys.prefix
+    return env
+
+
+def _log_command(label: str, cmd: list[str]) -> None:
+    print(f"Command ({label}): {cmd}")
+
+
 def run_step(label: str, cmd: list[str], cwd: Path, env: dict[str, str] | None = None) -> int:
     print(f"\n==> {label}")
-    result = subprocess.run(cmd, cwd=str(cwd), env=env)
+    _log_command(label, cmd)
+    result = subprocess.run(cmd, cwd=str(cwd), env=_ensure_env(env))
     if result.returncode != 0:
         print(f"!! {label} failed (exit {result.returncode})")
     else:
@@ -68,7 +87,8 @@ def _process_kwargs() -> dict:
 
 
 def start_process(cmd: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Popen:
-    return subprocess.Popen(cmd, cwd=str(cwd), env=env, **_process_kwargs())
+    _log_command("start_process", cmd)
+    return subprocess.Popen(cmd, cwd=str(cwd), env=_ensure_env(env), **_process_kwargs())
 
 
 def stop_process(proc: subprocess.Popen | None, label: str) -> None:
@@ -184,6 +204,7 @@ def main() -> int:
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
+    print(f"Python executable: {sys.executable}")
     api_proc: subprocess.Popen | None = None
     ui_proc: subprocess.Popen | None = None
     api_port = DEFAULT_API_PORT
