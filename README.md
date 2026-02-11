@@ -331,9 +331,10 @@ ruff format --check .
 ## Release Preflight (Local)
 
 ```bash
-python -m tools.release_preflight
-python -m tools.release_gate --strict
+python -m tools.release_preflight --timeout-seconds 900
+python -m tools.release_gate --strict --timeout-seconds 900
 ```
+See docs/RELEASE_PRECHECK.md and docs/RELEASE_GATE.md for details.
 
 ## Governance / Safety
 
