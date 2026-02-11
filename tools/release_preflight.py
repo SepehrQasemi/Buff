@@ -283,6 +283,7 @@ def main(argv: list[str] | None = None) -> int:
     ending_branch: str | None = None
     ending_sha: str | None = None
     dirty_tree_reported = False
+    custom_error_reported = False
 
     try:
         _log("release_preflight: verify git repo")
@@ -380,7 +381,7 @@ def main(argv: list[str] | None = None) -> int:
             timeout_seconds=args.timeout_seconds,
         )
 
-        _log("release_preflight: verify main matches origin/main")
+        _log("release_preflight: verify main ancestry")
         verify_start = time.perf_counter()
         branch_proc = _run_and_check(
             steps,
@@ -412,24 +413,54 @@ def main(argv: list[str] | None = None) -> int:
         )
         origin_sha = (origin_proc.stdout or "").strip()
 
-        matches = ending_branch == "main" and ending_sha == origin_sha
+        merge_base_proc = _run_command(
+            steps,
+            "git_merge_base_is_ancestor",
+            ["git", "merge-base", "--is-ancestor", "origin/main", "HEAD"],
+            cwd=repo_root,
+            timeout_seconds=args.timeout_seconds,
+            allow_failure=True,
+        )
+        is_ancestor = merge_base_proc.returncode == 0
+        if ending_sha == origin_sha:
+            relation = "equal"
+        elif is_ancestor:
+            relation = "ahead"
+        else:
+            relation = "diverged"
+
+        matches = ending_branch == "main" and relation in {"equal", "ahead"}
         steps.append(
             {
                 "name": "git_verify_main_sync",
                 "status": "ok" if matches else "fail",
                 "duration": round(time.perf_counter() - verify_start, 4),
                 "details": {
-                    "branch": ending_branch,
                     "head_sha": ending_sha,
                     "origin_main_sha": origin_sha,
-                    "matches": matches,
+                    "is_ancestor": is_ancestor,
+                    "relation": relation,
+                    "branch": ending_branch,
                 },
             }
         )
         if not matches:
+            if relation == "diverged":
+                print(
+                    "Your local main has diverged from origin/main. Update your local history by "
+                    "merging/rebasing origin/main into your work (without pushing to main), then "
+                    "rerun preflight.",
+                    file=sys.stderr,
+                )
+                custom_error_reported = True
+                raise StepFailure(
+                    "git_verify_main_sync",
+                    "HEAD is not based on origin/main (diverged history). Rebase/merge onto "
+                    "origin/main before release.",
+                )
             raise StepFailure(
                 "git_verify_main_sync",
-                "HEAD does not match origin/main after ff-only pull",
+                "HEAD is not on main",
             )
 
         _log("release_preflight: verify clean after pull")
@@ -462,7 +493,7 @@ def main(argv: list[str] | None = None) -> int:
         return_code = 0
     except StepFailure as exc:
         _log(f"release_preflight: FAIL ({exc.step_name})")
-        if not dirty_tree_reported:
+        if not dirty_tree_reported and not custom_error_reported:
             print(f"error: {exc.message}", file=sys.stderr)
         return_code = 1
     finally:
