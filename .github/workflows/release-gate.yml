@@ -23,7 +23,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --extra dev
       - name: Run release gate
-        run: python -m tools.release_gate --strict
+        run: uv run python -m tools.release_gate --strict
       - name: Upload release gate report
         if: always()
         uses: actions/upload-artifact@v4
