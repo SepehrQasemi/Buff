@@ -1,3 +1,4 @@
+import math
 import os
 
 import pytest
@@ -18,6 +19,11 @@ def test_apply_resource_limits_invokes_setrlimit(monkeypatch):
 
     validation_module._apply_resource_limits()
 
-    assert any(call[0] == resource.RLIMIT_CPU for call in calls)
+    cpu_calls = [call for call in calls if call[0] == resource.RLIMIT_CPU]
+    assert cpu_calls
+    expected_cpu = max(1, int(math.ceil(validation_module.RUNTIME_TIMEOUT_SECONDS)) + 1)
+    assert cpu_calls[0][1] == (expected_cpu, expected_cpu)
     if hasattr(resource, "RLIMIT_AS"):
-        assert any(call[0] == resource.RLIMIT_AS for call in calls)
+        as_calls = [call for call in calls if call[0] == resource.RLIMIT_AS]
+        assert as_calls
+        assert as_calls[0][1] == (512 * 1024 * 1024, 512 * 1024 * 1024)
