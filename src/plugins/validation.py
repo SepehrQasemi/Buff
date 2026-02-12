@@ -956,7 +956,7 @@ def _run_runtime_with_timeout(
             detail = _describe_exitcode(exitcode)
             if exitcode and exitcode != 0:
                 message = f"Runtime worker exited with {detail}."
-                _add_issue(issues, f"RUNTIME_ERROR({detail})", message)
+                _add_issue(issues, "RUNTIME_ERROR", message)
             else:
                 message = f"Runtime validation returned no result ({detail})."
                 _add_issue(issues, "RUNTIME_ERROR", message)
@@ -1027,7 +1027,7 @@ def _apply_resource_limits() -> None:
     except ImportError:
         return
 
-    cpu_seconds = max(1, int(math.ceil(RUNTIME_TIMEOUT_SECONDS)))
+    cpu_seconds = max(1, int(math.ceil(RUNTIME_TIMEOUT_SECONDS)) + 1)
     try:
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
     except (ValueError, OSError):
