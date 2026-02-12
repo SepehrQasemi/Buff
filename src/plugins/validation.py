@@ -954,13 +954,12 @@ def _run_runtime_with_timeout(
         if not has_payload:
             exitcode = process.exitcode
             detail = _describe_exitcode(exitcode)
-            code = f"RUNTIME_ERROR({detail})"
             if exitcode and exitcode != 0:
                 message = f"Runtime worker exited with {detail}."
-                _add_issue(issues, code, message)
+                _add_issue(issues, f"RUNTIME_ERROR({detail})", message)
             else:
                 message = f"Runtime validation returned no result ({detail})."
-                _add_issue(issues, code, message)
+                _add_issue(issues, "RUNTIME_ERROR", message)
             return
         try:
             payload = parent_conn.recv()
@@ -968,7 +967,7 @@ def _run_runtime_with_timeout(
             exitcode = process.exitcode
             detail = _describe_exitcode(exitcode)
             message = f"Runtime validation returned no result ({detail})."
-            _add_issue(issues, f"RUNTIME_ERROR({detail})", message)
+            _add_issue(issues, "RUNTIME_ERROR", message)
             return
         for code, message in payload:
             _add_issue(issues, code, message)
