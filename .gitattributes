@@ -3,5 +3,12 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.json text eol=lf
+*.jsonl text eol=lf
 *.toml text eol=lf
 *.sh  text eol=lf
+*.csv text eol=lf
+
+apps/api/phase6/** text eol=lf
+scripts/*.py text eol=lf
+tests/fixtures/phase6/** text eol=lf
+tests/goldens/phase6/** text eol=lf

@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
+
+
+def _subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    repo_root = Path(__file__).resolve().parents[1]
+    src_path = repo_root / "src"
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(src_path) + (os.pathsep + existing if existing else "")
+    return env
 
 
 def test_cli_replay_exit_codes(tmp_path: Path) -> None:
@@ -26,6 +36,7 @@ def test_cli_replay_exit_codes(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_subprocess_env(),
     )
     assert record_proc.returncode == 0
 
@@ -45,6 +56,7 @@ def test_cli_replay_exit_codes(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_subprocess_env(),
     )
     assert snapshot_proc.returncode == 0
 
@@ -65,6 +77,7 @@ def test_cli_replay_exit_codes(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_subprocess_env(),
     )
     assert replay_proc.returncode == 0
     assert "REPLAY_OK strict-core" in replay_proc.stdout
@@ -88,6 +101,7 @@ def test_cli_replay_out_is_directory(tmp_path: Path) -> None:
             str(decisions_dir),
         ],
         check=True,
+        env=_subprocess_env(),
     )
     decision_path = decisions_dir / "2026-02-01" / "decision_dec-001.json"
 
@@ -104,6 +118,7 @@ def test_cli_replay_out_is_directory(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_subprocess_env(),
     )
     assert snapshot_proc.returncode == 0
     snapshot_path = Path(snapshot_proc.stdout.strip())
@@ -126,6 +141,7 @@ def test_cli_replay_out_is_directory(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_subprocess_env(),
     )
     assert replay_proc.returncode == 0
     assert (out_dir / "replay_dec-001.json").exists()
@@ -149,6 +165,7 @@ def test_cli_replay_out_file_path_fails(tmp_path: Path) -> None:
             str(decisions_dir),
         ],
         check=True,
+        env=_subprocess_env(),
     )
     decision_path = decisions_dir / "2026-02-01" / "decision_dec-001.json"
 
@@ -165,6 +182,7 @@ def test_cli_replay_out_file_path_fails(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_subprocess_env(),
     )
     assert snapshot_proc.returncode == 0
     snapshot_path = Path(snapshot_proc.stdout.strip())
@@ -187,6 +205,7 @@ def test_cli_replay_out_file_path_fails(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_subprocess_env(),
     )
     assert replay_proc.returncode == 2
     assert "ERROR: --out must be a directory" in replay_proc.stderr
@@ -208,6 +227,7 @@ def test_cli_replay_writes_diff_json(tmp_path: Path) -> None:
             str(decisions_dir),
         ],
         check=True,
+        env=_subprocess_env(),
     )
     decision_path = decisions_dir / "2026-02-01" / "decision_dec-001.json"
 
@@ -238,6 +258,7 @@ def test_cli_replay_writes_diff_json(tmp_path: Path) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_subprocess_env(),
     )
     assert replay_proc.returncode == 2
     assert "REPLAY_MISMATCH" in replay_proc.stdout

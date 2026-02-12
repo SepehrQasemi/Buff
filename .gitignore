@@ -26,6 +26,7 @@ htmlcov/
 
 # Data / logs / secrets
 /data/
+/logs/
 *.parquet
 !tests/fixtures/ohlcv/ohlcv_1m_fixture.parquet
 *.csv

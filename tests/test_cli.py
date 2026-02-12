@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -36,7 +37,16 @@ def _write_decision_record(run_dir: Path, run_id: str) -> None:
 
 def _run_cli(args: list[str], workspaces: Path) -> subprocess.CompletedProcess[str]:
     cmd = [sys.executable, "-m", "src.cli", "--workspaces", str(workspaces)] + args
-    return subprocess.run(cmd, capture_output=True, text=True)
+    return subprocess.run(cmd, capture_output=True, text=True, env=_subprocess_env())
+
+
+def _subprocess_env() -> dict[str, str]:
+    env = os.environ.copy()
+    repo_root = Path(__file__).resolve().parents[1]
+    src_path = repo_root / "src"
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(src_path) + (os.pathsep + existing if existing else "")
+    return env
 
 
 def test_cli_list_runs(tmp_path: Path) -> None:

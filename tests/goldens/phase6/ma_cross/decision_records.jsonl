@@ -1,0 +1,10 @@
+{"action":"HOLD","price":10.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":0,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:00:00.000Z"}
+{"action":"HOLD","price":9.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":1,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:01:00.000Z"}
+{"action":"HOLD","price":8.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":2,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:02:00.000Z"}
+{"action":"HOLD","price":9.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":3,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:03:00.000Z"}
+{"action":"ENTER_LONG","price":10.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":4,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:04:00.000Z"}
+{"action":"HOLD","price":11.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":5,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:05:00.000Z"}
+{"action":"HOLD","price":10.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":6,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:06:00.000Z"}
+{"action":"EXIT_LONG","price":9.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":7,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:07:00.000Z"}
+{"action":"HOLD","price":8.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":8,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:08:00.000Z"}
+{"action":"HOLD","price":7.00000000,"risk_level":3,"run_id":"run_5985d38491c0","schema_version":"dr.v1","seq":9,"strategy_id":"ma_cross","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:09:00.000Z"}
