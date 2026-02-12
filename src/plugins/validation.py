@@ -901,9 +901,19 @@ def _runtime_debug_enabled() -> bool:
     return os.getenv("BUFF_PLUGIN_VALIDATION_DEBUG") == "1"
 
 
-def _debug_runtime(issues: list[ValidationIssue], message: str) -> None:
-    if _runtime_debug_enabled():
-        issues.append(ValidationIssue(code="DEBUG_RUNTIME", message=message))
+def _runtime_debug_suffix(exitcode: int | None, has_payload: bool | None) -> str:
+    if not _runtime_debug_enabled():
+        return ""
+    parts = [f"exitcode={exitcode}", f"has_payload={has_payload}"]
+    if exitcode is not None and exitcode < 0:
+        try:
+            import signal
+
+            signame = signal.Signals(-exitcode).name
+        except Exception:
+            signame = "UNKNOWN"
+        parts.append(f"signal={signame}")
+    return f" [debug {', '.join(parts)}]"
 
 
 def _run_runtime_with_timeout(
@@ -932,20 +942,17 @@ def _run_runtime_with_timeout(
         if process.is_alive() and hasattr(process, "kill"):
             process.kill()
             process.join()
-        _debug_runtime(
+        debug_suffix = _runtime_debug_suffix(process.exitcode, None)
+        _add_issue(
             issues,
-            f"timeout: exitcode={process.exitcode} has_payload=unknown",
+            "RUNTIME_TIMEOUT",
+            f"Runtime validation timed out.{debug_suffix}",
         )
-        _add_issue(issues, "RUNTIME_TIMEOUT", "Runtime validation timed out.")
         return
     try:
         has_payload = queue._poll(0.2)
     except Exception:
         has_payload = False
-    _debug_runtime(
-        issues,
-        f"completed: exitcode={process.exitcode} has_payload={has_payload}",
-    )
     if not has_payload:
         exitcode = process.exitcode
         if exitcode and exitcode != 0:
@@ -960,9 +967,11 @@ def _run_runtime_with_timeout(
                 message = f"Runtime worker exited with code {exitcode} (signal {signame})."
             else:
                 message = f"Runtime worker exited with code {exitcode}."
+            message = f"{message}{_runtime_debug_suffix(exitcode, False)}"
             _add_issue(issues, "RUNTIME_ERROR", message)
         else:
-            _add_issue(issues, "RUNTIME_ERROR", "Runtime validation returned no result.")
+            message = f"Runtime validation returned no result.{_runtime_debug_suffix(exitcode, False)}"
+            _add_issue(issues, "RUNTIME_ERROR", message)
         return
     payload = queue.get()
     for code, message in payload:
