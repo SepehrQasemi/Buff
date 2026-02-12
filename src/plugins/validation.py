@@ -1023,7 +1023,7 @@ def _apply_resource_limits() -> None:
     except ImportError:
         return
 
-    cpu_seconds = max(1, int(math.ceil(RUNTIME_TIMEOUT_SECONDS)) + 1)
+    cpu_seconds = max(1, int(math.ceil(RUNTIME_TIMEOUT_SECONDS)))
     try:
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
     except (ValueError, OSError):
