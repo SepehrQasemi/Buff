@@ -32,7 +32,7 @@ from .artifacts import (
 )
 from .chat import router as chat_router
 from .errors import build_error_payload, raise_api_error
-from .plugins import list_active_plugins, list_failed_plugins
+from .plugins import get_validation_summary, list_active_plugins, list_failed_plugins
 from .timeutils import coerce_ts_param
 from .phase6.http import error_response
 from .phase6.paths import get_runs_root, is_within_root
@@ -168,6 +168,11 @@ def list_active() -> dict[str, list[dict[str, object]]]:
 @router.get("/plugins/failed")
 def list_failed() -> dict[str, list[dict[str, object]]]:
     return list_failed_plugins(get_artifacts_root())
+
+
+@router.get("/plugins/validation-summary")
+def validation_summary() -> dict[str, object]:
+    return get_validation_summary(get_artifacts_root())
 
 
 @router.get("/runs/{run_id}/summary")

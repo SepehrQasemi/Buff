@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from hashlib import sha256
 from pathlib import Path
 from typing import Literal
 
@@ -12,9 +11,10 @@ PluginType = Literal["indicator", "strategy"]
 class PluginCandidate:
     plugin_id: str
     plugin_type: PluginType
+    plugin_dir: Path
     yaml_path: Path
     py_path: Path
-    fingerprint: str
+    extra_files: list[str]
 
 
 def discover_plugins(root: Path) -> list[PluginCandidate]:
@@ -35,27 +35,24 @@ def discover_plugins(root: Path) -> list[PluginCandidate]:
             py_path = entry / py_name
             if not (yaml_path.exists() or py_path.exists()):
                 continue
-            fingerprint = _fingerprint_files(yaml_path, py_path)
+            extra_files = _extra_top_level_files(entry, {yaml_name, py_name})
             candidates.append(
                 PluginCandidate(
                     plugin_id=entry.name,
                     plugin_type=plugin_type,
+                    plugin_dir=entry,
                     yaml_path=yaml_path,
                     py_path=py_path,
-                    fingerprint=fingerprint,
+                    extra_files=extra_files,
                 )
             )
     return candidates
 
 
-def _fingerprint_files(yaml_path: Path, py_path: Path) -> str:
-    yaml_bytes = _read_bytes(yaml_path)
-    py_bytes = _read_bytes(py_path)
-    return sha256(yaml_bytes + py_bytes).hexdigest()
-
-
-def _read_bytes(path: Path) -> bytes:
-    try:
-        return path.read_bytes()
-    except OSError:
-        return b""
+def _extra_top_level_files(plugin_dir: Path, required: set[str]) -> list[str]:
+    allowed = set(required) | {"README.md", "README.txt"}
+    extras: list[str] = []
+    for entry in sorted(plugin_dir.iterdir(), key=lambda p: p.name):
+        if entry.is_file() and entry.name not in allowed:
+            extras.append(entry.name)
+    return extras
