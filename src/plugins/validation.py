@@ -8,6 +8,7 @@ import multiprocessing
 import os
 import re
 import sys
+from multiprocessing.connection import Connection
 from types import ModuleType
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -897,23 +898,18 @@ def _validate_runtime(
         _add_issue(issues, "RUNTIME_ERROR", f"Runtime validation failed: {exc}")
 
 
-def _runtime_debug_enabled() -> bool:
-    return os.getenv("BUFF_PLUGIN_VALIDATION_DEBUG") == "1"
-
-
-def _runtime_debug_suffix(exitcode: int | None, has_payload: bool | None) -> str:
-    if not _runtime_debug_enabled():
-        return ""
-    parts = [f"exitcode={exitcode}", f"has_payload={has_payload}"]
-    if exitcode is not None and exitcode < 0:
+def _describe_exitcode(exitcode: int | None) -> str:
+    if exitcode is None:
+        return "exitcode=None"
+    if exitcode < 0:
         try:
             import signal
 
             signame = signal.Signals(-exitcode).name
         except Exception:
             signame = "UNKNOWN"
-        parts.append(f"signal={signame}")
-    return f" [debug {', '.join(parts)}]"
+        return f"exitcode={exitcode} (signal {signame})"
+    return f"exitcode={exitcode}"
 
 
 def _run_runtime_with_timeout(
@@ -922,7 +918,7 @@ def _run_runtime_with_timeout(
     issues: list[ValidationIssue],
 ) -> None:
     ctx = multiprocessing.get_context("spawn")
-    queue: multiprocessing.queues.SimpleQueue[list[tuple[str, str]]] = ctx.SimpleQueue()
+    parent_conn, child_conn = ctx.Pipe(duplex=False)
     process = ctx.Process(
         target=_runtime_worker,
         args=(
@@ -931,53 +927,52 @@ def _run_runtime_with_timeout(
             str(candidate.py_path),
             str(candidate.plugin_dir),
             yaml_payload,
-            queue,
+            child_conn,
         ),
     )
     process.start()
-    process.join(RUNTIME_TIMEOUT_SECONDS)
-    if process.is_alive():
-        process.terminate()
-        process.join()
-        if process.is_alive() and hasattr(process, "kill"):
-            process.kill()
-            process.join()
-        debug_suffix = _runtime_debug_suffix(process.exitcode, None)
-        _add_issue(
-            issues,
-            "RUNTIME_TIMEOUT",
-            f"Runtime validation timed out.{debug_suffix}",
-        )
-        return
     try:
-        has_payload = queue._poll(0.2)
-    except Exception:
-        has_payload = False
-    if not has_payload:
-        exitcode = process.exitcode
-        if exitcode and exitcode != 0:
-            message = "Runtime worker crashed."
-            if exitcode < 0:
-                try:
-                    import signal
-
-                    signame = signal.Signals(-exitcode).name
-                except Exception:
-                    signame = "UNKNOWN"
-                message = f"Runtime worker exited with code {exitcode} (signal {signame})."
-            else:
-                message = f"Runtime worker exited with code {exitcode}."
-            message = f"{message}{_runtime_debug_suffix(exitcode, False)}"
-            _add_issue(issues, "RUNTIME_ERROR", message)
-        else:
-            message = (
-                f"Runtime validation returned no result.{_runtime_debug_suffix(exitcode, False)}"
+        child_conn.close()
+        process.join(RUNTIME_TIMEOUT_SECONDS)
+        if process.is_alive():
+            process.terminate()
+            process.join()
+            if process.is_alive() and hasattr(process, "kill"):
+                process.kill()
+                process.join()
+            detail = _describe_exitcode(process.exitcode)
+            _add_issue(
+                issues,
+                "RUNTIME_TIMEOUT",
+                f"Runtime validation timed out (parent terminated worker, {detail}).",
             )
+            return
+        try:
+            has_payload = parent_conn.poll(0.2)
+        except Exception:
+            has_payload = False
+        if not has_payload:
+            exitcode = process.exitcode
+            detail = _describe_exitcode(exitcode)
+            if exitcode and exitcode != 0:
+                message = f"Runtime worker exited with {detail}."
+                _add_issue(issues, "RUNTIME_ERROR", message)
+            else:
+                message = f"Runtime validation returned no result ({detail})."
+                _add_issue(issues, "RUNTIME_ERROR", message)
+            return
+        try:
+            payload = parent_conn.recv()
+        except Exception:
+            exitcode = process.exitcode
+            detail = _describe_exitcode(exitcode)
+            message = f"Runtime validation returned no result ({detail})."
             _add_issue(issues, "RUNTIME_ERROR", message)
-        return
-    payload = queue.get()
-    for code, message in payload:
-        _add_issue(issues, code, message)
+            return
+        for code, message in payload:
+            _add_issue(issues, code, message)
+    finally:
+        parent_conn.close()
 
 
 def _runtime_worker(
@@ -986,7 +981,7 @@ def _runtime_worker(
     py_path: str,
     plugin_dir: str,
     yaml_payload: dict[str, Any],
-    queue: multiprocessing.queues.SimpleQueue[list[tuple[str, str]]],
+    conn: Connection,
 ) -> None:
     issues: list[ValidationIssue] = []
     module_name = f"_buff_user_{plugin_type}_{plugin_id}"
@@ -1012,7 +1007,16 @@ def _runtime_worker(
         _add_issue(issues, "RUNTIME_ERROR", f"Runtime validation failed: {exc}")
     finally:
         sys.modules.pop(module_name, None)
-        queue.put([(issue.code, issue.message) for issue in issues])
+        try:
+            conn.send([(issue.code, issue.message) for issue in issues])
+        except Exception:
+            pass
+        finally:
+            conn.close()
+
+
+def _runtime_worker_crash_for_test(*_args: object, **_kwargs: object) -> None:
+    os._exit(137)
 
 
 def _apply_resource_limits() -> None:

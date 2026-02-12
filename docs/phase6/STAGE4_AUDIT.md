@@ -80,7 +80,6 @@ python -m pytest -q
 
 ## CI/Linux Root Cause & Fix
 - Symptom: On Ubuntu CI, runtime validation returned `RUNTIME_ERROR` instead of expected codes (e.g., `RUNTIME_TIMEOUT`, `INTENT_INVALID`).
-- Evidence: CI run 21966156083 (CPU limit reverted) failed timeout tests with `RUNTIME_ERROR`; CI run 21966258386 (memory limit reverted) failed multiple runtime validation tests with `RUNTIME_ERROR`.
-- Root cause: the worker was terminated before reporting results when `RLIMIT_CPU` matched the wall-time timeout or `RLIMIT_AS` was capped at 256MB.
-- Minimal fix: keep `RLIMIT_CPU = ceil(timeout) + 1` and `RLIMIT_AS = 512MB`; remove global spawn start-method forcing.
-- Debug aid: `BUFF_PLUGIN_VALIDATION_DEBUG=1` appends exit code/signal and queue payload status to error messages in artifacts.
+- Evidence: CI run 21966156083 (CPU limit reverted) failed timeout tests with `RUNTIME_ERROR`; CI run 21966258386 (memory limit reverted) failed multiple runtime validation tests with `RUNTIME_ERROR`. Deterministic repro added via `test_runtime_worker_exitcode_is_reported` (worker exits via `os._exit(137)` before sending).
+- Root cause: the worker was terminated before reporting results when `RLIMIT_CPU` matched the wall-time timeout or `RLIMIT_AS` was capped at 256MB; missing payloads surfaced as `RUNTIME_ERROR`.
+- Minimal fix: keep `RLIMIT_CPU = ceil(timeout) + 1` and `RLIMIT_AS = 512MB`; use `multiprocessing.Pipe` for IPC (no private APIs); avoid global spawn start-method forcing; include exitcode/signal in `RUNTIME_ERROR` messages when no payload is received.

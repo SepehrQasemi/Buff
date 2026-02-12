@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.plugins.discovery import discover_plugins
+from src.plugins import validation as validation_module
 from src.plugins.validation import validate_candidate
 
 VALID_INDICATOR_YAML = """\
@@ -398,6 +399,25 @@ def test_strategy_indicator_ids_invalid(tmp_path: Path) -> None:
     result = validate_candidate(candidate)
     assert result.status == "INVALID"
     assert any(code.startswith("INVALID_ENUM:inputs.indicators") for code in result.reason_codes)
+
+
+def test_runtime_worker_exitcode_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write(tmp_path / "user_indicators/simple_rsi/indicator.yaml", VALID_INDICATOR_YAML)
+    _write(tmp_path / "user_indicators/simple_rsi/indicator.py", VALID_INDICATOR_PY)
+    candidate = _candidate(tmp_path, "indicator", "simple_rsi")
+
+    monkeypatch.setattr(
+        validation_module,
+        "_runtime_worker",
+        validation_module._runtime_worker_crash_for_test,
+    )
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "RUNTIME_ERROR" in result.reason_codes
+    assert any("exitcode=137" in message for message in result.reason_messages)
 
 
 def test_runtime_timeout_is_invalid(tmp_path: Path) -> None:
