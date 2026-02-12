@@ -1,4 +1,4 @@
-# INDICATOR_CONTRACT — Built-in and User-defined Indicators
+# INDICATOR_CONTRACT â€” Built-in and User-defined Indicators
 
 ## Purpose
 Indicators are reusable computations that produce series used in strategies and overlays.
@@ -62,3 +62,11 @@ The built-in library should cover:
 - Volume: OBV, VWAP, MFI
 - Statistics: rolling mean/std, z-score, percentiles
 - Structure: pivots, swing high/low
+
+## Canonical contract constants
+```text
+ALLOWED_PARAM_TYPES: ["int", "float", "bool", "string", "enum"]
+ALLOWED_NAN_POLICIES: ["propagate", "fill", "error"]
+ALLOWED_INTENTS: ["HOLD", "ENTER_LONG", "ENTER_SHORT", "EXIT_LONG", "EXIT_SHORT"]
+```
+These constants are shared by indicator and strategy contracts.

@@ -65,6 +65,21 @@ const extractTimelineDate = (value) => {
 
 const formatDate = (value) => (value ? String(value) : "n/a");
 
+const normalizeParams = (params) => (Array.isArray(params) ? params : []);
+const hasParamDefault = (param) =>
+  Boolean(param && Object.prototype.hasOwnProperty.call(param, "default"));
+
+const buildParamDefaults = (params) =>
+  normalizeParams(params).reduce((acc, param) => {
+    if (!param || !param.name) {
+      return acc;
+    }
+    if (hasParamDefault(param) && param.default !== null) {
+      acc[param.name] = param.default;
+    }
+    return acc;
+  }, {});
+
 const Tabs = [
   { id: "strategy", label: "Strategy" },
   { id: "indicators", label: "Indicators" },
@@ -133,6 +148,8 @@ export default function ChartWorkspace() {
   const [selectedTrade, setSelectedTrade] = useState(null);
   const [rangeDraft, setRangeDraft] = useState({ start_ts: "", end_ts: "" });
   const [selectedStrategy, setSelectedStrategy] = useState("");
+  const [strategyParams, setStrategyParams] = useState({});
+  const [indicatorParams, setIndicatorParams] = useState({});
   const [chatModes, setChatModes] = useState(DEFAULT_CHAT_MODES);
   const [chatMode, setChatMode] = useState("add_indicator");
   const [chatContext, setChatContext] = useState({
@@ -290,6 +307,10 @@ export default function ChartWorkspace() {
     () => (failedPlugins?.indicators ? failedPlugins.indicators : []),
     [failedPlugins]
   );
+  const selectedStrategyMeta = useMemo(
+    () => activeStrategies.find((item) => item.id === selectedStrategy) || null,
+    [activeStrategies, selectedStrategy]
+  );
 
   useEffect(() => {
     if (selectedStrategy || activeStrategies.length === 0) {
@@ -299,6 +320,35 @@ export default function ChartWorkspace() {
     const match = activeStrategies.find((item) => item.id === runStrategy);
     setSelectedStrategy(match ? match.id : activeStrategies[0].id);
   }, [selectedStrategy, activeStrategies, run]);
+
+  useEffect(() => {
+    if (!selectedStrategy) {
+      setStrategyParams({});
+      return;
+    }
+    const selected = activeStrategies.find((item) => item.id === selectedStrategy);
+    const defaults = buildParamDefaults(selected?.schema?.params);
+    setStrategyParams(defaults);
+  }, [selectedStrategy, activeStrategies]);
+
+  useEffect(() => {
+    if (!activeIndicators.length) {
+      setIndicatorParams({});
+      return;
+    }
+    setIndicatorParams((current) => {
+      const next = { ...current };
+      activeIndicators.forEach((indicator) => {
+        if (!indicator || !indicator.id) {
+          return;
+        }
+        if (!next[indicator.id]) {
+          next[indicator.id] = buildParamDefaults(indicator?.schema?.params);
+        }
+      });
+      return next;
+    });
+  }, [activeIndicators]);
 
   useEffect(() => {
     if (!selectedTrade) {
@@ -388,6 +438,78 @@ export default function ChartWorkspace() {
 
   const risk = summary?.risk || {};
   const provenance = summary?.provenance || {};
+
+  const updateStrategyParam = (name, value) => {
+    setStrategyParams((current) => ({ ...current, [name]: value }));
+  };
+
+  const updateIndicatorParam = (indicatorId, name, value) => {
+    setIndicatorParams((current) => ({
+      ...current,
+      [indicatorId]: { ...(current[indicatorId] || {}), [name]: value },
+    }));
+  };
+
+  const renderParamInput = (param, value, onChange, options = {}) => {
+    const { disabled = false, missingDefault = false } = options;
+    const type = String(param?.type || "").toLowerCase();
+    if (type === "bool") {
+      return (
+        <input
+          type="checkbox"
+          checked={value === true}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.checked)}
+        />
+      );
+    }
+    if (type === "enum") {
+      const enumOptions = Array.isArray(param.enum) ? param.enum : [];
+      const selectValue = value ?? "";
+      return (
+        <select
+          value={selectValue}
+          disabled={disabled}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {selectValue === "" && (
+            <option value="">
+              {missingDefault ? "Missing default" : "Select value"}
+            </option>
+          )}
+          {enumOptions.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    if (type === "int" || type === "float") {
+      const step = type === "int" ? 1 : 0.01;
+      return (
+        <input
+          type="number"
+          step={step}
+          value={value ?? ""}
+          min={param.min}
+          max={param.max}
+          disabled={disabled}
+          placeholder={missingDefault ? "Missing default" : ""}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      );
+    }
+    return (
+      <input
+        type="text"
+        value={value ?? ""}
+        disabled={disabled}
+        placeholder={missingDefault ? "Missing default" : ""}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  };
 
   return (
     <main className="workspace-shell" data-testid="chart-workspace">
@@ -542,7 +664,7 @@ export default function ChartWorkspace() {
                   <h3>Strategy Selection</h3>
                   {activeStrategies.length === 0 ? (
                     <p className="muted">
-                      No active strategies found. Only validated (PASS) plugins are visible.
+                      No active strategies found. Only validated (VALID) plugins are visible.
                     </p>
                   ) : (
                     <label>
@@ -566,6 +688,49 @@ export default function ChartWorkspace() {
                         Run strategy is not validated. It is hidden from selection lists.
                       </p>
                     )}
+                </div>
+
+                <div className="panel-card">
+                  <h3>Strategy Parameters</h3>
+                  {!selectedStrategyMeta?.schema ? (
+                    <p className="muted">
+                      Schema missing in validation artifacts. Re-run validation to hydrate.
+                    </p>
+                  ) : normalizeParams(selectedStrategyMeta.schema.params).length === 0 ? (
+                    <p className="muted">No parameters declared for this strategy.</p>
+                  ) : (
+                    <div className="kv-grid">
+                      {normalizeParams(selectedStrategyMeta.schema.params).map((param) => {
+                        const missingDefault =
+                          !hasParamDefault(param) || param.default === null;
+                        return (
+                          <div key={`${selectedStrategyMeta.id}-${param.name}`}>
+                            <label
+                              style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+                            >
+                              <span>{param.name}</span>
+                              {renderParamInput(
+                                param,
+                                strategyParams[param.name],
+                                (value) => updateStrategyParam(param.name, value),
+                                { disabled: missingDefault, missingDefault }
+                              )}
+                            </label>
+                            {missingDefault && (
+                              <span className="inline-warning" style={{ fontSize: "0.75rem" }}>
+                                Missing default in schema. Re-run validation.
+                              </span>
+                            )}
+                            {param.description && (
+                              <span className="muted" style={{ fontSize: "0.75rem" }}>
+                                {param.description}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="panel-card">
@@ -648,22 +813,67 @@ export default function ChartWorkspace() {
             )}
 
             {activeTab === "indicators" && (
-              <div className="panel-card">
-                <h3>Indicators</h3>
-                {activeIndicators.length === 0 ? (
-                  <p className="muted">
-                    No active indicators found. Only validated (PASS) plugins are visible.
-                  </p>
-                ) : (
-                  <div className="kv-grid">
-                    {activeIndicators.map((indicator) => (
-                      <div key={indicator.id}>
-                        <span>{indicator.name || indicator.id}</span>
-                        <strong>{indicator.version || "n/a"}</strong>
+              <div className="panel-stack">
+                <div className="panel-card">
+                  <h3>Indicators</h3>
+                  {activeIndicators.length === 0 && (
+                    <p className="muted">
+                      No active indicators found. Only validated (VALID) plugins are visible.
+                    </p>
+                  )}
+                </div>
+                {activeIndicators.map((indicator) => (
+                  <div key={indicator.id} className="panel-card">
+                    <h4>
+                      {indicator.name ? `${indicator.name} (${indicator.id})` : indicator.id}
+                    </h4>
+                    <p className="muted">
+                      Version: {indicator.version || "n/a"} | Warmup:{" "}
+                      {indicator.schema?.warmup_bars ?? "n/a"} | NaN policy:{" "}
+                      {indicator.schema?.nan_policy || "n/a"}
+                    </p>
+                    {!indicator.schema ? (
+                      <p className="muted">
+                        Schema missing in validation artifacts. Re-run validation to hydrate.
+                      </p>
+                    ) : normalizeParams(indicator.schema.params).length === 0 ? (
+                      <p className="muted">No parameters declared for this indicator.</p>
+                    ) : (
+                      <div className="kv-grid">
+                        {normalizeParams(indicator.schema.params).map((param) => {
+                          const missingDefault =
+                            !hasParamDefault(param) || param.default === null;
+                          return (
+                            <div key={`${indicator.id}-${param.name}`}>
+                              <label
+                                style={{ display: "flex", flexDirection: "column", gap: "4px" }}
+                              >
+                                <span>{param.name}</span>
+                                {renderParamInput(
+                                  param,
+                                  indicatorParams[indicator.id]?.[param.name],
+                                  (value) =>
+                                    updateIndicatorParam(indicator.id, param.name, value),
+                                  { disabled: missingDefault, missingDefault }
+                                )}
+                              </label>
+                              {missingDefault && (
+                                <span className="inline-warning" style={{ fontSize: "0.75rem" }}>
+                                  Missing default in schema. Re-run validation.
+                                </span>
+                              )}
+                              {param.description && (
+                                <span className="muted" style={{ fontSize: "0.75rem" }}>
+                                  {param.description}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+                ))}
               </div>
             )}
 
@@ -1317,6 +1527,61 @@ export default function ChartWorkspace() {
                           <p className="muted">No success criteria returned.</p>
                         )}
                       </div>
+                      {chatResponse.review && (
+                        <div className="chat-section">
+                          <h4>Review Summary</h4>
+                          <div className="chat-alert chat-alert-danger">
+                            <strong>Issues</strong>
+                            {chatResponse.review.issues?.length ? (
+                              <ul className="chat-list">
+                                {chatResponse.review.issues.map((item, index) => (
+                                  <li key={`review-issue-${index}`}>{item}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="muted">No issues reported.</p>
+                            )}
+                          </div>
+                          <div className="chat-alert chat-alert-warning">
+                            <strong>Warnings</strong>
+                            {chatResponse.review.warnings?.length ? (
+                              <ul className="chat-list">
+                                {chatResponse.review.warnings.map((item, index) => (
+                                  <li key={`review-warning-${index}`}>{item}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="muted">No warnings reported.</p>
+                            )}
+                          </div>
+                          <div className="chat-section">
+                            <h4>Suggestions</h4>
+                            {chatResponse.review.suggestions?.length ? (
+                              <ul className="chat-list">
+                                {chatResponse.review.suggestions.map((item, index) => (
+                                  <li key={`review-suggestion-${index}`}>{item}</li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="muted">No suggestions returned.</p>
+                            )}
+                          </div>
+                          <div className="chat-section">
+                            <h4>Next Tests</h4>
+                            {chatResponse.review.next_tests?.length ? (
+                              <ul className="chat-list">
+                                {chatResponse.review.next_tests.map((item, index) => (
+                                  <li key={`review-test-${index}`}>
+                                    <code>{item}</code>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="muted">No next tests returned.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
