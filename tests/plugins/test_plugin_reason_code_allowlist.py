@@ -3,8 +3,6 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-import pytest
-
 from src.plugins.discovery import PluginCandidate, discover_plugins
 from src.plugins.reason_codes import is_allowed_reason_code
 from src.plugins.registry import _load_artifact_details
