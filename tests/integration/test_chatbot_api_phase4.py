@@ -227,42 +227,36 @@ def test_review_plugin_includes_warmup_nan_and_overfit_sections():
                     "    default: 14",
                     "    min: 2",
                     "    max: 200",
-                    "    step: 1",
                     "    description: length",
                     "  - name: threshold",
                     "    type: float",
                     "    default: 0.1",
                     "    min: 0.0",
                     "    max: 1.0",
-                    "    step: 0.01",
                     "    description: threshold",
                     "  - name: offset",
                     "    type: int",
                     "    default: 3",
                     "    min: 0",
                     "    max: 10",
-                    "    step: 1",
                     "    description: offset",
                     "  - name: alpha",
                     "    type: float",
                     "    default: 0.5",
                     "    min: 0.0",
                     "    max: 1.0",
-                    "    step: 0.1",
                     "    description: alpha",
                     "  - name: beta",
                     "    type: float",
                     "    default: 0.25",
                     "    min: 0.0",
                     "    max: 1.0",
-                    "    step: 0.05",
                     "    description: beta",
                     "  - name: gamma",
                     "    type: float",
                     "    default: 0.75",
                     "    min: 0.0",
                     "    max: 1.0",
-                    "    step: 0.05",
                     "    description: gamma",
                     "warmup_bars: 0",
                     "nan_policy: fill",
@@ -305,6 +299,10 @@ def test_review_plugin_includes_warmup_nan_and_overfit_sections():
         assert "overfitting_smells" in step_ids
         assert any("warmup" in warning for warning in data.get("warnings", []))
         assert any("overfit_smell" in warning for warning in data.get("warnings", []))
+        review = data.get("review")
+        assert review is not None
+        for key in ["issues", "warnings", "suggestions", "next_tests"]:
+            assert key in review
     finally:
         if plugin_dir.exists():
             shutil.rmtree(plugin_dir.parent.parent, ignore_errors=True)

@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.plugins.discovery import discover_plugins
+from src.plugins import validation as validation_module
 from src.plugins.validation import validate_candidate
 
 VALID_INDICATOR_YAML = """\
@@ -20,7 +21,7 @@ params:
     default: 14
     min: 2
     max: 200
-    step: 1
+    description: "Lookback period"
 warmup_bars: 14
 nan_policy: propagate
 """
@@ -49,7 +50,7 @@ params:
     default: 0.0
     min: -1.0
     max: 1.0
-    step: 0.1
+    description: "Entry threshold"
 outputs:
   intents: [HOLD, ENTER_LONG, EXIT_LONG]
   provides_confidence: false
@@ -111,6 +112,18 @@ def test_validation_passes_for_valid_plugins(tmp_path: Path) -> None:
     assert indicator_result.reason_codes == []
     assert strategy_result.status == "VALID"
     assert strategy_result.reason_codes == []
+
+
+def test_validation_repeated_runs_are_consistent(tmp_path: Path) -> None:
+    _write(tmp_path / "user_indicators/simple_rsi/indicator.yaml", VALID_INDICATOR_YAML)
+    _write(tmp_path / "user_indicators/simple_rsi/indicator.py", VALID_INDICATOR_PY)
+    candidate = _candidate(tmp_path, "indicator", "simple_rsi")
+
+    first = validate_candidate(candidate)
+    second = validate_candidate(candidate)
+
+    assert first.status == second.status
+    assert first.reason_codes == second.reason_codes
 
 
 def test_schema_validation_fails_for_missing_fields(tmp_path: Path) -> None:
@@ -213,3 +226,244 @@ def test_missing_required_files_is_invalid(tmp_path: Path) -> None:
     result = validate_candidate(candidate)
     assert result.status == "INVALID"
     assert any(code.startswith("MISSING_FILE:") for code in result.reason_codes)
+
+
+def test_strategy_invalid_intent_is_detected(tmp_path: Path) -> None:
+    bad_yaml = VALID_STRATEGY_YAML.replace("simple_cross", "bad_intent")
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def on_bar(ctx):
+    return {"intent": "FLY"}
+"""
+    _write(tmp_path / "user_strategies/bad_intent/strategy.yaml", bad_yaml)
+    _write(tmp_path / "user_strategies/bad_intent/strategy.py", bad_py)
+    candidate = _candidate(tmp_path, "strategy", "bad_intent")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "INTENT_INVALID" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes
+
+
+def test_strategy_nan_after_warmup_is_invalid(tmp_path: Path) -> None:
+    bad_yaml = VALID_STRATEGY_YAML.replace(
+        "provides_confidence: false", "provides_confidence: true"
+    ).replace("simple_cross", "nan_confidence")
+    bad_yaml = bad_yaml.replace("warmup_bars: 20", "warmup_bars: 1")
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def on_bar(ctx):
+    return {"intent": "HOLD", "confidence": float("nan")}
+"""
+    _write(tmp_path / "user_strategies/nan_confidence/strategy.yaml", bad_yaml)
+    _write(tmp_path / "user_strategies/nan_confidence/strategy.py", bad_py)
+    candidate = _candidate(tmp_path, "strategy", "nan_confidence")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "NAN_POLICY_VIOLATION" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes
+
+
+def test_strategy_confidence_none_is_invalid(tmp_path: Path) -> None:
+    bad_yaml = (
+        VALID_STRATEGY_YAML.replace("simple_cross", "none_confidence")
+        .replace("provides_confidence: false", "provides_confidence: true")
+        .replace("warmup_bars: 20", "warmup_bars: 0")
+    )
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def on_bar(ctx):
+    return {"intent": "HOLD", "confidence": None}
+"""
+    _write(tmp_path / "user_strategies/none_confidence/strategy.yaml", bad_yaml)
+    _write(tmp_path / "user_strategies/none_confidence/strategy.py", bad_py)
+    candidate = _candidate(tmp_path, "strategy", "none_confidence")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "CONFIDENCE_MISSING" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes
+
+
+def test_indicator_nondeterminism_is_invalid(tmp_path: Path) -> None:
+    bad_yaml = VALID_INDICATOR_YAML.replace("simple_rsi", "nondet")
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def compute(ctx, counter=iter([1, 2, 3])):
+    return {"rsi": next(counter)}
+"""
+    _write(tmp_path / "user_indicators/nondet/indicator.yaml", bad_yaml)
+    _write(tmp_path / "user_indicators/nondet/indicator.py", bad_py)
+    candidate = _candidate(tmp_path, "indicator", "nondet")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "NON_DETERMINISTIC_OUTPUT" in result.reason_codes
+
+
+def test_indicator_none_after_warmup_is_invalid_type(tmp_path: Path) -> None:
+    bad_yaml = VALID_INDICATOR_YAML.replace("simple_rsi", "none_output").replace(
+        "warmup_bars: 14", "warmup_bars: 0"
+    )
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def compute(ctx):
+    return {"rsi": None}
+"""
+    _write(tmp_path / "user_indicators/none_output/indicator.yaml", bad_yaml)
+    _write(tmp_path / "user_indicators/none_output/indicator.py", bad_py)
+    candidate = _candidate(tmp_path, "indicator", "none_output")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "OUTPUT_INVALID_TYPE" in result.reason_codes
+
+
+def test_indicator_nan_after_warmup_is_policy_violation(tmp_path: Path) -> None:
+    bad_yaml = VALID_INDICATOR_YAML.replace("simple_rsi", "nan_output").replace(
+        "warmup_bars: 14", "warmup_bars: 0"
+    )
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def compute(ctx):
+    return {"rsi": float("nan")}
+"""
+    _write(tmp_path / "user_indicators/nan_output/indicator.yaml", bad_yaml)
+    _write(tmp_path / "user_indicators/nan_output/indicator.py", bad_py)
+    candidate = _candidate(tmp_path, "indicator", "nan_output")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "NAN_POLICY_VIOLATION" in result.reason_codes
+
+
+def test_indicator_series_mutation_is_invalid(tmp_path: Path) -> None:
+    bad_yaml = VALID_INDICATOR_YAML.replace("simple_rsi", "mutate_series")
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def compute(ctx):
+    ctx.series["close"][0] = 1.0
+    return {"rsi": 50.0}
+"""
+    _write(tmp_path / "user_indicators/mutate_series/indicator.yaml", bad_yaml)
+    _write(tmp_path / "user_indicators/mutate_series/indicator.py", bad_py)
+    candidate = _candidate(tmp_path, "indicator", "mutate_series")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "RUNTIME_ERROR" in result.reason_codes
+
+
+def test_strategy_indicator_ids_validation(tmp_path: Path) -> None:
+    indicator_yaml = VALID_INDICATOR_YAML.replace("simple_rsi", "rsi_fast")
+    _write(tmp_path / "user_indicators/rsi_fast/indicator.yaml", indicator_yaml)
+
+    good_yaml = VALID_STRATEGY_YAML.replace("simple_cross", "uses_indicator").replace(
+        "indicators: []", "indicators: [rsi_fast]"
+    )
+    _write(tmp_path / "user_strategies/uses_indicator/strategy.yaml", good_yaml)
+    _write(tmp_path / "user_strategies/uses_indicator/strategy.py", VALID_STRATEGY_PY)
+    candidate = _candidate(tmp_path, "strategy", "uses_indicator")
+
+    result = validate_candidate(candidate)
+    assert result.status == "VALID"
+
+
+def test_strategy_indicator_ids_invalid(tmp_path: Path) -> None:
+    bad_yaml = VALID_STRATEGY_YAML.replace("simple_cross", "bad_indicator_id").replace(
+        "indicators: []", "indicators: [Bad-ID]"
+    )
+    _write(tmp_path / "user_strategies/bad_indicator_id/strategy.yaml", bad_yaml)
+    _write(tmp_path / "user_strategies/bad_indicator_id/strategy.py", VALID_STRATEGY_PY)
+    candidate = _candidate(tmp_path, "strategy", "bad_indicator_id")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert any(code.startswith("INVALID_ENUM:inputs.indicators") for code in result.reason_codes)
+
+
+def test_runtime_worker_exitcode_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write(tmp_path / "user_indicators/simple_rsi/indicator.yaml", VALID_INDICATOR_YAML)
+    _write(tmp_path / "user_indicators/simple_rsi/indicator.py", VALID_INDICATOR_PY)
+    candidate = _candidate(tmp_path, "indicator", "simple_rsi")
+
+    monkeypatch.setattr(
+        validation_module,
+        "_runtime_worker",
+        validation_module._runtime_worker_crash_for_test,
+    )
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "RUNTIME_ERROR" in result.reason_codes
+    assert any("exitcode=137" in message for message in result.reason_messages)
+
+
+def test_runtime_timeout_is_invalid(tmp_path: Path) -> None:
+    bad_yaml = VALID_INDICATOR_YAML.replace("simple_rsi", "timeout_indicator")
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def compute(ctx):
+    while True:
+        pass
+"""
+    _write(tmp_path / "user_indicators/timeout_indicator/indicator.yaml", bad_yaml)
+    _write(tmp_path / "user_indicators/timeout_indicator/indicator.py", bad_py)
+    candidate = _candidate(tmp_path, "indicator", "timeout_indicator")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "RUNTIME_TIMEOUT" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes
+    assert any("parent terminated worker" in message for message in result.reason_messages)
+    assert any("exitcode=" in message for message in result.reason_messages)
+
+
+def test_strategy_infinite_loop_times_out(tmp_path: Path) -> None:
+    bad_yaml = VALID_STRATEGY_YAML.replace("simple_cross", "timeout_strategy").replace(
+        "warmup_bars: 20", "warmup_bars: 0"
+    )
+    bad_py = """\
+def get_schema():
+    return {}
+
+
+def on_bar(ctx):
+    while True:
+        pass
+"""
+    _write(tmp_path / "user_strategies/timeout_strategy/strategy.yaml", bad_yaml)
+    _write(tmp_path / "user_strategies/timeout_strategy/strategy.py", bad_py)
+    candidate = _candidate(tmp_path, "strategy", "timeout_strategy")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert "RUNTIME_TIMEOUT" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes

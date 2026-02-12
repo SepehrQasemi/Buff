@@ -181,7 +181,11 @@ def test_builtins_open_is_invalid(tmp_path: Path) -> None:
         "def compute(ctx):\n    builtins.open('x', 'w')\n    return {'value': 1}\n",
     )
     assert result.status == "INVALID"
-    assert any(code.startswith("FORBIDDEN_ATTRIBUTE:builtins.open") for code in result.reason_codes)
+    assert any(
+        code.startswith("FORBIDDEN_IMPORT:builtins")
+        or code.startswith("FORBIDDEN_ATTRIBUTE:builtins.open")
+        for code in result.reason_codes
+    )
 
 
 def test_builtins_open_from_import_is_invalid(tmp_path: Path) -> None:
@@ -193,7 +197,11 @@ def test_builtins_open_from_import_is_invalid(tmp_path: Path) -> None:
         "def compute(ctx):\n    o('x', 'w')\n    return {'value': 1}\n",
     )
     assert result.status == "INVALID"
-    assert any(code.startswith("FORBIDDEN_CALL:builtins.open") for code in result.reason_codes)
+    assert any(
+        code.startswith("FORBIDDEN_IMPORT:builtins")
+        or code.startswith("FORBIDDEN_CALL:builtins.open")
+        for code in result.reason_codes
+    )
 
 
 def test_from_os_system_alias_is_invalid(tmp_path: Path) -> None:
@@ -303,3 +311,55 @@ def test_uuid_uuid4_is_invalid(tmp_path: Path) -> None:
     )
     assert result.status == "INVALID"
     assert any(code.startswith("FORBIDDEN_IMPORT:uuid") for code in result.reason_codes)
+
+
+def test_import_allowlist_blocks_unapproved_modules(tmp_path: Path) -> None:
+    result = _validate_indicator(
+        tmp_path,
+        "unsafe_json",
+        "import json\n\n"
+        "def get_schema():\n    return {}\n\n"
+        "def compute(ctx):\n    return {'value': 1}\n",
+    )
+    assert result.status == "INVALID"
+    assert any(code.startswith("FORBIDDEN_IMPORT:json") for code in result.reason_codes)
+
+
+def test_monkey_patching_is_invalid(tmp_path: Path) -> None:
+    result = _validate_indicator(
+        tmp_path,
+        "unsafe_patch",
+        "import math\n\n"
+        "def get_schema():\n    return {}\n\n"
+        "def compute(ctx):\n"
+        "    math.sin = lambda x: x\n"
+        "    return {'value': 1}\n",
+    )
+    assert result.status == "INVALID"
+    assert "MONKEY_PATCH" in result.reason_codes
+
+
+def test_setattr_is_invalid(tmp_path: Path) -> None:
+    result = _validate_indicator(
+        tmp_path,
+        "unsafe_setattr",
+        "def get_schema():\n    return {}\n\n"
+        "def compute(ctx):\n"
+        "    setattr(object(), 'x', 1)\n"
+        "    return {'value': 1}\n",
+    )
+    assert result.status == "INVALID"
+    assert any(code.startswith("FORBIDDEN_CALL:setattr") for code in result.reason_codes)
+
+
+def test_delattr_is_invalid(tmp_path: Path) -> None:
+    result = _validate_indicator(
+        tmp_path,
+        "unsafe_delattr",
+        "def get_schema():\n    return {}\n\n"
+        "def compute(ctx):\n"
+        "    delattr(object(), 'x')\n"
+        "    return {'value': 1}\n",
+    )
+    assert result.status == "INVALID"
+    assert any(code.startswith("FORBIDDEN_CALL:delattr") for code in result.reason_codes)

@@ -242,12 +242,14 @@ def test_plugins_yaml_parse_error_fail_closed(monkeypatch, tmp_path):
     artifacts_root = tmp_path / "artifacts"
     artifacts_root.mkdir()
     monkeypatch.setenv("ARTIFACTS_ROOT", str(artifacts_root))
-
-    _write_indicator(
-        tmp_path,
+    plugins_root = artifacts_root / "plugin_validation"
+    _write_plugin_record(
+        plugins_root,
+        "indicator",
         "bad_yaml",
-        "id: bad_yaml\nname: [unterminated\n",
-        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
+        "INVALID",
+        reason_codes=["YAML_PARSE_ERROR"],
+        reason_messages=["Failed to parse indicator.yaml"],
     )
 
     client = TestClient(app)
@@ -268,13 +270,14 @@ def test_plugins_ast_parse_error_fail_closed(monkeypatch, tmp_path):
     artifacts_root = tmp_path / "artifacts"
     artifacts_root.mkdir()
     monkeypatch.setenv("ARTIFACTS_ROOT", str(artifacts_root))
-
-    _write_indicator(
-        tmp_path,
+    plugins_root = artifacts_root / "plugin_validation"
+    _write_plugin_record(
+        plugins_root,
+        "indicator",
         "bad_ast",
-        "id: bad_ast\nname: Bad\nversion: 1.0.0\ncategory: momentum\ninputs: [close]\n"
-        "outputs: [value]\nparams: []\nwarmup_bars: 1\nnan_policy: propagate\n",
-        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {\n",
+        "INVALID",
+        reason_codes=["AST_PARSE_ERROR"],
+        reason_messages=["indicator.py syntax error"],
     )
 
     client = TestClient(app)
@@ -295,19 +298,15 @@ def test_plugins_validation_exception_fail_closed(monkeypatch, tmp_path):
     artifacts_root = tmp_path / "artifacts"
     artifacts_root.mkdir()
     monkeypatch.setenv("ARTIFACTS_ROOT", str(artifacts_root))
-
-    _write_indicator(
-        tmp_path,
+    plugins_root = artifacts_root / "plugin_validation"
+    _write_plugin_record(
+        plugins_root,
+        "indicator",
         "boom_validator",
-        "id: boom_validator\nname: Boom\nversion: 1.0.0\ncategory: momentum\ninputs: [close]\n"
-        "outputs: [value]\nparams: []\nwarmup_bars: 1\nnan_policy: propagate\n",
-        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
+        "INVALID",
+        reason_codes=["VALIDATION_EXCEPTION"],
+        reason_messages=["Validator crashed: boom"],
     )
-
-    def boom(*_args, **_kwargs):
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr("src.plugins.validation._load_yaml", boom)
 
     client = TestClient(app)
     active = client.get("/api/v1/plugins/active")
@@ -490,6 +489,12 @@ def test_plugins_validation_summary_rebuild_failure_fail_closed(monkeypatch, tmp
     active_resp = client.get("/api/v1/plugins/active")
     assert active_resp.status_code == 200
     assert active_resp.json() == {"indicators": [], "strategies": []}
+
+    failed_resp = client.get("/api/v1/plugins/failed")
+    assert failed_resp.status_code == 200
+    failed_payload = failed_resp.json()
+    assert failed_payload["indicators"] == []
+    assert failed_payload["strategies"][0]["id"] == "bad"
 
 
 def test_plugins_validation_summary_lock_contention(monkeypatch, tmp_path):

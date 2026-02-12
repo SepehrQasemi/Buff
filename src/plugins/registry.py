@@ -10,8 +10,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
 
-from .discovery import PluginType, discover_plugins
-from .validation import validate_all
+from .discovery import PluginType
 
 ValidationStatus = Literal["VALID", "INVALID"]
 INDEX_LOCK_FILENAME = ".index.lock"
@@ -92,38 +91,66 @@ def _list_by_status(
 ) -> list[dict[str, Any]]:
     index = _load_index_or_rebuild(artifacts_root)
     plugins = index.payload.get("plugins", {})
-    entries = [
-        entry
-        for entry in plugins.values()
-        if entry.get("plugin_type") == plugin_type and entry.get("status") == status
-    ]
-    if status == "VALID":
-        payload = [_active_payload(entry) for entry in entries]
-    else:
-        payload = [_failed_payload(artifacts_root, entry) for entry in entries]
+    entries = [entry for entry in plugins.values() if entry.get("plugin_type") == plugin_type]
+    payload: list[dict[str, Any]] = []
+    for entry in entries:
+        details = _load_artifact_details(artifacts_root, entry)
+        artifact_status = details.get("status") or "INVALID"
+        if status == "VALID":
+            if artifact_status != "VALID":
+                continue
+            payload.append(_active_payload(entry, details))
+        else:
+            if artifact_status == "VALID":
+                continue
+            payload.append(_failed_payload(artifacts_root, entry, details))
+    if not entries and status == "INVALID" and not _index_lock_active(artifacts_root):
+        payload = _list_invalid_from_artifacts(artifacts_root, plugin_type)
     return sorted(payload, key=lambda item: item.get("id") or "")
+
+
+def _list_invalid_from_artifacts(
+    artifacts_root: Path, plugin_type: PluginType
+) -> list[dict[str, Any]]:
+    payload: list[dict[str, Any]] = []
+    folder = Path(artifacts_root) / "plugin_validation" / plugin_type
+    if not folder.exists():
+        return payload
+    for path in sorted(folder.glob("*.json")):
+        entry, _ = _entry_from_artifact(path, plugin_type)
+        details = _load_artifact_details(artifacts_root, entry)
+        if details.get("status") == "VALID":
+            continue
+        payload.append(_failed_payload(artifacts_root, entry, details))
+    return payload
 
 
 def _load_index_or_rebuild(artifacts_root: Path) -> ValidationIndex:
     artifacts_root = Path(artifacts_root)
     index_path = artifacts_root / "plugin_validation" / "index.json"
-    repo_root = _resolve_repo_root(artifacts_root)
 
     payload = _read_index(index_path)
     if payload is None:
-        payload = _rebuild_index_with_lock(repo_root, artifacts_root)
-        return ValidationIndex(payload=payload)
-
-    if _index_stale(payload, repo_root, artifacts_root):
-        payload = _rebuild_index_with_lock(repo_root, artifacts_root)
+        try:
+            payload = _rebuild_index_with_lock(artifacts_root)
+        except Exception:
+            payload = _empty_index()
     return ValidationIndex(payload=payload)
 
 
-def _rebuild_index_with_lock(repo_root: Path, artifacts_root: Path) -> dict[str, Any]:
+def _rebuild_index_with_lock(artifacts_root: Path) -> dict[str, Any]:
     with _acquire_index_lock(artifacts_root) as acquired:
         if not acquired:
             return _empty_index()
-        return _rebuild_index(repo_root, artifacts_root)
+        try:
+            payload = _rebuild_index_from_artifacts(artifacts_root)
+        except Exception:
+            return _empty_index()
+        try:
+            _write_index_payload(artifacts_root, payload)
+        except Exception:
+            return _empty_index()
+        return payload
 
 
 def _load_index_for_summary(
@@ -143,18 +170,6 @@ def _load_index_for_summary(
         total = _count_artifact_files(artifacts_root)
         return _empty_index(), f"summary rebuild failed: {exc}", total
     return payload, None, None
-
-
-def _rebuild_index(repo_root: Path, artifacts_root: Path) -> dict[str, Any]:
-    try:
-        candidates = discover_plugins(repo_root)
-        validate_all(candidates, artifacts_root / "plugin_validation")
-    except Exception:
-        return _empty_index()
-    payload = _read_index(artifacts_root / "plugin_validation" / "index.json")
-    if payload is None:
-        return _empty_index()
-    return payload
 
 
 def _rebuild_index_from_artifacts(artifacts_root: Path) -> dict[str, Any]:
@@ -200,6 +215,27 @@ def _read_index(path: Path) -> dict[str, Any] | None:
     if not _index_valid(payload):
         return None
     return payload
+
+
+def _write_index_payload(artifacts_root: Path, payload: dict[str, Any]) -> None:
+    path = Path(artifacts_root) / "plugin_validation" / "index.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_json(path, payload)
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    data = json.dumps(payload, indent=2, sort_keys=True)
+    try:
+        tmp_path.write_text(data, encoding="utf-8")
+        os.replace(tmp_path, path)
+    except Exception:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        raise
 
 
 def _index_valid(payload: dict[str, Any]) -> bool:
@@ -267,52 +303,8 @@ def _entry_from_artifact(path: Path, plugin_type: str) -> tuple[dict[str, Any], 
     return entry, status
 
 
-def _index_stale(payload: dict[str, Any], repo_root: Path, artifacts_root: Path) -> bool:
-    candidates = discover_plugins(repo_root)
-    candidate_map = {
-        f"{candidate.plugin_type}:{candidate.plugin_id}": candidate for candidate in candidates
-    }
-    plugins = payload.get("plugins", {})
-    if len(candidate_map) != len(plugins):
-        return True
-
-    for key, candidate in candidate_map.items():
-        entry = plugins.get(key)
-        if not isinstance(entry, dict):
-            return True
-        artifact_path = (
-            artifacts_root
-            / "plugin_validation"
-            / candidate.plugin_type
-            / f"{candidate.plugin_id}.json"
-        )
-        if not artifact_path.exists():
-            return True
-        current_hash = _hash_plugin_dir(candidate.plugin_dir)
-        if current_hash is None:
-            return True
-        if entry.get("source_hash") != current_hash:
-            return True
-
-    for key in plugins.keys():
-        if key not in candidate_map:
-            return True
-
-    return False
-
-
-def _resolve_repo_root(artifacts_root: Path) -> Path:
-    candidate = artifacts_root.parent
-    if (candidate / "user_indicators").exists() or (candidate / "user_strategies").exists():
-        return candidate
-    cwd = Path.cwd()
-    if (cwd / "user_indicators").exists() or (cwd / "user_strategies").exists():
-        return cwd
-    return candidate
-
-
-def _active_payload(entry: dict[str, Any]) -> dict[str, Any]:
-    return {
+def _active_payload(entry: dict[str, Any], details: dict[str, Any]) -> dict[str, Any]:
+    payload = {
         "id": entry.get("id"),
         "name": entry.get("name"),
         "version": entry.get("version"),
@@ -320,14 +312,22 @@ def _active_payload(entry: dict[str, Any]) -> dict[str, Any]:
         "validated_at_utc": entry.get("checked_at_utc"),
         "fingerprint": entry.get("source_hash"),
     }
+    schema = details.get("schema")
+    if isinstance(schema, dict):
+        payload["schema"] = schema
+    warnings = details.get("warnings")
+    if isinstance(warnings, list) and warnings:
+        payload["warnings"] = warnings
+    return payload
 
 
-def _failed_payload(artifacts_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
-    details = _load_artifact_details(artifacts_root, entry)
+def _failed_payload(
+    artifacts_root: Path, entry: dict[str, Any], details: dict[str, Any]
+) -> dict[str, Any]:
     errors = _to_error_payload(details.get("reason_codes", []), details.get("reason_messages", []))
     return {
         "id": entry.get("id"),
-        "status": entry.get("status"),
+        "status": details.get("status") or entry.get("status"),
         "errors": errors,
         "validated_at_utc": entry.get("checked_at_utc"),
         "fingerprint": entry.get("source_hash"),
@@ -337,26 +337,49 @@ def _failed_payload(artifacts_root: Path, entry: dict[str, Any]) -> dict[str, An
 def _load_artifact_details(artifacts_root: Path, entry: dict[str, Any]) -> dict[str, Any]:
     plugin_type = entry.get("plugin_type")
     plugin_id = entry.get("id")
-    if not plugin_type or not plugin_id:
-        return {"reason_codes": ["ARTIFACT_INVALID"], "reason_messages": ["Invalid entry."]}
+    if not plugin_type or plugin_type not in {"indicator", "strategy"}:
+        return {
+            "status": "INVALID",
+            "reason_codes": ["ARTIFACT_INVALID"],
+            "reason_messages": ["Invalid entry."],
+        }
+    if not _is_safe_component(plugin_id):
+        return {
+            "status": "INVALID",
+            "reason_codes": ["ARTIFACT_INVALID"],
+            "reason_messages": ["Invalid entry."],
+        }
     path = artifacts_root / "plugin_validation" / plugin_type / f"{plugin_id}.json"
     if not path.exists():
-        return {"reason_codes": ["ARTIFACT_MISSING"], "reason_messages": ["Artifact missing."]}
+        return {
+            "status": "INVALID",
+            "reason_codes": ["ARTIFACT_MISSING"],
+            "reason_messages": ["Artifact missing."],
+        }
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         return {
+            "status": "INVALID",
             "reason_codes": ["ARTIFACT_INVALID"],
             "reason_messages": [f"Artifact invalid: {exc}"],
         }
     if not isinstance(payload, dict):
         return {
+            "status": "INVALID",
             "reason_codes": ["ARTIFACT_INVALID"],
             "reason_messages": ["Artifact invalid."],
         }
     codes = payload.get("reason_codes")
     messages = payload.get("reason_messages")
+    status = payload.get("status")
+    status = status if status in {"VALID", "INVALID"} else "INVALID"
+    schema = payload.get("schema") if isinstance(payload.get("schema"), dict) else None
+    warnings = payload.get("warnings") if isinstance(payload.get("warnings"), list) else []
     return {
+        "status": status,
+        "schema": schema,
+        "warnings": warnings,
         "reason_codes": codes if isinstance(codes, list) else [],
         "reason_messages": messages if isinstance(messages, list) else [],
     }
@@ -371,6 +394,17 @@ def _to_error_payload(codes: list[Any], messages: list[Any]) -> list[dict[str, s
             continue
         errors.append({"rule_id": str(code), "message": str(message or "")})
     return errors
+
+
+def _is_safe_component(value: Any) -> bool:
+    if not isinstance(value, str):
+        return False
+    candidate = value.strip()
+    if not candidate or candidate in {".", ".."}:
+        return False
+    if "/" in candidate or "\\" in candidate:
+        return False
+    return True
 
 
 def _hash_plugin_dir(plugin_dir: Path) -> str | None:

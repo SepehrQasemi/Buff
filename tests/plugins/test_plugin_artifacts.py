@@ -15,6 +15,7 @@ def _sample_result() -> ValidationResult:
         name=None,
         version=None,
         category=None,
+        schema=None,
         status="VALID",
         issues=[],
         checked_at_utc="2026-02-01T00:00:00Z",

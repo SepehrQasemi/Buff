@@ -78,6 +78,13 @@ class Diagnostics(BaseModel):
     notes: list[str]
 
 
+class ReviewSummary(BaseModel):
+    issues: list[str]
+    warnings: list[str]
+    suggestions: list[str]
+    next_tests: list[str]
+
+
 class ChatResponse(BaseModel):
     mode: str
     title: str
@@ -89,6 +96,7 @@ class ChatResponse(BaseModel):
     warnings: list[str]
     blockers: list[str]
     diagnostics: Diagnostics
+    review: ReviewSummary | None = None
 
 
 _MODE_INDEX = [
@@ -225,7 +233,7 @@ def _add_indicator(request: ChatRequest) -> ChatResponse:
         ),
         _step(
             "validate",
-            "Run the validator: python -m src.plugins.validate --out artifacts/plugins",
+            "Run the validator: python -m src.plugins.validate --out artifacts/plugin_validation",
         ),
         _step("test", "Run ruff and pytest to confirm it passes."),
     ]
@@ -242,14 +250,14 @@ def _add_indicator(request: ChatRequest) -> ChatResponse:
     ]
 
     commands = [
-        "python -m src.plugins.validate --out artifacts/plugins",
+        "python -m src.plugins.validate --out artifacts/plugin_validation",
         "python -m ruff check .",
         "python -m pytest",
     ]
     success = [
         f"user_indicators/{indicator_id}/indicator.yaml exists",
         f"user_indicators/{indicator_id}/indicator.py exists",
-        f"artifacts/plugins/indicator/{indicator_id}/validation.json status=PASS",
+        f"artifacts/plugin_validation/indicator/{indicator_id}.json status=VALID",
         "Indicator appears in the UI Indicators tab (validated plugins only).",
     ]
     warnings.extend(
@@ -331,7 +339,7 @@ def _add_strategy(request: ChatRequest) -> ChatResponse:
         ),
         _step(
             "validate",
-            "Run the validator: python -m src.plugins.validate --out artifacts/plugins",
+            "Run the validator: python -m src.plugins.validate --out artifacts/plugin_validation",
         ),
         _step("test", "Run ruff and pytest to confirm it passes."),
     ]
@@ -348,14 +356,14 @@ def _add_strategy(request: ChatRequest) -> ChatResponse:
     ]
 
     commands = [
-        "python -m src.plugins.validate --out artifacts/plugins",
+        "python -m src.plugins.validate --out artifacts/plugin_validation",
         "python -m ruff check .",
         "python -m pytest",
     ]
     success = [
         f"user_strategies/{strategy_id}/strategy.yaml exists",
         f"user_strategies/{strategy_id}/strategy.py exists",
-        f"artifacts/plugins/strategy/{strategy_id}/validation.json status=PASS",
+        f"artifacts/plugin_validation/strategy/{strategy_id}.json status=VALID",
         "Strategy appears in the UI Strategy dropdown (validated plugins only).",
     ]
     warnings.extend(
@@ -478,6 +486,12 @@ def _review_plugin(request: ChatRequest) -> ChatResponse:
         steps.append(_step(f"suggestion_{idx}", suggestion))
 
     diagnostics = _diagnostics(request, notes)
+    review = ReviewSummary(
+        issues=blockers,
+        warnings=warnings,
+        suggestions=suggestions,
+        next_tests=_review_next_tests(),
+    )
     return ChatResponse(
         mode="review_plugin",
         title=f"Review {kind.title()}: {plugin_id}",
@@ -485,10 +499,11 @@ def _review_plugin(request: ChatRequest) -> ChatResponse:
         steps=steps,
         files_to_create=[],
         commands=_review_commands(),
-        success_criteria=["Resolve blockers and rerun validator until PASS."],
+        success_criteria=["Resolve blockers and rerun validator until VALID."],
         warnings=warnings,
         blockers=blockers,
         diagnostics=diagnostics,
+        review=review,
     )
 
 
@@ -543,24 +558,24 @@ def _troubleshoot_errors(request: ChatRequest) -> ChatResponse:
         _step("exact_edits", "Exact edits: " + "; ".join(edits)),
         _step(
             "rerun_commands",
-            "Rerun commands: python -m src.plugins.validate --out artifacts/plugins; "
+            "Rerun commands: python -m src.plugins.validate --out artifacts/plugin_validation; "
             "python -m ruff check .; python -m pytest",
         ),
         _step(
             "ui_success",
-            "What success looks like in UI: validation PASS in artifacts/plugins, "
+            "What success looks like in UI: validation VALID in artifacts/plugin_validation, "
             "plugin appears in selection lists, and failures are cleared from "
             "Plugin Diagnostics.",
         ),
     ]
 
     commands = [
-        "python -m src.plugins.validate --out artifacts/plugins",
+        "python -m src.plugins.validate --out artifacts/plugin_validation",
         "python -m ruff check .",
         "python -m pytest",
     ]
     success = [
-        "Validation returns PASS for the plugin.",
+        "Validation returns VALID for the plugin.",
         "Plugin appears in the UI (validated plugins only).",
         "No new errors appear under Plugin Diagnostics.",
     ]
@@ -788,7 +803,7 @@ def _review_missing_steps(kind: str | None, plugin_id: str | None) -> list[Step]
             _step("create_files", "Create indicator/strategy YAML and Python files."),
             _step(
                 "validate",
-                "Run: python -m src.plugins.validate --out artifacts/plugins",
+                "Run: python -m src.plugins.validate --out artifacts/plugin_validation",
             ),
         ]
     )
@@ -797,9 +812,17 @@ def _review_missing_steps(kind: str | None, plugin_id: str | None) -> list[Step]
 
 def _review_commands() -> list[str]:
     return [
-        "python -m src.plugins.validate --out artifacts/plugins",
+        "python -m src.plugins.validate --out artifacts/plugin_validation",
         "python -m ruff check .",
         "python -m pytest",
+    ]
+
+
+def _review_next_tests() -> list[str]:
+    return [
+        "python -m src.plugins.validate --out artifacts/plugin_validation",
+        "python -m ruff check .",
+        "python -m pytest -q tests/plugins",
     ]
 
 
@@ -982,7 +1005,7 @@ def _render_indicator_yaml(
     warmup_bars: int,
     nan_policy: str,
 ) -> str:
-    author_line = f"author: {author}" if author else "author: TODO"
+    author_line = f"author: {author}" if author else "author: Your Name"
     params_yaml = _render_params_yaml(params)
     inputs_yaml = "\n".join([f"  - {item}" for item in inputs])
     outputs_yaml = "\n".join([f"  - {item}" for item in outputs])
@@ -1019,7 +1042,7 @@ def _render_strategy_yaml(
     params: list[dict[str, Any]],
     provides_confidence: bool,
 ) -> str:
-    author_line = f"author: {author}" if author else "author: TODO"
+    author_line = f"author: {author}" if author else "author: Your Name"
     series_yaml = "\n".join([f"    - {item}" for item in series_inputs])
     indicators_yaml = "\n".join([f"    - {item}" for item in indicators]) or "    -"
     params_yaml = _render_params_yaml(params, indent=2)
@@ -1064,11 +1087,10 @@ def _render_params_yaml(params: list[dict[str, Any]], indent: int = 0) -> str:
                 f"{pad}  default: {entry.get('default')}",
                 f"{pad}  min: {entry.get('min')}",
                 f"{pad}  max: {entry.get('max')}",
-                f"{pad}  step: {entry.get('step')}",
                 f"{pad}  description: {description}",
             ]
         )
-    return "\n".join(lines) if lines else f"{pad}- name: TODO"
+    return "\n".join(lines) if lines else f"{pad}- name: param"
 
 
 def _render_indicator_py(outputs: list[str]) -> str:
@@ -1080,7 +1102,7 @@ def _render_indicator_py(outputs: list[str]) -> str:
             "",
             "",
             "def compute(ctx):",
-            "    # TODO: implement indicator computation using ctx inputs only.",
+            "    # Implement indicator computation using ctx inputs only.",
             "    value = 0.0",
             f"    return {{{output_lines}}}",
             "",
@@ -1095,7 +1117,7 @@ def _render_strategy_py(provides_confidence: bool) -> str:
         "",
         "",
         "def on_bar(ctx):",
-        "    # TODO: implement entry/exit rules using ctx series and indicators.",
+        "    # Implement entry/exit rules using ctx series and indicators.",
         '    decision = {"intent": "HOLD"}',
     ]
     if provides_confidence:
@@ -1146,8 +1168,7 @@ def _normalize_params(
             entry = dict(item)
             entry.setdefault("min", 2 if default_type == "int" else -1.0)
             entry.setdefault("max", 200 if default_type == "int" else 1.0)
-            entry.setdefault("step", 1 if default_type == "int" else 0.1)
-            entry.setdefault("description", "TODO: describe parameter.")
+            entry.setdefault("description", "Describe parameter.")
             valid.append(entry)
         if valid:
             return valid
@@ -1158,8 +1179,7 @@ def _normalize_params(
             "default": 14 if default_type == "int" else 0.0,
             "min": 2 if default_type == "int" else -1.0,
             "max": 200 if default_type == "int" else 1.0,
-            "step": 1 if default_type == "int" else 0.1,
-            "description": "TODO: describe parameter.",
+            "description": "Describe parameter.",
         }
     ]
 
