@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import json
@@ -43,9 +42,7 @@ def list_invalid_strategies(artifacts_root: Path) -> list[dict[str, Any]]:
 def get_validation_summary(artifacts_root: Path) -> dict[str, Any]:
     index = _load_index_or_rebuild(artifacts_root)
     plugins = index.payload.get("plugins", {})
-    invalid_entries = [
-        entry for entry in plugins.values() if entry.get("status") == "INVALID"
-    ]
+    invalid_entries = [entry for entry in plugins.values() if entry.get("status") == "INVALID"]
     reason_counts: dict[str, int] = {}
     for entry in invalid_entries:
         details = _load_artifact_details(artifacts_root, entry)
@@ -63,9 +60,7 @@ def get_validation_summary(artifacts_root: Path) -> dict[str, Any]:
 def get_validation_summary_from_artifacts(artifacts_root: Path) -> dict[str, Any]:
     payload, error, total_override = _load_index_for_summary(artifacts_root)
     plugins = payload.get("plugins", {})
-    invalid_entries = [
-        entry for entry in plugins.values() if entry.get("status") == "INVALID"
-    ]
+    invalid_entries = [entry for entry in plugins.values() if entry.get("status") == "INVALID"]
     reason_counts: dict[str, int] = {}
     for entry in invalid_entries:
         details = _load_artifact_details(artifacts_root, entry)
@@ -105,10 +100,7 @@ def _list_by_status(
     if status == "VALID":
         payload = [_active_payload(entry) for entry in entries]
     else:
-        payload = [
-            _failed_payload(artifacts_root, entry)
-            for entry in entries
-        ]
+        payload = [_failed_payload(artifacts_root, entry) for entry in entries]
     return sorted(payload, key=lambda item: item.get("id") or "")
 
 
@@ -278,8 +270,7 @@ def _entry_from_artifact(path: Path, plugin_type: str) -> tuple[dict[str, Any], 
 def _index_stale(payload: dict[str, Any], repo_root: Path, artifacts_root: Path) -> bool:
     candidates = discover_plugins(repo_root)
     candidate_map = {
-        f"{candidate.plugin_type}:{candidate.plugin_id}": candidate
-        for candidate in candidates
+        f"{candidate.plugin_type}:{candidate.plugin_id}": candidate for candidate in candidates
     }
     plugins = payload.get("plugins", {})
     if len(candidate_map) != len(plugins):
@@ -290,7 +281,10 @@ def _index_stale(payload: dict[str, Any], repo_root: Path, artifacts_root: Path)
         if not isinstance(entry, dict):
             return True
         artifact_path = (
-            artifacts_root / "plugin_validation" / candidate.plugin_type / f"{candidate.plugin_id}.json"
+            artifacts_root
+            / "plugin_validation"
+            / candidate.plugin_type
+            / f"{candidate.plugin_id}.json"
         )
         if not artifact_path.exists():
             return True
@@ -345,9 +339,7 @@ def _load_artifact_details(artifacts_root: Path, entry: dict[str, Any]) -> dict[
     plugin_id = entry.get("id")
     if not plugin_type or not plugin_id:
         return {"reason_codes": ["ARTIFACT_INVALID"], "reason_messages": ["Invalid entry."]}
-    path = (
-        artifacts_root / "plugin_validation" / plugin_type / f"{plugin_id}.json"
-    )
+    path = artifacts_root / "plugin_validation" / plugin_type / f"{plugin_id}.json"
     if not path.exists():
         return {"reason_codes": ["ARTIFACT_MISSING"], "reason_messages": ["Artifact missing."]}
     try:

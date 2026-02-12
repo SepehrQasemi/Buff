@@ -146,9 +146,7 @@ def write_validation_index(results: Iterable[ValidationResult], out_dir: Path) -
     _atomic_write_json(dest, payload)
 
 
-def _write_result_with_fail_closed(
-    result: ValidationResult, out_dir: Path
-) -> ValidationResult:
+def _write_result_with_fail_closed(result: ValidationResult, out_dir: Path) -> ValidationResult:
     try:
         write_validation_artifact(result, out_dir)
         return result
@@ -270,14 +268,13 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
                 pass
         raise
 
+
 def _validate_candidate(candidate: PluginCandidate) -> ValidationResult:
     issues: list[ValidationIssue] = []
     warnings: list[str] = []
 
     if candidate.extra_files:
-        warnings.append(
-            "Unexpected top-level files: " + ", ".join(sorted(candidate.extra_files))
-        )
+        warnings.append("Unexpected top-level files: " + ", ".join(sorted(candidate.extra_files)))
 
     source_hash = _hash_plugin_dir(candidate.plugin_dir, issues)
 
@@ -454,16 +451,12 @@ def _validate_strategy_schema(
                     "strategy.yaml inputs.indicators is required.",
                 )
             else:
-                _validate_string_list(
-                    inputs.get("indicators"), "inputs.indicators", issues
-                )
+                _validate_string_list(inputs.get("indicators"), "inputs.indicators", issues)
 
     outputs = payload.get("outputs")
     if outputs is not None:
         if not isinstance(outputs, dict):
-            _add_issue(
-                issues, "INVALID_TYPE:outputs", "strategy.yaml outputs must be a mapping."
-            )
+            _add_issue(issues, "INVALID_TYPE:outputs", "strategy.yaml outputs must be a mapping.")
         else:
             if "intents" not in outputs:
                 _add_issue(
@@ -562,6 +555,7 @@ def _validate_common_schema(
         _add_issue(issues, "INVALID_TYPE:warmup_bars", "warmup_bars must be an integer.")
     elif warmup_bars < 0:
         _add_issue(issues, "INVALID_ENUM:warmup_bars", "warmup_bars must be >= 0.")
+
 
 def _validate_params(params: Any, field: str, issues: list[ValidationIssue]) -> None:
     if not isinstance(params, list):
@@ -981,6 +975,7 @@ def _hash_plugin_dir(plugin_dir: Path, issues: list[ValidationIssue]) -> str:
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
+
 class _SafetyScanner(ast.NodeVisitor):
     _FORBIDDEN_IMPORT_ROOTS = {
         "aiohttp",
@@ -1334,10 +1329,7 @@ class _SafetyScanner(ast.NodeVisitor):
         return False
 
     def _is_subprocess_call(self, node: ast.Attribute) -> bool:
-        return (
-            isinstance(node.value, ast.Name)
-            and self._alias_matches(node.value.id, "subprocess")
-        )
+        return isinstance(node.value, ast.Name) and self._alias_matches(node.value.id, "subprocess")
 
     def _is_os_call(self, node: ast.Attribute) -> bool:
         if node.attr not in {"system", "popen"}:

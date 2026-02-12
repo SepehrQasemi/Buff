@@ -30,8 +30,7 @@ def _setup_indicator(tmp_path: Path, plugin_id: str) -> Path:
     _write(plugin_dir / "indicator.yaml", BASE_INDICATOR_YAML.replace("demo_indicator", plugin_id))
     _write(
         plugin_dir / "indicator.py",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
     )
     return plugin_dir
 
@@ -67,8 +66,7 @@ def test_hash_change_triggers_rebuild(tmp_path: Path) -> None:
 
     _write(
         plugin_dir / "indicator.py",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 2}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 2}\n",
     )
 
     list_valid_indicators(artifacts_root)

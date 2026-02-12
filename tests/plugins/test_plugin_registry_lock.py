@@ -35,8 +35,7 @@ def test_index_rebuild_lock_fail_closed(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (indicator_dir / "indicator.py").write_text(
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         encoding="utf-8",
     )
 
@@ -60,8 +59,7 @@ def test_index_rebuild_lock_stale_allows_rebuild(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     (indicator_dir / "indicator.py").write_text(
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         encoding="utf-8",
     )
 
@@ -103,8 +101,7 @@ def test_index_lock_invalid_json_stale_mtime_allows_rebuild(tmp_path: Path) -> N
         encoding="utf-8",
     )
     (indicator_dir / "indicator.py").write_text(
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         encoding="utf-8",
     )
 

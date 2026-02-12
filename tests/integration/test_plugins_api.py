@@ -116,8 +116,7 @@ def test_plugins_active_and_failed(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     (indicator_dir / "indicator.py").write_text(
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'rsi': 0.0}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'rsi': 0.0}\n",
         encoding="utf-8",
     )
 
@@ -130,8 +129,7 @@ def test_plugins_active_and_failed(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     (strategy_dir / "strategy.py").write_text(
-        "def get_schema():\n    return {}\n\n"
-        "def on_bar(ctx):\n    return {'intent': 'HOLD'}\n",
+        "def get_schema():\n    return {}\n\ndef on_bar(ctx):\n    return {'intent': 'HOLD'}\n",
         encoding="utf-8",
     )
 
@@ -249,8 +247,7 @@ def test_plugins_yaml_parse_error_fail_closed(monkeypatch, tmp_path):
         tmp_path,
         "bad_yaml",
         "id: bad_yaml\nname: [unterminated\n",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
     )
 
     client = TestClient(app)
@@ -263,8 +260,7 @@ def test_plugins_yaml_parse_error_fail_closed(monkeypatch, tmp_path):
     payload = failed.json()
     assert payload["indicators"][0]["id"] == "bad_yaml"
     assert any(
-        error["rule_id"] == "YAML_PARSE_ERROR"
-        for error in payload["indicators"][0]["errors"]
+        error["rule_id"] == "YAML_PARSE_ERROR" for error in payload["indicators"][0]["errors"]
     )
 
 
@@ -278,8 +274,7 @@ def test_plugins_ast_parse_error_fail_closed(monkeypatch, tmp_path):
         "bad_ast",
         "id: bad_ast\nname: Bad\nversion: 1.0.0\ncategory: momentum\ninputs: [close]\n"
         "outputs: [value]\nparams: []\nwarmup_bars: 1\nnan_policy: propagate\n",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {\n",
     )
 
     client = TestClient(app)
@@ -292,8 +287,7 @@ def test_plugins_ast_parse_error_fail_closed(monkeypatch, tmp_path):
     payload = failed.json()
     assert payload["indicators"][0]["id"] == "bad_ast"
     assert any(
-        error["rule_id"] == "AST_PARSE_ERROR"
-        for error in payload["indicators"][0]["errors"]
+        error["rule_id"] == "AST_PARSE_ERROR" for error in payload["indicators"][0]["errors"]
     )
 
 
@@ -307,8 +301,7 @@ def test_plugins_validation_exception_fail_closed(monkeypatch, tmp_path):
         "boom_validator",
         "id: boom_validator\nname: Boom\nversion: 1.0.0\ncategory: momentum\ninputs: [close]\n"
         "outputs: [value]\nparams: []\nwarmup_bars: 1\nnan_policy: propagate\n",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
     )
 
     def boom(*_args, **_kwargs):
@@ -326,8 +319,7 @@ def test_plugins_validation_exception_fail_closed(monkeypatch, tmp_path):
     payload = failed.json()
     assert payload["indicators"][0]["id"] == "boom_validator"
     assert any(
-        error["rule_id"] == "VALIDATION_EXCEPTION"
-        for error in payload["indicators"][0]["errors"]
+        error["rule_id"] == "VALIDATION_EXCEPTION" for error in payload["indicators"][0]["errors"]
     )
 
 
@@ -344,8 +336,7 @@ def test_plugins_validation_summary_healthy(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     (indicator_dir / "indicator.py").write_text(
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         encoding="utf-8",
     )
 
@@ -358,8 +349,7 @@ def test_plugins_validation_summary_healthy(monkeypatch, tmp_path):
         encoding="utf-8",
     )
     (strategy_dir / "strategy.py").write_text(
-        "def get_schema():\n    return {}\n\n"
-        "def on_bar(ctx):\n    return {'intent': 'HOLD'}\n",
+        "def get_schema():\n    return {}\n\ndef on_bar(ctx):\n    return {'intent': 'HOLD'}\n",
         encoding="utf-8",
     )
 

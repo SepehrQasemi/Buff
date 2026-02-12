@@ -36,7 +36,9 @@ def _candidate(root: Path, plugin_id: str) -> object:
     raise AssertionError("candidate not found")
 
 
-def _validate_indicator(tmp_path: Path, plugin_id: str, py_content: str, yaml_content: str | None = None):
+def _validate_indicator(
+    tmp_path: Path, plugin_id: str, py_content: str, yaml_content: str | None = None
+):
     yaml_path = tmp_path / f"user_indicators/{plugin_id}/indicator.yaml"
     py_path = tmp_path / f"user_indicators/{plugin_id}/indicator.py"
     _write(yaml_path, yaml_content or BASE_INDICATOR_YAML.replace("demo_indicator", plugin_id))
@@ -51,8 +53,7 @@ def test_reason_code_allowlist(monkeypatch, tmp_path: Path) -> None:
     result = _validate_indicator(
         tmp_path,
         "bad_yaml",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         "id: bad_yaml\nname: [unterminated\n",
     )
     codes.update(result.reason_codes)
@@ -65,8 +66,7 @@ def test_reason_code_allowlist(monkeypatch, tmp_path: Path) -> None:
     py_only = tmp_path / "user_indicators/missing_yaml/indicator.py"
     _write(
         py_only,
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
     )
     candidate = _candidate(tmp_path, "missing_yaml")
     codes.update(validate_candidate(candidate).reason_codes)
@@ -74,8 +74,7 @@ def test_reason_code_allowlist(monkeypatch, tmp_path: Path) -> None:
     result = _validate_indicator(
         tmp_path,
         "schema_missing",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         "id: schema_missing\nname: Missing\nversion: 1.0.0\ncategory: momentum\n",
     )
     codes.update(result.reason_codes)
@@ -83,8 +82,7 @@ def test_reason_code_allowlist(monkeypatch, tmp_path: Path) -> None:
     result = _validate_indicator(
         tmp_path,
         "schema_unknown",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         BASE_INDICATOR_YAML.replace("demo_indicator", "schema_unknown") + "unexpected: 1\n",
     )
     codes.update(result.reason_codes)
@@ -92,8 +90,7 @@ def test_reason_code_allowlist(monkeypatch, tmp_path: Path) -> None:
     result = _validate_indicator(
         tmp_path,
         "invalid_enum",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         BASE_INDICATOR_YAML.replace("demo_indicator", "invalid_enum").replace(
             "category: momentum", "category: nope"
         ),
@@ -103,8 +100,7 @@ def test_reason_code_allowlist(monkeypatch, tmp_path: Path) -> None:
     result = _validate_indicator(
         tmp_path,
         "invalid_type",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
         BASE_INDICATOR_YAML.replace("demo_indicator", "invalid_type").replace(
             "warmup_bars: 1", "warmup_bars: nope"
         ),
@@ -173,8 +169,7 @@ def test_reason_code_allowlist(monkeypatch, tmp_path: Path) -> None:
     result = _validate_indicator(
         tmp_path,
         "ast_parse_error",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {\n",
     )
     codes.update(result.reason_codes)
 
@@ -182,8 +177,7 @@ def test_reason_code_allowlist(monkeypatch, tmp_path: Path) -> None:
     repeats = (MAX_PLUGIN_SOURCE_BYTES // len(padding)) + 10
     large_source = (
         "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n\n"
-        + padding * repeats
+        "def compute(ctx):\n    return {'value': 1}\n\n" + padding * repeats
     )
     result = _validate_indicator(
         tmp_path,
@@ -240,8 +234,7 @@ def test_too_large_triggers_invalid(tmp_path: Path) -> None:
     repeats = (MAX_PLUGIN_SOURCE_BYTES // len(padding)) + 10
     large_source = (
         "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n\n"
-        + padding * repeats
+        "def compute(ctx):\n    return {'value': 1}\n\n" + padding * repeats
     )
     result = _validate_indicator(tmp_path, "too_large_only", large_source)
     assert result.status == "INVALID"
@@ -252,8 +245,7 @@ def test_normal_source_not_too_large(tmp_path: Path) -> None:
     result = _validate_indicator(
         tmp_path,
         "normal",
-        "def get_schema():\n    return {}\n\n"
-        "def compute(ctx):\n    return {'value': 1}\n",
+        "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 1}\n",
     )
     assert result.status == "VALID"
     assert "TOO_LARGE" not in result.reason_codes

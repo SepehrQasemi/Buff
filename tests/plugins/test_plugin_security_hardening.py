@@ -43,7 +43,9 @@ def test_yaml_corruption_is_invalid(tmp_path: Path) -> None:
     yaml_path = tmp_path / "user_indicators/bad/indicator.yaml"
     py_path = tmp_path / "user_indicators/bad/indicator.py"
     _write(yaml_path, "id: bad\nname: [unterminated\n")
-    _write(py_path, "def get_schema():\n    return {}\n\n" "def compute(ctx):\n    return {'value': 0}\n")
+    _write(
+        py_path, "def get_schema():\n    return {}\n\ndef compute(ctx):\n    return {'value': 0}\n"
+    )
     candidate = _candidate(tmp_path, "bad")
     result = validate_candidate(candidate)
     assert result.status == "INVALID"
@@ -132,8 +134,7 @@ def test_getattr_dunder_import_is_invalid(tmp_path: Path) -> None:
     )
     assert result.status == "INVALID"
     assert any(
-        code.startswith("FORBIDDEN_CALL:getattr(__builtins__)")
-        or code.startswith("AST_UNCERTAIN")
+        code.startswith("FORBIDDEN_CALL:getattr(__builtins__)") or code.startswith("AST_UNCERTAIN")
         for code in result.reason_codes
     )
 
