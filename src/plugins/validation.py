@@ -897,13 +897,13 @@ def _validate_runtime(
         _add_issue(issues, "RUNTIME_ERROR", f"Runtime validation failed: {exc}")
 
 
-def _ensure_spawn_start_method() -> None:
-    import multiprocessing as mp
+def _runtime_debug_enabled() -> bool:
+    return os.getenv("BUFF_PLUGIN_VALIDATION_DEBUG") == "1"
 
-    try:
-        mp.set_start_method("spawn", force=True)
-    except RuntimeError:
-        pass
+
+def _debug_runtime(issues: list[ValidationIssue], message: str) -> None:
+    if _runtime_debug_enabled():
+        issues.append(ValidationIssue(code="DEBUG_RUNTIME", message=message))
 
 
 def _run_runtime_with_timeout(
@@ -911,7 +911,6 @@ def _run_runtime_with_timeout(
     yaml_payload: dict[str, Any],
     issues: list[ValidationIssue],
 ) -> None:
-    _ensure_spawn_start_method()
     ctx = multiprocessing.get_context("spawn")
     queue: multiprocessing.queues.SimpleQueue[list[tuple[str, str]]] = ctx.SimpleQueue()
     process = ctx.Process(
@@ -933,12 +932,20 @@ def _run_runtime_with_timeout(
         if process.is_alive() and hasattr(process, "kill"):
             process.kill()
             process.join()
+        _debug_runtime(
+            issues,
+            f"timeout: exitcode={process.exitcode} has_payload=unknown",
+        )
         _add_issue(issues, "RUNTIME_TIMEOUT", "Runtime validation timed out.")
         return
     try:
         has_payload = queue._poll(0.2)
     except Exception:
         has_payload = False
+    _debug_runtime(
+        issues,
+        f"completed: exitcode={process.exitcode} has_payload={has_payload}",
+    )
     if not has_payload:
         exitcode = process.exitcode
         if exitcode and exitcode != 0:
