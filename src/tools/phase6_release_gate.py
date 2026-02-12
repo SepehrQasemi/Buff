@@ -81,7 +81,9 @@ def _verify_registry(runs_root: Path, run_id: str) -> None:
         raise SystemExit("Registry missing")
     payload = json.loads(registry_path.read_text(encoding="utf-8"))
     runs = payload.get("runs", [])
-    entry = next((item for item in runs if isinstance(item, dict) and item.get("run_id") == run_id), None)
+    entry = next(
+        (item for item in runs if isinstance(item, dict) and item.get("run_id") == run_id), None
+    )
     if entry is None:
         raise SystemExit(f"Registry entry missing for {run_id}")
     if entry.get("status") == "CORRUPTED":

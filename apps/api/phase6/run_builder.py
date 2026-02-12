@@ -216,9 +216,7 @@ def _normalize_request(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[st
             fast = int(params.get("fast_period", 10))
             slow = int(params.get("slow_period", 20))
         except (TypeError, ValueError) as exc:
-            raise RunBuilderError(
-                "STRATEGY_INVALID", "ma_cross params invalid", 400
-            ) from exc
+            raise RunBuilderError("STRATEGY_INVALID", "ma_cross params invalid", 400) from exc
         if fast <= 0 or slow <= 0 or fast >= slow:
             raise RunBuilderError("STRATEGY_INVALID", "ma_cross params invalid", 400)
         params = {"fast_period": fast, "slow_period": slow}
@@ -310,7 +308,7 @@ def _resolve_symlink_target(path: Path) -> Path:
     except OSError:
         return path.resolve(strict=False)
     if not target.is_absolute():
-        target = (path.parent / target)
+        target = path.parent / target
     return target.resolve(strict=False)
 
 
@@ -623,7 +621,9 @@ def _write_artifacts(
     write_canonical_json(run_dir / "equity_curve.json", engine_result.equity_curve)
     write_canonical_json(
         run_dir / "timeline.json",
-        _build_timeline(manifest["created_at"], manifest.get("status_history", [manifest["status"]])),
+        _build_timeline(
+            manifest["created_at"], manifest.get("status_history", [manifest["status"]])
+        ),
     )
     write_canonical_jsonl(run_dir / "decision_records.jsonl", engine_result.decisions)
     write_canonical_jsonl(run_dir / "trades.jsonl", engine_result.trades)
