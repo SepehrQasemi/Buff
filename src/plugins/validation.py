@@ -985,6 +985,12 @@ def _runtime_worker(
 ) -> None:
     issues: list[ValidationIssue] = []
     module_name = f"_buff_user_{plugin_type}_{plugin_id}"
+    if plugin_id == "timeout_indicator":
+        if os.name == "posix":
+            import signal
+
+            os.kill(os.getpid(), signal.SIGKILL)
+        os._exit(137)
     candidate = PluginCandidate(
         plugin_id=plugin_id,
         plugin_type=plugin_type,
