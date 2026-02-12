@@ -107,10 +107,10 @@ def test_validation_passes_for_valid_plugins(tmp_path: Path) -> None:
     indicator_result = validate_candidate(indicator)
     strategy_result = validate_candidate(strategy)
 
-    assert indicator_result.status == "PASS"
-    assert indicator_result.errors == []
-    assert strategy_result.status == "PASS"
-    assert strategy_result.errors == []
+    assert indicator_result.status == "VALID"
+    assert indicator_result.reason_codes == []
+    assert strategy_result.status == "VALID"
+    assert strategy_result.reason_codes == []
 
 
 def test_schema_validation_fails_for_missing_fields(tmp_path: Path) -> None:
@@ -120,8 +120,8 @@ def test_schema_validation_fails_for_missing_fields(tmp_path: Path) -> None:
     bad_candidate = _candidate(tmp_path, "indicator", "bad")
 
     result = validate_candidate(bad_candidate)
-    assert result.status == "FAIL"
-    assert any(error.rule_id == "SCHEMA_MISSING_FIELD" for error in result.errors)
+    assert result.status == "INVALID"
+    assert any(code.startswith("SCHEMA_MISSING_FIELD:") for code in result.reason_codes)
 
 
 def test_schema_validation_fails_for_strategy_missing_outputs(tmp_path: Path) -> None:
@@ -131,8 +131,8 @@ def test_schema_validation_fails_for_strategy_missing_outputs(tmp_path: Path) ->
     bad_candidate = _candidate(tmp_path, "strategy", "bad")
 
     result = validate_candidate(bad_candidate)
-    assert result.status == "FAIL"
-    assert any(error.rule_id == "SCHEMA_MISSING_FIELD" for error in result.errors)
+    assert result.status == "INVALID"
+    assert any(code.startswith("SCHEMA_MISSING_FIELD:") for code in result.reason_codes)
 
 
 def test_static_safety_catches_forbidden_imports(tmp_path: Path) -> None:
@@ -155,8 +155,8 @@ def compute(ctx):
     bad_candidate = _candidate(tmp_path, "indicator", "unsafe")
 
     result = validate_candidate(bad_candidate)
-    assert result.status == "FAIL"
-    assert any(error.rule_id == "FORBIDDEN_IMPORT" for error in result.errors)
+    assert result.status == "INVALID"
+    assert any(code.startswith("FORBIDDEN_IMPORT:") for code in result.reason_codes)
 
 
 @pytest.mark.parametrize("attr", ["now", "utcnow", "today"])
@@ -182,8 +182,11 @@ def compute(ctx):
     bad_candidate = _candidate(tmp_path, "indicator", plugin_id)
 
     result = validate_candidate(bad_candidate)
-    assert result.status == "FAIL"
-    assert any(error.rule_id == "FORBIDDEN_OPERATION" for error in result.errors)
+    assert result.status == "INVALID"
+    assert any(
+        code.startswith("FORBIDDEN_IMPORT:") or code.startswith("NON_DETERMINISTIC_API:")
+        for code in result.reason_codes
+    )
 
 
 def test_fail_closed_on_validator_crash(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -196,5 +199,17 @@ def test_fail_closed_on_validator_crash(tmp_path: Path, monkeypatch: pytest.Monk
 
     monkeypatch.setattr("src.plugins.validation._load_yaml", boom)
     result = validate_candidate(candidate)
-    assert result.status == "FAIL"
-    assert any(error.rule_id == "VALIDATOR_CRASH" for error in result.errors)
+    assert result.status == "INVALID"
+    assert "VALIDATION_EXCEPTION" in result.reason_codes
+
+
+def test_missing_required_files_is_invalid(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "user_indicators/missing/indicator.yaml",
+        VALID_INDICATOR_YAML.replace("simple_rsi", "missing"),
+    )
+    candidate = _candidate(tmp_path, "indicator", "missing")
+
+    result = validate_candidate(candidate)
+    assert result.status == "INVALID"
+    assert any(code.startswith("MISSING_FILE:") for code in result.reason_codes)

@@ -1,7 +1,7 @@
 # User Extensibility Quickstart (Phase-3 MVP)
 
 This is a concise, contract-aligned quickstart for user strategies and indicators.
-UI is fail-closed: only validated plugins (PASS) appear in selection lists.
+UI is fail-closed: only validated plugins (VALID) appear in selection lists.
 
 ## Folder Structure
 ```
@@ -120,13 +120,74 @@ These must match the contracts:
 ## Validation (Fail-Closed)
 Run the validator to generate artifacts:
 ```
-python -m src.plugins.validate --out artifacts/plugins
+python -m src.plugins.validate --out artifacts/plugin_validation
 ```
 Validation writes:
 ```
-artifacts/plugins/<type>/<id>/validation.json
+artifacts/plugin_validation/<type>/<id>.json
+artifacts/plugin_validation/index.json
 ```
-Only `status=PASS` plugins are selectable in the UI. Invalid plugins remain hidden.
+Only `status=VALID` plugins are selectable in the UI. Invalid plugins remain hidden.
+
+Example VALID artifact (`artifacts/plugin_validation/indicator/demo.json`):
+```json
+{
+  "plugin_type": "indicator",
+  "id": "demo",
+  "version": "1.0.0",
+  "status": "VALID",
+  "reason_codes": [],
+  "reason_messages": [],
+  "checked_at_utc": "2026-02-01T00:00:00Z",
+  "source_hash": "sha256...",
+  "name": "Demo",
+  "category": "momentum"
+}
+```
+
+Example INVALID artifact:
+```json
+{
+  "plugin_type": "indicator",
+  "id": "bad",
+  "version": "1.0.0",
+  "status": "INVALID",
+  "reason_codes": ["SCHEMA_MISSING_FIELD:id", "FORBIDDEN_IMPORT:os"],
+  "reason_messages": [
+    "Missing required field 'id'.",
+    "Import 'os' is not allowed."
+  ],
+  "checked_at_utc": "2026-02-01T00:00:00Z",
+  "source_hash": "sha256..."
+}
+```
+
+Reason codes are stable, machine-readable identifiers. Codes include:
+- `MISSING_FILE:<filename>`
+- `YAML_PARSE_ERROR`
+- `AST_PARSE_ERROR`
+- `AST_UNCERTAIN`
+- `VALIDATION_EXCEPTION`
+- `SCHEMA_MISSING_FIELD:<field>`
+- `SCHEMA_UNKNOWN_FIELD:<field>`
+- `INVALID_ENUM:<field>`
+- `INVALID_TYPE:<field>`
+- `FORBIDDEN_IMPORT:<module>`
+- `FORBIDDEN_CALL:<name>`
+- `FORBIDDEN_ATTRIBUTE:<name>`
+- `NON_DETERMINISTIC_API:<name>`
+- `GLOBAL_STATE_RISK`
+- `SOURCE_HASH_ERROR`
+- `ARTIFACT_WRITE_ERROR`
+- `ARTIFACT_INVALID`
+- `ARTIFACT_MISSING`
+- `TOO_LARGE`
+
+Operational notes:
+- Validation artifacts and index rebuilds use a simple lock file (`artifacts/plugin_validation/.index.lock`).
+  Locks include a UTC timestamp and expire after 120s; stale locks are cleared automatically.
+  If the lock is held, rebuilds fail-closed and the API returns empty plugin lists until the lock is released.
+- Plugin source size/complexity is capped; oversized sources are rejected with `TOO_LARGE`.
 
 You can also run the full gate:
 ```
@@ -135,7 +196,7 @@ python scripts/verify_phase1.py --with-services
 Note: run without PowerShell piping to preserve exit codes.
 
 ## Where Validation Shows Up
-- UI strategy/indicator dropdowns include only validated plugins (PASS).
+- UI strategy/indicator dropdowns include only validated plugins (VALID).
 - Diagnostics panel shows failed plugins and rule_id/message details.
 - API endpoints (used by UI):
   - `/api/v1/plugins/active`
