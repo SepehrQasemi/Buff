@@ -970,7 +970,9 @@ def _run_runtime_with_timeout(
             message = f"{message}{_runtime_debug_suffix(exitcode, False)}"
             _add_issue(issues, "RUNTIME_ERROR", message)
         else:
-            message = f"Runtime validation returned no result.{_runtime_debug_suffix(exitcode, False)}"
+            message = (
+                f"Runtime validation returned no result.{_runtime_debug_suffix(exitcode, False)}"
+            )
             _add_issue(issues, "RUNTIME_ERROR", message)
         return
     payload = queue.get()
