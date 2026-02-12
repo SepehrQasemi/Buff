@@ -897,11 +897,21 @@ def _validate_runtime(
         _add_issue(issues, "RUNTIME_ERROR", f"Runtime validation failed: {exc}")
 
 
+def _ensure_spawn_start_method() -> None:
+    import multiprocessing as mp
+
+    try:
+        mp.set_start_method("spawn", force=True)
+    except RuntimeError:
+        pass
+
+
 def _run_runtime_with_timeout(
     candidate: PluginCandidate,
     yaml_payload: dict[str, Any],
     issues: list[ValidationIssue],
 ) -> None:
+    _ensure_spawn_start_method()
     ctx = multiprocessing.get_context("spawn")
     queue: multiprocessing.queues.SimpleQueue[list[tuple[str, str]]] = ctx.SimpleQueue()
     process = ctx.Process(
