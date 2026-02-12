@@ -930,8 +930,20 @@ def _run_runtime_with_timeout(
     except Exception:
         has_payload = False
     if not has_payload:
-        if process.exitcode and process.exitcode != 0:
-            _add_issue(issues, "RUNTIME_ERROR", "Runtime worker crashed.")
+        exitcode = process.exitcode
+        if exitcode and exitcode != 0:
+            message = "Runtime worker crashed."
+            if exitcode < 0:
+                try:
+                    import signal
+
+                    signame = signal.Signals(-exitcode).name
+                except Exception:
+                    signame = "UNKNOWN"
+                message = f"Runtime worker exited with code {exitcode} (signal {signame})."
+            else:
+                message = f"Runtime worker exited with code {exitcode}."
+            _add_issue(issues, "RUNTIME_ERROR", message)
         else:
             _add_issue(issues, "RUNTIME_ERROR", "Runtime validation returned no result.")
         return
