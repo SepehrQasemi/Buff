@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
+from pathlib import Path
 from typing import Iterable
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -32,6 +34,10 @@ from .chat import router as chat_router
 from .errors import build_error_payload, raise_api_error
 from .plugins import list_active_plugins, list_failed_plugins
 from .timeutils import coerce_ts_param
+from .phase6.http import error_response
+from .phase6.paths import get_runs_root, is_within_root
+from .phase6.registry import lock_registry, reconcile_registry
+from .phase6.run_builder import RunBuilderError, create_run
 
 router = APIRouter()
 
@@ -42,7 +48,14 @@ def health() -> dict[str, str]:
 
 
 @router.get("/runs")
-def list_runs() -> list[dict[str, object]]:
+def list_runs() -> object:
+    runs_root = get_runs_root()
+    if runs_root is not None:
+        registry_result = _load_registry_with_lock(runs_root)
+        if isinstance(registry_result, JSONResponse):
+            return registry_result
+        return registry_result.get("runs", [])
+
     artifacts_root = get_artifacts_root()
     if not artifacts_root.exists():
         raise_api_error(
@@ -52,6 +65,99 @@ def list_runs() -> list[dict[str, object]]:
             {"path": str(artifacts_root)},
         )
     return discover_runs()
+
+
+@router.post("/runs")
+async def create_run_endpoint(request: Request) -> JSONResponse:
+    try:
+        payload = await request.json()
+    except Exception:
+        return error_response(400, "RUN_CONFIG_INVALID", "Invalid JSON payload")
+
+    try:
+        status_code, response = create_run(payload)
+        return JSONResponse(status_code=status_code, content=response)
+    except RunBuilderError as exc:
+        return error_response(exc.status_code, exc.code, exc.message, exc.details)
+    except Exception:
+        return error_response(500, "INTERNAL", "Internal error")
+
+
+@router.get("/runs/{run_id}/manifest")
+def run_manifest(run_id: str) -> JSONResponse:
+    runs_root = get_runs_root()
+    if runs_root is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found")
+    invalid = _is_invalid_component(run_id)
+    if invalid:
+        return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
+
+    registry_result = _load_registry_with_lock(runs_root)
+    if isinstance(registry_result, JSONResponse):
+        return registry_result
+    entry = _find_registry_entry(registry_result, run_id)
+    if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    if entry.get("status") == "CORRUPTED":
+        return error_response(409, "RUN_CORRUPTED", "Run artifacts missing", {"run_id": run_id})
+
+    run_dir = (runs_root / run_id).resolve()
+    if not is_within_root(run_dir, runs_root) or not run_dir.exists():
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        return error_response(409, "RUN_CORRUPTED", "Run artifacts missing", {"run_id": run_id})
+
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return error_response(409, "RUN_CORRUPTED", "Manifest invalid", {"run_id": run_id})
+    return JSONResponse(status_code=200, content=payload)
+
+
+@router.get("/runs/{run_id}/artifacts/{name}", response_model=None)
+def run_artifact(run_id: str, name: str):
+    runs_root = get_runs_root()
+    if runs_root is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found")
+    if _is_invalid_component(run_id):
+        return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
+    if _is_invalid_component(name):
+        return error_response(400, "RUN_CONFIG_INVALID", "Invalid artifact name", {"name": name})
+
+    registry_result = _load_registry_with_lock(runs_root)
+    if isinstance(registry_result, JSONResponse):
+        return registry_result
+    entry = _find_registry_entry(registry_result, run_id)
+    if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    if entry.get("status") == "CORRUPTED":
+        return error_response(409, "RUN_CORRUPTED", "Run artifacts missing", {"run_id": run_id})
+
+    run_dir = (runs_root / run_id).resolve()
+    if not is_within_root(run_dir, runs_root) or not run_dir.exists():
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+
+    artifact_path = (run_dir / name).resolve()
+    if not is_within_root(artifact_path, run_dir) or not artifact_path.exists():
+        return error_response(
+            404,
+            "ARTIFACT_NOT_FOUND",
+            "Artifact not found",
+            {"run_id": run_id, "name": name},
+        )
+
+    media_type = _artifact_media_type(name)
+    try:
+        content = artifact_path.read_bytes()
+    except OSError:
+        return error_response(
+            404,
+            "ARTIFACT_NOT_FOUND",
+            "Artifact not found",
+            {"run_id": run_id, "name": name},
+        )
+    return StreamingResponse(iter([content]), media_type=media_type)
 
 
 @router.get("/plugins/active")
@@ -477,3 +583,44 @@ def _export_response(stream: Iterable[bytes], media_type: str, filename: str) ->
         "Cache-Control": "no-store",
     }
     return StreamingResponse(stream, media_type=media_type, headers=headers)
+
+
+def _load_registry_with_lock(runs_root: Path) -> dict[str, object] | JSONResponse:
+    lock = lock_registry(runs_root)
+    try:
+        with lock:
+            return reconcile_registry(runs_root)
+    except TimeoutError:
+        return error_response(503, "REGISTRY_LOCK_TIMEOUT", "Registry lock timeout")
+    except Exception:
+        return error_response(500, "REGISTRY_WRITE_FAILED", "Registry write failed")
+
+
+def _find_registry_entry(registry: dict[str, object], run_id: str) -> dict[str, object] | None:
+    runs = registry.get("runs") if isinstance(registry, dict) else None
+    if not isinstance(runs, list):
+        return None
+    for entry in runs:
+        if isinstance(entry, dict) and entry.get("run_id") == run_id:
+            return entry
+    return None
+
+
+def _is_invalid_component(value: str) -> bool:
+    candidate = (value or "").strip()
+    if not candidate or candidate in {".", ".."}:
+        return True
+    if "/" in candidate or "\\" in candidate:
+        return True
+    if candidate.startswith("."):
+        return True
+    return False
+
+
+def _artifact_media_type(name: str) -> str:
+    lowered = name.lower()
+    if lowered.endswith(".jsonl") or lowered.endswith(".ndjson"):
+        return "application/x-ndjson; charset=utf-8"
+    if lowered.endswith(".json"):
+        return "application/json; charset=utf-8"
+    return "text/plain; charset=utf-8"

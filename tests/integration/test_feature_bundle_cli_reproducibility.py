@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +21,21 @@ def _run_cli(input_path: Path, out_dir: Path, repo_root: Path) -> subprocess.Com
         "--out",
         str(out_dir),
     ]
-    return subprocess.run(cmd, capture_output=True, text=True, cwd=repo_root)
+    return subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+        env=_subprocess_env(repo_root),
+    )
+
+
+def _subprocess_env(repo_root: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    src_path = repo_root / "src"
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = str(src_path) + (os.pathsep + existing if existing else "")
+    return env
 
 
 def test_feature_bundle_cli_reproducible(tmp_path: Path) -> None:

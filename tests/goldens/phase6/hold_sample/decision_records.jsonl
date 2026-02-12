@@ -1,0 +1,10 @@
+{"action":"ENTER_LONG","price":100.50000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":0,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:00:00.000Z"}
+{"action":"HOLD","price":100.80000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":1,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:01:00.000Z"}
+{"action":"HOLD","price":101.00000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":2,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:02:00.000Z"}
+{"action":"HOLD","price":101.50000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":3,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:03:00.000Z"}
+{"action":"HOLD","price":101.70000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":4,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:04:00.000Z"}
+{"action":"HOLD","price":101.90000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":5,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:05:00.000Z"}
+{"action":"HOLD","price":102.00000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":6,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:06:00.000Z"}
+{"action":"HOLD","price":102.20000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":7,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:07:00.000Z"}
+{"action":"HOLD","price":102.40000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":8,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:08:00.000Z"}
+{"action":"EXIT_LONG","price":102.60000000,"risk_level":3,"run_id":"run_41e3fb1b78d6","schema_version":"dr.v1","seq":9,"strategy_id":"hold","symbol":"BTCUSDT","timeframe":"1m","ts_utc":"2026-02-01T00:09:00.000Z"}

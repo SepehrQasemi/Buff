@@ -33,6 +33,7 @@ Run Python commands via `\.venv\Scripts\python.exe` to ensure the venv interpret
 ```powershell
 .\.venv\Scripts\python.exe scripts\verify_phase1.py --with-services
 .\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
+.\.venv\Scripts\python.exe scripts\phase6_release_gate.py
 node apps/web/scripts/smoke.mjs
 node apps/web/scripts/ui-smoke.mjs
 ```
