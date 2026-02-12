@@ -903,7 +903,7 @@ def _run_runtime_with_timeout(
     issues: list[ValidationIssue],
 ) -> None:
     ctx = multiprocessing.get_context("spawn")
-    queue: multiprocessing.Queue[list[tuple[str, str]]] = ctx.Queue()
+    queue: multiprocessing.queues.SimpleQueue[list[tuple[str, str]]] = ctx.SimpleQueue()
     process = ctx.Process(
         target=_runtime_worker,
         args=(
@@ -926,13 +926,16 @@ def _run_runtime_with_timeout(
         _add_issue(issues, "RUNTIME_TIMEOUT", "Runtime validation timed out.")
         return
     try:
-        payload = queue.get(timeout=0.2)
+        has_payload = queue._poll(0.2)
     except Exception:
+        has_payload = False
+    if not has_payload:
         if process.exitcode and process.exitcode != 0:
             _add_issue(issues, "RUNTIME_ERROR", "Runtime worker crashed.")
         else:
             _add_issue(issues, "RUNTIME_ERROR", "Runtime validation returned no result.")
         return
+    payload = queue.get()
     for code, message in payload:
         _add_issue(issues, code, message)
 
@@ -943,7 +946,7 @@ def _runtime_worker(
     py_path: str,
     plugin_dir: str,
     yaml_payload: dict[str, Any],
-    queue: multiprocessing.Queue[list[tuple[str, str]]],
+    queue: multiprocessing.queues.SimpleQueue[list[tuple[str, str]]],
 ) -> None:
     issues: list[ValidationIssue] = []
     module_name = f"_buff_user_{plugin_type}_{plugin_id}"
