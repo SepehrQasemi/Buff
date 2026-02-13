@@ -11,6 +11,14 @@
 - [PHASE2_CLOSURE.md](PHASE2_CLOSURE.md): Phase-2 closure summary and test status.
 - [WIP_BRANCH_POLICY.md](WIP_BRANCH_POLICY.md): WIP branch do-not-merge rule and cleanup guidance.
 
+## Roadmap & Identity
+
+- [Product Roadmap (Official)](./PRODUCT_ROADMAP.md)
+- [User Journey (Official)](./USER_JOURNEY.md)
+- [Architecture Boundaries (Non-Negotiable)](./ARCHITECTURE_BOUNDARIES.md)
+- [Decisions (Canonical)](./DECISIONS.md)
+- [Delivery Checklist (Operational)](./DELIVERY_CHECKLIST.md)
+
 ## Roadmap / Next
 
 - [phase6/README.md](phase6/README.md): Phase-6 plan to make Buff actually usable.

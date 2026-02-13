@@ -1,4 +1,4 @@
-# UI_SPEC — Buff TradingView-like UI (Read-only)
+ï»¿# UI_SPEC â€” Buff TradingView-like UI (Read-only)
 
 ## North Star
 A chart-first experience like TradingView, focused on:
@@ -7,6 +7,20 @@ A chart-first experience like TradingView, focused on:
 - Helping users iterate quickly
 
 UI must remain **read-only for execution** (no buy/sell, no broker actions).
+
+## Run Creation UX (File-based)
+
+Run creation in the UI is file-based:
+- The user selects a CSV file using a file picker.
+- The UI submits the creation request and displays progress.
+- On success, the UI redirects to the workspace page for the created run id.
+
+Implementation detail:
+The backend may store the uploaded file to a controlled location and reference it as an internal path, so path-based request contracts remain compatible.
+
+**Current status**
+If the current implementation is path-based, it must be documented as temporary and scheduled for migration to file-based selection.
+See `docs/DECISIONS.md` (D-001).
 
 ## Pages / Screens
 
@@ -99,10 +113,10 @@ Event timeline:
 
 #### 2.7 AI Chat tab
 Chatbot embedded:
-- “Add Indicator” flow
-- “Add Strategy” flow
-- “Review Strategy” flow
-- “Explain Trade” flow
+- â€œAdd Indicatorâ€ flow
+- â€œAdd Strategyâ€ flow
+- â€œReview Strategyâ€ flow
+- â€œExplain Tradeâ€ flow
 
 ### 3) Run Explorer
 Purpose: browse and compare previous runs.
@@ -171,3 +185,6 @@ UI must not invent trades; it must plot from artifacts.
 - Fast: avoid blocking UI on heavy computation; show progress
 - Deterministic: if run_id loaded, UI must render same view every time
 - Error clarity: show actionable messages, not stack traces
+
+
+

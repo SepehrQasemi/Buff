@@ -1,8 +1,17 @@
-# PRODUCT_SPEC ó Buff (TradingView-like Strategy Lab)
+Ôªø# PRODUCT_SPEC ‚Äî Buff (TradingView-like Strategy Lab)
 
 ## Product Identity
 Buff is a TradingView-like **strategy analysis lab**: a chart-first UI for visualizing signals, trades, and outcomes of strategies on historical data and paper runs.
 Buff is **read-only** in the UI: it does not provide Buy/Sell buttons, broker connections, or live execution controls.
+
+## Roadmap Alignment
+
+The official roadmap and locked product decisions live in:
+- `docs/PRODUCT_ROADMAP.md`
+- `docs/USER_JOURNEY.md`
+- `docs/ARCHITECTURE_BOUNDARIES.md`
+
+If any document conflicts with these boundaries, the boundaries win.
 
 ## Target User
 - Users who want to **test, compare, and iterate** on strategies and indicators visually.
@@ -49,7 +58,7 @@ Buff is **read-only** in the UI: it does not provide Buy/Sell buttons, broker co
 ## Explicit Non-goals
 - No buy/sell buttons or trading execution from UI.
 - No broker connections or live trading controls in UI.
-- No ìAI that guarantees profitsî or ìsignals marketplaceî.
+- No ‚ÄúAI that guarantees profits‚Äù or ‚Äúsignals marketplace‚Äù.
 - No multi-tenant SaaS or hosted user accounts (v1).
 
 ## Product Principles (Non-negotiable)
@@ -57,7 +66,7 @@ Buff is **read-only** in the UI: it does not provide Buy/Sell buttons, broker co
 - Deterministic, explainable outputs; every plotted trade/outcome has traceable provenance.
 - Extensibility must be safe: user code cannot bypass core contracts, risk safety caps, or artifacts integrity.
 
-## Definition of ìUsableî
+## Definition of ‚ÄúUsable‚Äù
 A user can:
 1) Open the UI and load data / runs.
 2) Select a built-in strategy, tune parameters, run, and see:
@@ -65,3 +74,5 @@ A user can:
    - each trade outcome
    - summary metrics and timeline events
 3) Add a new indicator or strategy using guided chatbot steps, validate it, and see it appear in UI.
+
+
