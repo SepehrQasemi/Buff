@@ -1,0 +1,29 @@
+{
+  "content_hash": "ae4bcdbc88756012e1fa4fb732151dc05d91b22a1ba849f517737bd910ccee8d",
+  "index_built_at": "2026-02-13T00:26:45Z",
+  "plugins": {
+    "indicator:demo_sma": {
+      "category": "trend",
+      "checked_at_utc": "2026-02-13T00:26:44Z",
+      "id": "demo_sma",
+      "name": "Demo SMA",
+      "plugin_type": "indicator",
+      "source_hash": "eff4b62dde8ef7fbf4468970011880341e25afea927c01729b17be675536d1c5",
+      "status": "VALID",
+      "version": "1.0.0"
+    },
+    "strategy:demo_threshold": {
+      "category": "trend",
+      "checked_at_utc": "2026-02-13T00:26:45Z",
+      "id": "demo_threshold",
+      "name": "Demo Threshold",
+      "plugin_type": "strategy",
+      "source_hash": "79729f4673dbf6d27fd5c6ed4c7687d56196b2453dd1e38c3368dd1d7f7bc4ba",
+      "status": "VALID",
+      "version": "1.0.0"
+    }
+  },
+  "total_invalid": 0,
+  "total_plugins": 2,
+  "total_valid": 2
+}

@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { getDecisions, getErrors, getRuns, getRunSummary, getTrades } from "./api";
+import {
+  API_UNREACHABLE_MESSAGE,
+  MISSING_ARTIFACTS_MESSAGE,
+  RUN_NOT_INDEXED_MESSAGE,
+  formatApiError,
+  mapApiError,
+} from "./errors";
 import { buildQueryString, parseViewState, serializeViewState } from "./urlState";
 
 const splitList = (value) =>
@@ -8,16 +15,6 @@ const splitList = (value) =>
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
-
-const formatError = (result, fallback) => {
-  if (!result) {
-    return fallback;
-  }
-  if (!result.status) {
-    return `${fallback}: ${result.error || "API unreachable"}`;
-  }
-  return `${result.error || fallback} (HTTP ${result.status})`;
-};
 
 const buildDecisionParams = (filters) => ({
   symbol: filters.symbol ? splitList(filters.symbol) : undefined,
@@ -160,9 +157,9 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setRunError(formatError(result, "Failed to load runs"));
+        setRunError(formatApiError(result, "Failed to load runs"));
         if (!result.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
         return;
       }
@@ -170,7 +167,7 @@ export default function useRunDashboard(runId) {
       const data = Array.isArray(result.data) ? result.data : [];
       const match = data.find((item) => item.id === runId) || null;
       if (!match) {
-        setRunError("Run not found in artifacts index.");
+        setRunError(RUN_NOT_INDEXED_MESSAGE);
       }
       setRun(match);
     }
@@ -193,12 +190,15 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setSummaryError(formatError(result, "Failed to load summary"));
-        if (result.status === 404) {
-          setMissingArtifactsMessage(result.error || "Required artifacts are missing.");
+        setSummaryError(formatApiError(result, "Failed to load summary"));
+        const mapped = mapApiError(result);
+        if (mapped) {
+          setMissingArtifactsMessage(mapped);
+        } else if (result.status === 404) {
+          setMissingArtifactsMessage(MISSING_ARTIFACTS_MESSAGE);
         }
         if (!result.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
         setSummaryLoading(false);
         return;
@@ -228,9 +228,9 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setDecisionsError(formatError(result, "Failed to load decisions"));
+        setDecisionsError(formatApiError(result, "Failed to load decisions"));
         if (!result.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
         setDecisionsLoading(false);
         return;
@@ -269,9 +269,9 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setTradesError(formatError(result, "Failed to load trades"));
+        setTradesError(formatApiError(result, "Failed to load trades"));
         if (!result.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
         setTradesLoading(false);
         return;
@@ -297,9 +297,9 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setErrorsError(formatError(result, "Failed to load errors"));
+        setErrorsError(formatApiError(result, "Failed to load errors"));
         if (!result.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
         setErrorsLoading(false);
         return;

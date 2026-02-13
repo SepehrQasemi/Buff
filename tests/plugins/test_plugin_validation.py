@@ -245,6 +245,7 @@ def on_bar(ctx):
     result = validate_candidate(candidate)
     assert result.status == "INVALID"
     assert "INTENT_INVALID" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes
 
 
 def test_strategy_nan_after_warmup_is_invalid(tmp_path: Path) -> None:
@@ -267,6 +268,7 @@ def on_bar(ctx):
     result = validate_candidate(candidate)
     assert result.status == "INVALID"
     assert "NAN_POLICY_VIOLATION" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes
 
 
 def test_strategy_confidence_none_is_invalid(tmp_path: Path) -> None:
@@ -290,6 +292,7 @@ def on_bar(ctx):
     result = validate_candidate(candidate)
     assert result.status == "INVALID"
     assert "CONFIDENCE_MISSING" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes
 
 
 def test_indicator_nondeterminism_is_invalid(tmp_path: Path) -> None:
@@ -438,6 +441,9 @@ def compute(ctx):
     result = validate_candidate(candidate)
     assert result.status == "INVALID"
     assert "RUNTIME_TIMEOUT" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes
+    assert any("parent terminated worker" in message for message in result.reason_messages)
+    assert any("exitcode=" in message for message in result.reason_messages)
 
 
 def test_strategy_infinite_loop_times_out(tmp_path: Path) -> None:
@@ -460,3 +466,4 @@ def on_bar(ctx):
     result = validate_candidate(candidate)
     assert result.status == "INVALID"
     assert "RUNTIME_TIMEOUT" in result.reason_codes
+    assert "RUNTIME_ERROR" not in result.reason_codes

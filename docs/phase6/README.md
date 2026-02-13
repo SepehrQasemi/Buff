@@ -27,6 +27,26 @@ Non-goals:
 | Stage 4: Usable UX | Add /runs/new create flow | UI creates run, progress + errors, redirect to /runs/{id} | [SPEC.md#stage-4-usable-ux](SPEC.md#stage-4-usable-ux) |
 | Stage 5: Reliability and Safety | Add limits, health, and kill switch | enforced limits, health readiness, structured logs | [SPEC.md#stage-5-reliability-and-safety](SPEC.md#stage-5-reliability-and-safety) |
 
+## Stage-5 Demo
+
+Run the read-only demo using the built-in artifacts pack:
+
+```bash
+./scripts/dev-demo.sh
+```
+
+```powershell
+.\scripts\dev-demo.ps1
+```
+
+Open `http://localhost:3000/runs/stage5_demo`.
+
+Success criteria:
+- Chart renders OHLCV candles with trade markers.
+- Trades, Metrics, Timeline, and Risk panels are populated from artifacts.
+- Risk panel shows a block reason (max_daily_loss).
+- UI remains read-only (no execution controls).
+
 ## Single Source of Truth Gates
 Run Python commands via `\.venv\Scripts\python.exe` to ensure the venv interpreter is used.
 
@@ -34,6 +54,7 @@ Run Python commands via `\.venv\Scripts\python.exe` to ensure the venv interpret
 .\.venv\Scripts\python.exe scripts\verify_phase1.py --with-services
 .\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
 .\.venv\Scripts\python.exe scripts\phase6_release_gate.py
+.\.venv\Scripts\python.exe scripts\verify_phase6_stage5.py --with-services
 node apps/web/scripts/smoke.mjs
 node apps/web/scripts/ui-smoke.mjs
 ```

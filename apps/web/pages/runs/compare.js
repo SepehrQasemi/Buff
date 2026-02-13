@@ -3,6 +3,7 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import CandlestickChart from "../../components/workspace/CandlestickChart";
 import { getMetrics, getOhlcv, getRunSummary, getRuns, getTradeMarkers } from "../../lib/api";
+import { formatApiError } from "../../lib/errors";
 
 const formatValue = (value) => {
   if (value === null || value === undefined || value === "") {
@@ -16,16 +17,6 @@ const formatList = (value) => {
     return value.length > 0 ? value.join(", ") : "n/a";
   }
   return formatValue(value);
-};
-
-const formatError = (result, fallback) => {
-  if (!result) {
-    return fallback;
-  }
-  if (!result.status) {
-    return `${fallback}: ${result.error || "API unreachable"}`;
-  }
-  return `${result.error || fallback} (HTTP ${result.status})`;
 };
 
 const normalizeParam = (value) => {
@@ -211,7 +202,7 @@ export default function CompareRunsPage() {
         runIndex = Array.isArray(runsResult.data) ? runsResult.data : [];
         setRunsIndex(runIndex);
       } else {
-        setRunsError(formatError(runsResult, "Failed to load run index"));
+        setRunsError(formatApiError(runsResult, "Failed to load run index"));
       }
 
       const runMetaA = runIndex.find((run) => run.id === runAId);
@@ -254,25 +245,25 @@ export default function CompareRunsPage() {
       if (summaryAResult.ok) {
         setSummaryA(summaryAResult.data);
       } else {
-        setSummaryErrorA(formatError(summaryAResult, "Failed to load run A summary"));
+        setSummaryErrorA(formatApiError(summaryAResult, "Failed to load run A summary"));
       }
 
       if (summaryBResult.ok) {
         setSummaryB(summaryBResult.data);
       } else {
-        setSummaryErrorB(formatError(summaryBResult, "Failed to load run B summary"));
+        setSummaryErrorB(formatApiError(summaryBResult, "Failed to load run B summary"));
       }
 
       if (metricsAResult.ok) {
         setMetricsA(metricsAResult.data);
       } else {
-        setMetricsErrorA(formatError(metricsAResult, "Failed to load run A metrics"));
+        setMetricsErrorA(formatApiError(metricsAResult, "Failed to load run A metrics"));
       }
 
       if (metricsBResult.ok) {
         setMetricsB(metricsBResult.data);
       } else {
-        setMetricsErrorB(formatError(metricsBResult, "Failed to load run B metrics"));
+        setMetricsErrorB(formatApiError(metricsBResult, "Failed to load run B metrics"));
       }
 
       if (markersAResult.ok) {
@@ -280,7 +271,7 @@ export default function CompareRunsPage() {
           Array.isArray(markersAResult.data?.markers) ? markersAResult.data.markers : []
         );
       } else {
-        setMarkersErrorA(formatError(markersAResult, "Failed to load run A markers"));
+        setMarkersErrorA(formatApiError(markersAResult, "Failed to load run A markers"));
       }
 
       if (markersBResult.ok) {
@@ -288,13 +279,13 @@ export default function CompareRunsPage() {
           Array.isArray(markersBResult.data?.markers) ? markersBResult.data.markers : []
         );
       } else {
-        setMarkersErrorB(formatError(markersBResult, "Failed to load run B markers"));
+        setMarkersErrorB(formatApiError(markersBResult, "Failed to load run B markers"));
       }
 
       if (ohlcvResult.ok) {
         setOhlcv(ohlcvResult.data);
       } else {
-        setOhlcvError(formatError(ohlcvResult, "Failed to load run A OHLCV"));
+        setOhlcvError(formatApiError(ohlcvResult, "Failed to load run A OHLCV"));
       }
 
       setLoading(false);

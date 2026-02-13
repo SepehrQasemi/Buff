@@ -11,6 +11,7 @@ import {
   getTrades,
   invalidateCache,
 } from "./api";
+import { API_UNREACHABLE_MESSAGE, RUN_NOT_INDEXED_MESSAGE, formatApiError } from "./errors";
 
 const DEFAULT_TIMEFRAMES = [
   "1m",
@@ -26,16 +27,6 @@ const DEFAULT_TIMEFRAMES = [
 ];
 const DEFAULT_TRADES_PAGE_SIZE = 250;
 const MAX_TRADES_PAGE_SIZE = 500;
-
-const formatError = (result, fallback) => {
-  if (!result) {
-    return fallback;
-  }
-  if (!result.status) {
-    return `${fallback}: ${result.error || "API unreachable"}`;
-  }
-  return `${result.error || fallback} (HTTP ${result.status})`;
-};
 
 export default function useWorkspace(runId) {
   const [run, setRun] = useState(null);
@@ -138,9 +129,9 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setRunError(formatError(result, "Failed to load runs"));
+        setRunError(formatApiError(result, "Failed to load runs"));
         if (!result.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
         return;
       }
@@ -148,7 +139,7 @@ export default function useWorkspace(runId) {
       const list = Array.isArray(result.data) ? result.data : [];
       const match = list.find((item) => item.id === runId) || null;
       if (!match) {
-        setRunError("Run not found in artifacts index.");
+        setRunError(RUN_NOT_INDEXED_MESSAGE);
       }
       setRun(match);
     }
@@ -195,9 +186,9 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setSummaryError(formatError(result, "Failed to load run summary"));
+        setSummaryError(formatApiError(result, "Failed to load run summary"));
         if (!result.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
         setSummaryLoading(false);
         return;
@@ -241,7 +232,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setOhlcvError(formatError(result, "Failed to load OHLCV"));
+        setOhlcvError(formatApiError(result, "Failed to load OHLCV"));
         setOhlcvLoading(false);
         return;
       }
@@ -282,7 +273,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setMarkersError(formatError(result, "Failed to load trade markers"));
+        setMarkersError(formatApiError(result, "Failed to load trade markers"));
         return;
       }
       setMarkers(Array.isArray(result.data?.markers) ? result.data.markers : []);
@@ -343,7 +334,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setTradesError(formatError(result, "Failed to load trades"));
+        setTradesError(formatApiError(result, "Failed to load trades"));
         return;
       }
       setTrades(result.data || { results: [] });
@@ -375,7 +366,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setMetricsError(formatError(result, "Failed to load metrics"));
+        setMetricsError(formatApiError(result, "Failed to load metrics"));
         return;
       }
       setMetrics(result.data);
@@ -411,7 +402,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setTimelineError(formatError(result, "Failed to load timeline"));
+        setTimelineError(formatApiError(result, "Failed to load timeline"));
         return;
       }
       const events = Array.isArray(result.data?.events) ? result.data.events : [];
@@ -453,9 +444,9 @@ export default function useWorkspace(runId) {
       });
 
       if (!activeResult.ok) {
-        setPluginsError(formatError(activeResult, "Failed to load active plugins"));
+        setPluginsError(formatApiError(activeResult, "Failed to load active plugins"));
         if (!activeResult.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
       } else {
         setActivePlugins(normalize(activeResult.data));
@@ -463,9 +454,9 @@ export default function useWorkspace(runId) {
       }
 
       if (!failedResult.ok) {
-        setPluginsError(formatError(failedResult, "Failed to load plugin diagnostics"));
+        setPluginsError(formatApiError(failedResult, "Failed to load plugin diagnostics"));
         if (!failedResult.status) {
-          setNetworkError("API unreachable. Check that the backend is running.");
+          setNetworkError(API_UNREACHABLE_MESSAGE);
         }
       } else {
         setFailedPlugins(normalize(failedResult.data));

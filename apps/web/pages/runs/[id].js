@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import CandlestickChart from "../../components/workspace/CandlestickChart";
 import { getChatModes, postChat } from "../../lib/api";
+import { MISSING_RUN_ID_MESSAGE } from "../../lib/errors";
 import useWorkspace from "../../lib/useWorkspace";
 
 const formatNumber = (value, digits = 2) => {
@@ -109,6 +110,7 @@ export default function ChartWorkspace() {
   const router = useRouter();
   const { id } = router.query;
   const runId = Array.isArray(id) ? id[0] : id;
+  const isReady = router.isReady;
 
   const {
     run,
@@ -527,6 +529,7 @@ export default function ChartWorkspace() {
         </div>
       </header>
 
+      {isReady && !runId && <div className="banner">{MISSING_RUN_ID_MESSAGE}</div>}
       {networkError && <div className="banner">{networkError}</div>}
       {pluginsError && <div className="banner">{pluginsError}</div>}
       {runError && <div className="banner">{runError}</div>}

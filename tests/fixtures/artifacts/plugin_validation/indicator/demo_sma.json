@@ -1,0 +1,42 @@
+{
+  "category": "trend",
+  "checked_at_utc": "2026-02-13T00:26:44Z",
+  "errors": [],
+  "id": "demo_sma",
+  "name": "Demo SMA",
+  "plugin_type": "indicator",
+  "reason_codes": [],
+  "reason_messages": [],
+  "schema": {
+    "author": "Buff Team",
+    "category": "trend",
+    "id": "demo_sma",
+    "inputs": [
+      "close"
+    ],
+    "name": "Demo SMA",
+    "nan_policy": "propagate",
+    "outputs": [
+      "sma"
+    ],
+    "params": [
+      {
+        "default": 5,
+        "description": "Lookback period for the SMA.",
+        "max": 200,
+        "min": 1,
+        "name": "period",
+        "type": "int"
+      }
+    ],
+    "version": "1.0.0",
+    "warmup_bars": 5
+  },
+  "source_hash": "eff4b62dde8ef7fbf4468970011880341e25afea927c01729b17be675536d1c5",
+  "status": "VALID",
+  "timestamp": "2026-02-13T00:26:44Z",
+  "type": "indicator",
+  "validation_status": "PASSED",
+  "version": "1.0.0",
+  "warnings": []
+}
