@@ -325,7 +325,7 @@ export default function useRunDashboard(runId) {
       await navigator.clipboard.writeText(url);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
-    } catch (error) {
+    } catch {
       setLinkCopied(false);
     }
   };

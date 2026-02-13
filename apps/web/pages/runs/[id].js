@@ -180,9 +180,12 @@ export default function ChartWorkspace() {
     ERROR: true,
   });
 
+  const rangeStart = range?.start_ts ?? "";
+  const rangeEnd = range?.end_ts ?? "";
+
   useEffect(() => {
-    setRangeDraft(range);
-  }, [range.start_ts, range.end_ts]);
+    setRangeDraft({ start_ts: rangeStart, end_ts: rangeEnd });
+  }, [rangeStart, rangeEnd]);
 
   useEffect(() => {
     if (!runId) {
@@ -210,9 +213,9 @@ export default function ChartWorkspace() {
           .filter((mode) => mode.id);
         if (normalized.length > 0) {
           setChatModes(normalized);
-          if (!normalized.some((mode) => mode.id === chatMode)) {
-            setChatMode(normalized[0].id);
-          }
+          setChatMode((current) =>
+            normalized.some((mode) => mode.id === current) ? current : normalized[0].id
+          );
           return;
         }
       }
