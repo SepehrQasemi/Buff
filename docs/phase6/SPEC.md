@@ -36,6 +36,17 @@ A deterministic execution of the pipeline over a defined dataset, timeframe, str
 Artifact Set:
 The minimal set of files that the UI and API consume to display a run. At minimum this includes decision records, metrics, and a timeline, plus a manifest that enumerates all artifacts and their versions.
 
+## Product Completion Definition
+
+A completion-ready product core means:
+- A user can create a run from CSV + selected strategy using UI and CLI.
+- The created run is stored under the runs root directory and is visible in the run list.
+- The workspace page renders the run strictly from artifacts.
+- The system is deterministic and reproducible (same inputs → same run id and artifacts).
+- Fail-closed behavior is preserved with stable, user-explainable error codes.
+- Local quality gates pass consistently.
+Note: If current UI implementation is path-based, it must be treated as a temporary bridge and tracked via `docs/DECISIONS.md` (D-001).
+
 ## Security and Privacy
 - No secrets are stored in the repo or run artifacts.
 - Data source credentials, if any, are supplied only via environment variables or local config ignored by git.
@@ -43,6 +54,8 @@ The minimal set of files that the UI and API consume to display a run. At minimu
 - Logs must avoid printing raw secrets or access tokens.
 
 ## Acceptance Journeys
+
+Canonical user journey: docs/USER_JOURNEY.md.
 1. User runs a CLI command with a CSV input and gets a new run_id with artifacts written under RUNS_ROOT.
 2. User opens /runs/{run_id} and sees the chart, metrics, and timeline from the new artifacts.
 3. User restarts API/UI and the run is still listed and loadable from RUNS_ROOT.
@@ -280,4 +293,7 @@ Milestone demos:
 - Stage 3: CSV ingest produces canonical 1m data and a data quality report; deterministic resampling for fixed windows.
 - Stage 4: /runs/new creates a run and redirects to /runs/{run_id}; UI shows progress and success state.
 - Stage 5: Kill switch blocks new run creation; health endpoint reports readiness; limits enforced.
+
+
+
 
