@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -35,16 +36,82 @@ from .errors import build_error_payload, raise_api_error
 from .plugins import get_validation_summary, list_active_plugins, list_failed_plugins
 from .timeutils import coerce_ts_param
 from .phase6.http import error_response
-from .phase6.paths import get_runs_root, is_within_root
+from .phase6.paths import RUNS_ROOT_ENV, get_runs_root, is_within_root
 from .phase6.registry import lock_registry, reconcile_registry
 from .phase6.run_builder import RunBuilderError, create_run
 
 router = APIRouter()
+KILL_SWITCH_ENV = "BUFF_KILL_SWITCH"
+
+
+def _kill_switch_enabled() -> bool:
+    return os.getenv(KILL_SWITCH_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
+    probe = runs_root / f".buff_write_check_{os.getpid()}"
+    try:
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        return False, str(exc)
+    return True, None
+
+
+def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
+    runs_root = get_runs_root()
+    if runs_root is None:
+        return error_response(
+            503,
+            "RUNS_ROOT_UNSET",
+            "RUNS_ROOT is not set",
+            {"env": RUNS_ROOT_ENV},
+        )
+    if not runs_root.exists():
+        return error_response(
+            503,
+            "RUNS_ROOT_MISSING",
+            "RUNS_ROOT does not exist",
+            {"path": str(runs_root)},
+        )
+    if not runs_root.is_dir():
+        return error_response(
+            503,
+            "RUNS_ROOT_INVALID",
+            "RUNS_ROOT is not a directory",
+            {"path": str(runs_root)},
+        )
+    writable, error = _check_runs_root_writable(runs_root)
+    if not writable:
+        return error_response(
+            503,
+            "RUNS_ROOT_NOT_WRITABLE",
+            "RUNS_ROOT is not writable",
+            {"path": str(runs_root), "error": error or "permission denied"},
+        )
+    return runs_root, {"status": "ok", "path": str(runs_root), "writable": True}
 
 
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "api_version": "1"}
+
+
+@router.get("/ready", response_model=None)
+def ready() -> object:
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        return readiness
+    runs_root, runs_check = readiness
+    registry_result = _load_registry_with_lock(runs_root)
+    if isinstance(registry_result, JSONResponse):
+        return registry_result
+    runs = registry_result.get("runs") if isinstance(registry_result, dict) else []
+    checks = {
+        "runs_root": runs_check,
+        "registry": {"status": "ok", "runs": len(runs) if isinstance(runs, list) else 0},
+    }
+    return {"status": "ready", "api_version": "1", "checks": checks}
 
 
 @router.get("/runs")
@@ -69,6 +136,13 @@ def list_runs() -> object:
 
 @router.post("/runs")
 async def create_run_endpoint(request: Request) -> JSONResponse:
+    if _kill_switch_enabled():
+        return error_response(
+            503,
+            "KILL_SWITCH_ENABLED",
+            "Run creation disabled",
+            {"env": KILL_SWITCH_ENV},
+        )
     try:
         payload = await request.json()
     except Exception:
