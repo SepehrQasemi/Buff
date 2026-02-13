@@ -1,0 +1,31 @@
+[
+  {
+    "detail": "Stage-5 demo run initialized",
+    "severity": "INFO",
+    "timestamp": "2024-01-01T00:00:00Z",
+    "title": "start",
+    "type": "run"
+  },
+  {
+    "detail": "demo_threshold signal",
+    "severity": "INFO",
+    "timestamp": "2024-01-01T00:10:00Z",
+    "title": "enter_long",
+    "type": "decision"
+  },
+  {
+    "detail": "max_daily_loss",
+    "risk": {
+      "level": 3,
+      "permission": "BLOCK",
+      "policy_type": "hard_cap",
+      "reason": "max_daily_loss",
+      "rule_id": "hard_cap_daily_loss",
+      "state": "RED"
+    },
+    "severity": "ERROR",
+    "timestamp": "2024-01-01T01:00:00Z",
+    "title": "risk_block",
+    "type": "risk"
+  }
+]

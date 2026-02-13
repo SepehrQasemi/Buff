@@ -29,6 +29,8 @@ htmlcov/
 /logs/
 *.parquet
 !tests/fixtures/ohlcv/ohlcv_1m_fixture.parquet
+!tests/fixtures/artifacts/stage5_demo/ohlcv_1m.parquet
+!tests/fixtures/artifacts/stage5_demo/trades.parquet
 *.csv
 *.log
 .env
