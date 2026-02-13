@@ -142,8 +142,14 @@ const parseErrorMessage = (data, fallback) => {
   if (typeof data.detail === "string") {
     return data.detail;
   }
+  if (typeof data.detail?.message === "string") {
+    return data.detail.message;
+  }
   if (typeof data.error === "string") {
     return data.error;
+  }
+  if (typeof data.error?.message === "string") {
+    return data.error.message;
   }
   return fallback;
 };

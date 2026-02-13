@@ -1,0 +1,29 @@
+## git status -sb
+## main...origin/main
+ M apps/web/lib/api.js
+ M apps/web/lib/useRunDashboard.js
+ M apps/web/lib/useWorkspace.js
+ M apps/web/pages/runs/[id].js
+ M apps/web/pages/runs/compare.js
+ M apps/web/pages/runs/index.js
+ M docs/phase6/README.md
+?? apps/web/lib/errors.js
+?? apps/web/scripts/demo-render-check.mjs
+?? scripts/dev-demo.ps1
+?? scripts/dev-demo.sh
+?? scripts/verify_phase6_stage5.py
+?? tests/fixtures/artifacts/plugin_validation/
+?? tests/fixtures/artifacts/stage5_demo/
+?? tests/plugins/test_demo_plugins.py
+?? user_indicators/
+?? user_strategies/
+
+## git diff --stat
+ apps/web/lib/api.js             |  6 ++++++
+ apps/web/lib/useRunDashboard.js | 25 +++++++++----------------
+ apps/web/lib/useWorkspace.js    | 33 +++++++++++++--------------------
+ apps/web/pages/runs/[id].js     | 15 +++++++++++----
+ apps/web/pages/runs/compare.js  | 27 +++++++++------------------
+ apps/web/pages/runs/index.js    | 17 +++++------------
+ docs/phase6/README.md           | 20 ++++++++++++++++++++
+ 7 files changed, 73 insertions(+), 70 deletions(-)

@@ -124,6 +124,33 @@ Proof (Phase-1 smoke):
 node apps/web/scripts/ui-smoke.mjs
 ```
 
+### Stage-5 Demo (Read-only)
+
+Run the Stage-5 demo with the built-in artifacts pack:
+
+```bash
+./scripts/dev-demo.sh
+```
+
+```powershell
+.\scripts\dev-demo.ps1
+```
+
+Open `http://localhost:3000/runs/stage5_demo`.
+
+Success criteria:
+- Chart renders OHLCV candles with trade markers.
+- Trades, Metrics, Timeline, and Risk panels are populated from artifacts.
+- Risk panel shows a block reason (`max_daily_loss`).
+- UI remains read-only (no execution controls).
+
+Verification gate:
+`.\.venv\Scripts\python.exe scripts\verify_phase6_stage5.py --with-services`
+
+Troubleshooting:
+- Port in use: set `API_PORT`/`UI_PORT` for bash or use `-ApiPort`/`-UiPort` in PowerShell.
+- Missing dependencies: install Python 3.10+ and Node.js 20.9+ and re-run the demo script.
+
 ## Verify Phase-1
 
 Run the verification gate:

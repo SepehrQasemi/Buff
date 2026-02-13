@@ -1,0 +1,18 @@
+{
+  "avg_loss": -0.12,
+  "avg_win": 0.77,
+  "max_drawdown": -0.021,
+  "num_trades": 3,
+  "risk_level": 3,
+  "time_breakdown": [
+    {
+      "max_drawdown": -0.021,
+      "num_trades": 3,
+      "period": "2024-01",
+      "total_return": 0.083,
+      "win_rate": 0.67
+    }
+  ],
+  "total_return": 0.083,
+  "win_rate": 0.67
+}

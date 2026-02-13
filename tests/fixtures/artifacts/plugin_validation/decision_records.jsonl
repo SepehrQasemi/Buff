@@ -1,0 +1,1 @@
+{"timestamp":"2026-01-10T08:00:00Z","action":"BLOCKED","risk_state":"BLOCKED","reason":"plugin_validation_artifacts","strategy_id":"demo_threshold","symbols":["BTCUSDT"],"timeframe":"1m","risk":{"level":3,"state":"BLOCKED","permission":"BLOCK","reason":"validation_only","rule_id":"plugin_validation","policy_type":"hard_cap"}}

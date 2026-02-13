@@ -1,0 +1,108 @@
+﻿## git status -sb
+## phase6/stage5-rc
+
+## git log --oneline --decorate -n 12
+2d538ff (HEAD -> phase6/stage5-rc, main) docs: document stage5 demo and verification
+d051731 fix(web): centralize and improve run/workspace error handling
+9a0cd96 test(gate): harden stage5 verification gate and strict render probe
+9cb8de3 feat(phase6): add demo plugins and determinism validation test
+5d7aa68 feat(phase6): add stage5 demo artifacts and demo runners
+68daa38 (origin/main, origin/HEAD) phase6(stage4): lock runtime guardrails + CI invariants (#167)
+6630a6e Plugin Gate Hardening: fail-closed enforcement + TTL index lock + observability (#164)
+3b536c0 Phase 6: Product-grade deterministic runs + release gate (#163)
+8ad1e94 docs(phase6): consolidate execution spec and contracts (#162)
+8b3d12c \ (#161)
+fe9c8d0 fix(phase1): use sys.executable for gates to honor venv (#160)
+5633156 Merge pull request #159 from Buff-Trading-AI/chore/release-gate
+
+## git rev-list --count origin/main..HEAD
+5
+
+## .\\.venv\\Scripts\\python.exe scripts\\verify_phase6_stage5.py --with-services
+INFO:     Started server process [18148]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:61464 - "GET /api/v1/health HTTP/1.1" 200 OK
+
+> dev
+> next dev --port 3000
+
+▲ Next.js 16.1.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.0.4.232:3000
+
+✓ Starting...
+✓ Ready in 823ms
+ GET /runs/stage5_demo 200 in 259ms (compile: 207ms, render: 52ms)
+380 files already formatted
+All checks passed!
+........................................................................ [ 11%]
+..........................s...................................s......... [ 23%]
+........................................................................ [ 35%]
+........................................................................ [ 47%]
+........................................................................ [ 59%]
+........................................................................ [ 70%]
+........................................................................ [ 82%]
+........................................................................ [ 94%]
+..................................                                       [100%]
+608 passed, 2 skipped in 99.77s (0:01:39)
+INFO:     127.0.0.1:53181 - "GET /api/v1/health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53182 - "GET /api/v1/runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53181 - "GET /api/v1/runs/plugin_validation/summary HTTP/1.1" 200 OK
+Smoke OK { runId: 'plugin_validation', summary: true }
+INFO:     127.0.0.1:53183 - "GET /api/v1/runs HTTP/1.1" 200 OK
+ GET /runs/phase1_demo 200 in 15ms (compile: 5ms, render: 10ms)
+INFO:     127.0.0.1:53183 - "GET /api/v1/runs/does-not-exist/summary HTTP/1.1" 404 Not Found
+UI smoke OK { runId: 'phase1_demo' }
+INFO:     127.0.0.1:53185 - "GET /api/v1/runs HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53186 - "GET /api/v1/runs/stage5_demo/summary HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53185 - "GET /api/v1/runs/stage5_demo/ohlcv?timeframe=1m&limit=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53186 - "GET /api/v1/runs/stage5_demo/trades?page=1&page_size=50 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53185 - "GET /api/v1/runs/stage5_demo/metrics HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53186 - "GET /api/v1/runs/stage5_demo/timeline HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53185 - "GET /api/v1/plugins/active HTTP/1.1" 200 OK
+ GET /runs/stage5_demo 200 in 15ms (compile: 6ms, render: 9ms)
+Demo render check OK { runId: 'stage5_demo' }
+Python executable: C:\dev\Buff\.venv\Scripts\python.exe
+Starting Stage-5 demo services...
+Command (start_process): ['C:\\dev\\Buff\\.venv\\Scripts\\python.exe', '-m', 'uvicorn', 'apps.api.main:app', '--host', '127.0.0.1', '--port', '8000']
+Command (start_process): ['C:\\Program Files\\nodejs\\npm.CMD', 'run', 'dev', '--', '--port', '3000']
+
+==> ruff format
+Command (ruff format): ['C:\\dev\\Buff\\.venv\\Scripts\\python.exe', '-m', 'ruff', 'format', '--check', '.']
+OK ruff format
+
+==> ruff check
+Command (ruff check): ['C:\\dev\\Buff\\.venv\\Scripts\\python.exe', '-m', 'ruff', 'check', '.']
+OK ruff check
+
+==> pytest
+Command (pytest): ['C:\\dev\\Buff\\.venv\\Scripts\\python.exe', '-m', 'pytest', '-q']
+OK pytest
+
+==> web smoke
+Command (web smoke): ['node', 'apps/web/scripts/smoke.mjs']
+OK web smoke
+
+==> ui smoke
+Command (ui smoke): ['node', 'apps/web/scripts/ui-smoke.mjs']
+OK ui smoke
+
+==> demo render check
+Command (demo render check): ['node', 'apps/web/scripts/demo-render-check.mjs']
+OK demo render check
+
+Summary:
+- ruff format: OK
+- ruff check: OK
+- pytest: OK
+- web smoke: OK
+- ui smoke: OK
+- demo render check: OK
+
+Phase-6 Stage-5 verification complete
+
+Stopping UI...
+
+Stopping API...

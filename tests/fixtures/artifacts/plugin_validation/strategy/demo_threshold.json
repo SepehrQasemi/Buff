@@ -1,0 +1,51 @@
+{
+  "category": "trend",
+  "checked_at_utc": "2026-02-13T00:26:45Z",
+  "errors": [],
+  "id": "demo_threshold",
+  "name": "Demo Threshold",
+  "plugin_type": "strategy",
+  "reason_codes": [],
+  "reason_messages": [],
+  "schema": {
+    "author": "Buff Team",
+    "category": "trend",
+    "id": "demo_threshold",
+    "inputs": {
+      "indicators": [
+        "demo_sma"
+      ],
+      "series": [
+        "close"
+      ]
+    },
+    "name": "Demo Threshold",
+    "outputs": {
+      "intents": [
+        "HOLD",
+        "ENTER_LONG",
+        "EXIT_LONG"
+      ],
+      "provides_confidence": false
+    },
+    "params": [
+      {
+        "default": 0.0,
+        "description": "Offset applied around SMA before entering/exiting.",
+        "max": 10.0,
+        "min": 0.0,
+        "name": "threshold",
+        "type": "float"
+      }
+    ],
+    "version": "1.0.0",
+    "warmup_bars": 5
+  },
+  "source_hash": "79729f4673dbf6d27fd5c6ed4c7687d56196b2453dd1e38c3368dd1d7f7bc4ba",
+  "status": "VALID",
+  "timestamp": "2026-02-13T00:26:45Z",
+  "type": "strategy",
+  "validation_status": "PASSED",
+  "version": "1.0.0",
+  "warnings": []
+}

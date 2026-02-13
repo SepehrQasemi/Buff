@@ -26,9 +26,13 @@ htmlcov/
 
 # Data / logs / secrets
 /data/
-/logs/
+/logs/*
+!/logs/stage5_preflight.txt
+!/logs/stage5_postflight.txt
 *.parquet
 !tests/fixtures/ohlcv/ohlcv_1m_fixture.parquet
+!tests/fixtures/artifacts/stage5_demo/ohlcv_1m.parquet
+!tests/fixtures/artifacts/stage5_demo/trades.parquet
 *.csv
 *.log
 .env

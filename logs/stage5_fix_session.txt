@@ -1,0 +1,37 @@
+﻿## pwd
+C:\dev\Buff
+
+## git status -sb
+## main...origin/main [ahead 5]
+
+## git rev-parse --abbrev-ref HEAD
+main
+
+## git log --oneline --decorate -n 20
+2d538ff (HEAD -> main) docs: document stage5 demo and verification
+d051731 fix(web): centralize and improve run/workspace error handling
+9a0cd96 test(gate): harden stage5 verification gate and strict render probe
+9cb8de3 feat(phase6): add demo plugins and determinism validation test
+5d7aa68 feat(phase6): add stage5 demo artifacts and demo runners
+68daa38 (origin/main, origin/HEAD) phase6(stage4): lock runtime guardrails + CI invariants (#167)
+6630a6e Plugin Gate Hardening: fail-closed enforcement + TTL index lock + observability (#164)
+3b536c0 Phase 6: Product-grade deterministic runs + release gate (#163)
+8ad1e94 docs(phase6): consolidate execution spec and contracts (#162)
+8b3d12c \ (#161)
+fe9c8d0 fix(phase1): use sys.executable for gates to honor venv (#160)
+5633156 Merge pull request #159 from Buff-Trading-AI/chore/release-gate
+7a2d3a4 ci: run release gate via uv run
+48e26b5 docs: finalize PR release gate formatting
+1a7502a docs: polish PR release gate description formatting
+42096af docs: polish release gate docs and PR text
+b319bb7 ci: align release-gate workflow with repo install docs
+07c2e96 fix: allow preflight when ahead of origin
+153bb91 chore: add local release preflight + release gate
+e1cd15c docs: add WIP branch policy (do-not-merge rule) (#155)
+
+## git diff --name-status
+
+## git diff --stat
+
+## branch after switch
+phase6/stage5-rc

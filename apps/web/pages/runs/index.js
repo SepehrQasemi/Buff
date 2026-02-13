@@ -2,16 +2,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import { getRuns } from "../../lib/api";
-
-const formatError = (result, fallback) => {
-  if (!result) {
-    return fallback;
-  }
-  if (!result.status) {
-    return `${fallback}: ${result.error || "API unreachable"}`;
-  }
-  return `${result.error || fallback} (HTTP ${result.status})`;
-};
+import { formatApiError } from "../../lib/errors";
 
 export default function RunsPage() {
   const router = useRouter();
@@ -39,7 +30,7 @@ export default function RunsPage() {
         return;
       }
       if (!result.ok) {
-        setError(formatError(result, "Failed to load runs"));
+        setError(formatApiError(result, "Failed to load runs"));
         setLoading(false);
         return;
       }
@@ -105,7 +96,9 @@ export default function RunsPage() {
       {loading ? (
         <div className="card fade-up">Loading runs...</div>
       ) : runs.length === 0 ? (
-        <div className="card fade-up">No runs found under artifacts.</div>
+        <div className="card fade-up">
+          No runs found. Ensure ARTIFACTS_ROOT points to the demo artifacts folder.
+        </div>
       ) : (
         <div className="grid two">
           {runs.map((run, index) => {
