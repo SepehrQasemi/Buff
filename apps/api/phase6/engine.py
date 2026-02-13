@@ -101,7 +101,9 @@ def run_engine(df: pd.DataFrame, config: EngineConfig) -> EngineResult:
     if df.empty:
         raise ValueError("engine_empty_data")
 
-    if config.strategy_id == "hold":
+    hold_like = config.strategy_id in {"hold", "demo_threshold"}
+
+    if hold_like:
         signal_actions = _signal_actions_hold(len(df))
     elif config.strategy_id == "ma_cross":
         signal_actions = _signal_actions_ma_cross(df, config.strategy_params)
@@ -165,7 +167,7 @@ def run_engine(df: pd.DataFrame, config: EngineConfig) -> EngineResult:
         entry_commission = 0.0
 
     for idx, ts_value in enumerate(timestamps):
-        if config.strategy_id == "hold":
+        if hold_like:
             if idx == 0 and position_qty == 0:
                 _enter(open_prices[idx], ts_value)
         else:
@@ -186,7 +188,7 @@ def run_engine(df: pd.DataFrame, config: EngineConfig) -> EngineResult:
         equity = cash + (position_qty * close_prices[idx])
         equity_curve.append({"t": _format_ts(ts_value), "equity": float(equity)})
 
-        if config.strategy_id == "hold":
+        if hold_like:
             if idx == 0:
                 action = "ENTER_LONG"
             elif idx == len(timestamps) - 1:
