@@ -270,3 +270,5 @@ export const getFailedPlugins = (options) => request("/plugins/failed", undefine
 export const getChatModes = () => request("/chat/modes");
 
 export const postChat = (payload) => post("/chat", payload);
+
+export const createRun = (payload) => post("/runs", payload);
