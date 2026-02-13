@@ -201,7 +201,7 @@ def _normalize_request(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[st
     strategy_id = str(strategy.get("id") or "").strip()
     if not strategy_id:
         raise RunBuilderError("STRATEGY_INVALID", "strategy.id is required", 400)
-    if strategy_id not in {"hold", "ma_cross"}:
+    if strategy_id not in {"hold", "ma_cross", "demo_threshold"}:
         raise RunBuilderError("STRATEGY_INVALID", "strategy.id is invalid", 400)
 
     params = strategy.get("params")
@@ -220,6 +220,14 @@ def _normalize_request(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[st
         if fast <= 0 or slow <= 0 or fast >= slow:
             raise RunBuilderError("STRATEGY_INVALID", "ma_cross params invalid", 400)
         params = {"fast_period": fast, "slow_period": slow}
+    elif strategy_id == "demo_threshold":
+        try:
+            threshold = float(params.get("threshold", 0.0))
+        except (TypeError, ValueError) as exc:
+            raise RunBuilderError("STRATEGY_INVALID", "demo_threshold params invalid", 400) from exc
+        if threshold < 0 or threshold > 10:
+            raise RunBuilderError("STRATEGY_INVALID", "demo_threshold params invalid", 400)
+        params = {"threshold": threshold}
     else:
         params = {}
 

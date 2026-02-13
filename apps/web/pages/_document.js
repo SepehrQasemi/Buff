@@ -4,7 +4,7 @@ export default function Document() {
   return (
     <Html>
       <Head>
-        <script src="/runtime-config.js" />
+        <script src="/runtime-config.js" defer />
       </Head>
       <body>
         <Main />
