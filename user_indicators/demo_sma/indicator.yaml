@@ -1,0 +1,16 @@
+id: demo_sma
+name: Demo SMA
+version: 1.0.0
+author: Buff Team
+category: trend
+inputs: [close]
+outputs: [sma]
+params:
+  - name: period
+    type: int
+    default: 5
+    min: 1
+    max: 200
+    description: "Lookback period for the SMA."
+warmup_bars: 5
+nan_policy: propagate

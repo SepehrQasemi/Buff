@@ -1,0 +1,19 @@
+id: demo_threshold
+name: Demo Threshold
+version: 1.0.0
+author: Buff Team
+category: trend
+warmup_bars: 5
+inputs:
+  series: [close]
+  indicators: [demo_sma]
+params:
+  - name: threshold
+    type: float
+    default: 0.0
+    min: 0.0
+    max: 10.0
+    description: "Offset applied around SMA before entering/exiting."
+outputs:
+  intents: [HOLD, ENTER_LONG, EXIT_LONG]
+  provides_confidence: false
