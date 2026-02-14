@@ -21,10 +21,14 @@ from .artifacts import (
     get_artifacts_root,
     load_metrics,
     load_ohlcv,
+    load_ohlcv_jsonl,
     load_timeline,
     load_trade_markers,
+    load_trade_markers_jsonl,
     load_trades,
+    load_trades_jsonl,
     resolve_ohlcv_path,
+    resolve_ohlcv_jsonl_path,
     resolve_run_dir,
     stream_decisions_export,
     stream_errors_export,
@@ -42,10 +46,15 @@ from .phase6.run_builder import RunBuilderError, create_run
 
 router = APIRouter()
 KILL_SWITCH_ENV = "BUFF_KILL_SWITCH"
+DEMO_MODE_ENV = "DEMO_MODE"
 
 
 def _kill_switch_enabled() -> bool:
     return os.getenv(KILL_SWITCH_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _demo_mode_enabled() -> bool:
+    return os.getenv(DEMO_MODE_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
@@ -92,6 +101,124 @@ def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
     return runs_root, {"status": "ok", "path": str(runs_root), "writable": True}
 
 
+def _mark_demo_runs(runs: list[dict[str, object]]) -> list[dict[str, object]]:
+    for run in runs:
+        run.setdefault("mode", "demo")
+        if "id" in run and "run_id" not in run:
+            run["run_id"] = run.get("id")
+    return runs
+
+
+def _load_manifest(run_dir: Path) -> dict[str, object]:
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _artifact_flags_from_present(run_dir: Path, artifacts_present: list[object]) -> dict[str, bool]:
+    names = {str(name) for name in artifacts_present if isinstance(name, str)}
+    has_trades = "trades.parquet" in names or "trades.jsonl" in names
+    has_ohlcv = False
+    for name in names:
+        if name == "ohlcv.parquet" or name == "ohlcv_1m.parquet":
+            has_ohlcv = True
+            break
+        if name.startswith("ohlcv_") and (name.endswith(".parquet") or name.endswith(".jsonl")):
+            has_ohlcv = True
+            break
+    return {
+        "decisions": "decision_records.jsonl" in names,
+        "trades": has_trades,
+        "metrics": "metrics.json" in names,
+        "ohlcv": has_ohlcv,
+        "timeline": find_timeline_path(run_dir) is not None,
+        "risk_report": "risk_report.json" in names,
+        "manifest": "manifest.json" in names,
+    }
+
+
+def _build_registry_run_list(runs_root: Path, runs: list[object]) -> list[dict[str, object]]:
+    listings: list[dict[str, object]] = []
+    for entry in runs:
+        if not isinstance(entry, dict):
+            continue
+        run_id = str(entry.get("run_id") or "").strip()
+        if not run_id:
+            continue
+        run_dir = (runs_root / run_id).resolve()
+        if not is_within_root(run_dir, runs_root):
+            continue
+        manifest = _load_manifest(run_dir)
+        manifest_data = manifest.get("data") if isinstance(manifest.get("data"), dict) else {}
+        strategy = entry.get("strategy_id") or (manifest.get("strategy") or {}).get("id")
+        symbol = entry.get("symbol") or (manifest_data or {}).get("symbol")
+        timeframe = entry.get("timeframe") or (manifest_data or {}).get("timeframe")
+        created_at = entry.get("created_at") or manifest.get("created_at")
+        status = entry.get("status") or "UNKNOWN"
+        artifacts_present = entry.get("artifacts_present")
+        if not isinstance(artifacts_present, list):
+            artifacts_present = []
+        artifacts = _artifact_flags_from_present(run_dir, artifacts_present)
+        listings.append(
+            {
+                "id": run_id,
+                "run_id": run_id,
+                "path": str(run_dir),
+                "created_at": created_at,
+                "status": status,
+                "strategy": strategy,
+                "symbols": [symbol] if symbol else None,
+                "timeframe": timeframe,
+                "has_trades": artifacts.get("trades", False),
+                "artifacts": artifacts,
+            }
+        )
+    return listings
+
+
+def _invalid_run_id_response(run_id: str) -> JSONResponse:
+    return error_response(400, "invalid_run_id", "Invalid run id", {"run_id": run_id})
+
+
+def _resolve_registry_run_dir(
+    runs_root: Path, run_id: str
+) -> tuple[dict[str, object], Path] | JSONResponse:
+    if _is_invalid_component(run_id):
+        return _invalid_run_id_response(run_id)
+    registry_result = _load_registry_with_lock(runs_root)
+    if isinstance(registry_result, JSONResponse):
+        return registry_result
+    entry = _find_registry_entry(registry_result, run_id)
+    if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    if entry.get("status") == "CORRUPTED":
+        return error_response(409, "RUN_CORRUPTED", "Run artifacts missing", {"run_id": run_id})
+    run_dir = (runs_root / run_id).resolve()
+    if not is_within_root(run_dir, runs_root) or not run_dir.exists():
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    return entry, run_dir
+
+
+def _resolve_run_dir_for_read(run_id: str) -> tuple[Path, str] | JSONResponse:
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        if _demo_mode_enabled():
+            run_path = resolve_run_dir(run_id, get_artifacts_root())
+            return run_path, "demo"
+        return readiness
+    runs_root, _ = readiness
+    resolved = _resolve_registry_run_dir(runs_root, run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    _, run_dir = resolved
+    return run_dir, "runs_root"
+
+
 @router.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "api_version": "1"}
@@ -116,22 +243,27 @@ def ready() -> object:
 
 @router.get("/runs")
 def list_runs() -> object:
-    runs_root = get_runs_root()
-    if runs_root is not None:
-        registry_result = _load_registry_with_lock(runs_root)
-        if isinstance(registry_result, JSONResponse):
-            return registry_result
-        return registry_result.get("runs", [])
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        if not _demo_mode_enabled():
+            return readiness
+        artifacts_root = get_artifacts_root()
+        if not artifacts_root.exists():
+            raise_api_error(
+                404,
+                "artifacts_root_missing",
+                "Artifacts root not found",
+                {"path": str(artifacts_root)},
+            )
+        runs = discover_runs()
+        return _mark_demo_runs(runs)
 
-    artifacts_root = get_artifacts_root()
-    if not artifacts_root.exists():
-        raise_api_error(
-            404,
-            "artifacts_root_missing",
-            "Artifacts root not found",
-            {"path": str(artifacts_root)},
-        )
-    return discover_runs()
+    runs_root, _ = readiness
+    registry_result = _load_registry_with_lock(runs_root)
+    if isinstance(registry_result, JSONResponse):
+        return registry_result
+    runs = registry_result.get("runs", []) if isinstance(registry_result, dict) else []
+    return _build_registry_run_list(runs_root, runs if isinstance(runs, list) else [])
 
 
 @router.post("/runs")
@@ -251,7 +383,10 @@ def validation_summary() -> dict[str, object]:
 
 @router.get("/runs/{run_id}/summary")
 def run_summary(run_id: str) -> dict[str, object]:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, mode = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -271,6 +406,8 @@ def run_summary(run_id: str) -> dict[str, object]:
     summary = dict(build_summary(decision_path))
     summary["run_id"] = run_id
     summary["artifacts"] = collect_run_artifacts(run_path)
+    if mode == "demo":
+        summary["mode"] = "demo"
     return summary
 
 
@@ -286,7 +423,10 @@ def decisions(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
 ) -> dict[str, object]:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, mode = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -311,7 +451,7 @@ def decisions(
 
     start_dt, end_dt = _parse_time_range(start_ts, end_ts)
 
-    return filter_decisions(
+    payload = filter_decisions(
         decision_path,
         symbol,
         action,
@@ -322,6 +462,9 @@ def decisions(
         page,
         page_size,
     )
+    if mode == "demo":
+        payload["mode"] = "demo"
+    return payload
 
 
 @router.get("/runs/{run_id}/trades")
@@ -332,17 +475,30 @@ def trades(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
 ) -> dict[str, object]:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
-    trade_path = run_path / "trades.parquet"
-    if not trade_path.exists():
-        raise_api_error(404, "trades_missing", "trades.parquet missing", {"run_id": run_id})
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, mode = resolved
+    trade_parquet_path = run_path / "trades.parquet"
+    trade_jsonl_path = run_path / "trades.jsonl"
+    if trade_parquet_path.exists():
+        trade_path = trade_parquet_path
+        trade_loader = load_trades
+    elif trade_jsonl_path.exists():
+        trade_path = trade_jsonl_path
+        trade_loader = load_trades_jsonl
+    else:
+        raise_api_error(404, "trades_missing", "trades artifact missing", {"run_id": run_id})
 
     start_dt, end_dt = _parse_time_range(start_ts, end_ts)
 
     try:
-        return load_trades(trade_path, start_dt, end_dt, page, page_size)
+        payload = trade_loader(trade_path, start_dt, end_dt, page, page_size)
     except RuntimeError as exc:
         raise_api_error(422, "trades_invalid", str(exc), {"run_id": run_id})
+    if mode == "demo":
+        payload["mode"] = "demo"
+    return payload
 
 
 @router.get("/runs/{run_id}/trades/markers")
@@ -351,17 +507,29 @@ def trade_markers(
     start_ts: str | None = None,
     end_ts: str | None = None,
 ) -> dict[str, object]:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
-    trade_path = run_path / "trades.parquet"
-    if not trade_path.exists():
-        raise_api_error(404, "trades_missing", "trades.parquet missing", {"run_id": run_id})
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, mode = resolved
+    trade_parquet_path = run_path / "trades.parquet"
+    trade_jsonl_path = run_path / "trades.jsonl"
+    if trade_parquet_path.exists():
+        trade_path = trade_parquet_path
+        marker_loader = load_trade_markers
+    elif trade_jsonl_path.exists():
+        trade_path = trade_jsonl_path
+        marker_loader = load_trade_markers_jsonl
+    else:
+        raise_api_error(404, "trades_missing", "trades artifact missing", {"run_id": run_id})
 
     start_dt, end_dt = _parse_time_range(start_ts, end_ts)
     try:
-        payload = load_trade_markers(trade_path, start_ts=start_dt, end_ts=end_dt)
+        payload = marker_loader(trade_path, start_ts=start_dt, end_ts=end_dt)
     except RuntimeError as exc:
         raise_api_error(422, "trades_invalid", str(exc), {"run_id": run_id})
     payload["run_id"] = run_id
+    if mode == "demo":
+        payload["mode"] = "demo"
     return payload
 
 
@@ -374,19 +542,29 @@ def ohlcv(
     end_ts: str | None = None,
     limit: int | None = Query(default=None, ge=1, le=10000),
 ) -> dict[str, object]:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, mode = resolved
     ohlcv_path = resolve_ohlcv_path(run_path, timeframe)
-    if ohlcv_path is None:
-        raise_api_error(
-            404,
-            "ohlcv_missing",
-            "OHLCV artifact missing",
-            {"run_id": run_id, "timeframe": timeframe},
-        )
+    if ohlcv_path is not None:
+        ohlcv_loader = load_ohlcv
+        source_path = ohlcv_path
+    else:
+        ohlcv_jsonl_path = resolve_ohlcv_jsonl_path(run_path, timeframe)
+        if ohlcv_jsonl_path is None:
+            raise_api_error(
+                404,
+                "ohlcv_missing",
+                "OHLCV artifact missing",
+                {"run_id": run_id, "timeframe": timeframe},
+            )
+        ohlcv_loader = load_ohlcv_jsonl
+        source_path = ohlcv_jsonl_path
 
     start_dt, end_dt = _parse_time_range(start_ts, end_ts)
     try:
-        payload = load_ohlcv(ohlcv_path, start_ts=start_dt, end_ts=end_dt, limit=limit)
+        payload = ohlcv_loader(source_path, start_ts=start_dt, end_ts=end_dt, limit=limit)
     except RuntimeError as exc:
         raise_api_error(
             422,
@@ -397,13 +575,18 @@ def ohlcv(
     payload["run_id"] = run_id
     payload["symbol"] = symbol
     payload["timeframe"] = timeframe
-    payload["source"] = ohlcv_path.name
+    payload["source"] = source_path.name
+    if mode == "demo":
+        payload["mode"] = "demo"
     return payload
 
 
 @router.get("/runs/{run_id}/metrics")
 def metrics(run_id: str) -> dict[str, object]:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, mode = resolved
     metrics_path = run_path / "metrics.json"
     if not metrics_path.exists():
         raise_api_error(404, "metrics_missing", "metrics.json missing", {"run_id": run_id})
@@ -412,12 +595,17 @@ def metrics(run_id: str) -> dict[str, object]:
     except RuntimeError as exc:
         raise_api_error(422, "metrics_invalid", str(exc), {"run_id": run_id})
     payload.setdefault("run_id", run_id)
+    if mode == "demo":
+        payload["mode"] = "demo"
     return payload
 
 
 @router.get("/runs/{run_id}/timeline")
 def timeline(run_id: str, source: str = "auto") -> dict[str, object]:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, mode = resolved
     source_key = (source or "auto").lower()
     timeline_path = None
 
@@ -455,12 +643,18 @@ def timeline(run_id: str, source: str = "auto") -> dict[str, object]:
             )
         events = build_timeline_from_decisions(decision_path)
 
-    return {"run_id": run_id, "total": len(events), "events": events}
+    payload = {"run_id": run_id, "total": len(events), "events": events}
+    if mode == "demo":
+        payload["mode"] = "demo"
+    return payload
 
 
 @router.get("/runs/{run_id}/errors")
 def errors(run_id: str) -> dict[str, object]:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, mode = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -477,7 +671,10 @@ def errors(run_id: str) -> dict[str, object]:
             "decision_records.jsonl contains invalid JSON lines",
             validation,
         )
-    return collect_error_records(decision_path)
+    payload = collect_error_records(decision_path)
+    if mode == "demo":
+        payload["mode"] = "demo"
+    return payload
 
 
 @router.get("/runs/{run_id}/decisions/export")
@@ -491,7 +688,10 @@ def export_decisions(
     start_ts: str | None = None,
     end_ts: str | None = None,
 ) -> StreamingResponse:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, _ = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -533,7 +733,10 @@ def export_decisions(
 
 @router.get("/runs/{run_id}/errors/export")
 def export_errors(run_id: str, format: str = "json") -> StreamingResponse:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, _ = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -565,10 +768,18 @@ def export_trades(
     start_ts: str | None = None,
     end_ts: str | None = None,
 ) -> StreamingResponse:
-    run_path = resolve_run_dir(run_id, get_artifacts_root())
-    trade_path = run_path / "trades.parquet"
-    if not trade_path.exists():
-        raise_api_error(404, "trades_missing", "trades.parquet missing", {"run_id": run_id})
+    resolved = _resolve_run_dir_for_read(run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, _ = resolved
+    trade_parquet_path = run_path / "trades.parquet"
+    trade_jsonl_path = run_path / "trades.jsonl"
+    if trade_parquet_path.exists():
+        trade_path = trade_parquet_path
+    elif trade_jsonl_path.exists():
+        trade_path = trade_jsonl_path
+    else:
+        raise_api_error(404, "trades_missing", "trades artifact missing", {"run_id": run_id})
 
     start_dt, end_dt = _parse_time_range(start_ts, end_ts)
     try:

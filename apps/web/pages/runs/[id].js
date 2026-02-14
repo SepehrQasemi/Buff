@@ -229,6 +229,13 @@ export default function ChartWorkspace() {
 
   const candles = useMemo(() => ohlcv?.candles || [], [ohlcv]);
   const tradeRows = useMemo(() => trades?.results || [], [trades]);
+  const demoMode = useMemo(
+    () =>
+      [run?.mode, summary?.mode, trades?.mode, metrics?.mode, timeline?.mode, ohlcv?.mode]
+        .filter(Boolean)
+        .some((mode) => mode === "demo"),
+    [run?.mode, summary?.mode, trades?.mode, metrics?.mode, timeline?.mode, ohlcv?.mode]
+  );
   const tradesTotal = Number.isFinite(trades?.total) ? trades.total : null;
   const tradesStart =
     tradeRows.length === 0 ? 0 : (tradesPage - 1) * tradesPageSize + 1;
@@ -526,6 +533,7 @@ export default function ChartWorkspace() {
           </div>
         </div>
         <div className="workspace-actions">
+          {demoMode && <span className="badge info">DEMO</span>}
           <button className="secondary" onClick={reload}>
             Refresh
           </button>
@@ -533,6 +541,11 @@ export default function ChartWorkspace() {
       </header>
 
       {isReady && !runId && <div className="banner">{MISSING_RUN_ID_MESSAGE}</div>}
+      {demoMode && (
+        <div className="banner info">
+          Demo mode active. This run is loaded from ARTIFACTS_ROOT and is read-only.
+        </div>
+      )}
       {networkError && <div className="banner">{networkError}</div>}
       {pluginsError && <div className="banner">{pluginsError}</div>}
       {runError && <div className="banner">{runError}</div>}

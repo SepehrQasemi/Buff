@@ -54,3 +54,33 @@ Symbols are stored in CCXT format (`BTC/USDT`) and converted to partition names 
 - No strategy logic or ML
 - No trading decisions
 - No derived datasets in the M1 ingest pipeline (derived timeframes are produced by the multi-timeframe runner)
+
+## Layer-1 Run Artifacts (RUNS_ROOT)
+
+Layer-1 runs write artifacts directly under `RUNS_ROOT/<run_id>/` and are read by the API.
+
+Required artifacts:
+
+- `manifest.json`
+- `config.json`
+- `metrics.json`
+- `equity_curve.json`
+- `decision_records.jsonl`
+- `trades.jsonl`
+- `timeline.json`
+- `ohlcv_*.jsonl` (for example `ohlcv_1m.jsonl`)
+
+JSONL formats (one JSON object per line):
+
+- `trades.jsonl` includes `entry_time`, `exit_time`, `entry_price`, `exit_price`, `side`, `qty`, `pnl`, `fees`.
+- `ohlcv_*.jsonl` includes `ts`, `open`, `high`, `low`, `close`, `volume`.
+
+JSON formats:
+
+- `metrics.json` is a single JSON object with summary statistics. Required fields for UI: `total_return`, `max_drawdown`, `num_trades`, `win_rate` (additional fields like `final_equity`, `risk_level`, `symbol` may be present).
+- `timeline.json` is a JSON array of event objects. Each event includes `timestamp`, `type`, `title`, and `severity` (optional `detail`).
+
+Precedence:
+
+- If a parquet artifact exists in the run directory (for example `trades.parquet` or `ohlcv_1m.parquet`), the API prefers parquet.
+- Otherwise the API reads the JSONL artifacts above.

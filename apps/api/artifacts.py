@@ -94,14 +94,17 @@ def resolve_run_dir(run_id: str, artifacts_root: Path) -> Path:
 
 
 def collect_run_artifacts(run_path: Path) -> dict[str, bool]:
+    manifest_exists = (run_path / "manifest.json").exists() or (
+        run_path / "run_manifest.json"
+    ).exists()
     return {
         "decisions": (run_path / "decision_records.jsonl").exists(),
-        "trades": (run_path / "trades.parquet").exists(),
+        "trades": (run_path / "trades.parquet").exists() or (run_path / "trades.jsonl").exists(),
         "metrics": (run_path / "metrics.json").exists(),
         "ohlcv": _has_ohlcv_artifact(run_path),
         "timeline": find_timeline_path(run_path) is not None,
         "risk_report": (run_path / "risk_report.json").exists(),
-        "manifest": (run_path / "run_manifest.json").exists(),
+        "manifest": manifest_exists,
     }
 
 
@@ -291,7 +294,10 @@ def stream_trades_export(
     trade_path: Path, *, start_ts: datetime | None, end_ts: datetime | None, fmt: str
 ) -> tuple[Iterable[bytes], str]:
     def iter_records() -> Iterable[dict[str, Any]]:
-        yield from _iter_trade_records(trade_path, start_ts, end_ts)
+        if trade_path.suffix == ".jsonl":
+            yield from _iter_trade_jsonl_records(trade_path, start_ts, end_ts)
+        else:
+            yield from _iter_trade_records(trade_path, start_ts, end_ts)
 
     return _build_export_stream(iter_records, fmt)
 
@@ -463,6 +469,43 @@ def load_trades(
     }
 
 
+def load_trades_jsonl(
+    trade_path: Path,
+    start_ts: datetime | None,
+    end_ts: datetime | None,
+    page: int,
+    page_size: int,
+) -> dict[str, Any]:
+    records: list[dict[str, Any]] = []
+    for record in _iter_jsonl_records(trade_path, "trades.jsonl"):
+        normalized = _normalize_trade_jsonl_record(record)
+        ts_value = normalized.get("timestamp")
+        if ts_value is None:
+            raise RuntimeError("trades.jsonl missing timestamp")
+        try:
+            ts = parse_ts(ts_value)
+        except ValueError as exc:
+            raise RuntimeError("trades.jsonl timestamp invalid") from exc
+        if start_ts and ts < start_ts:
+            continue
+        if end_ts and ts > end_ts:
+            continue
+        normalized["timestamp"] = format_ts(ts)
+        normalized.setdefault("ts_utc", normalized["timestamp"])
+        records.append(normalized)
+
+    total = len(records)
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "results": records[start:end],
+        "timestamp_field": "timestamp",
+    }
+
+
 def load_trade_markers(
     trade_path: Path, *, start_ts: datetime | None, end_ts: datetime | None
 ) -> dict[str, Any]:
@@ -524,6 +567,43 @@ def load_trade_markers(
     return {"total": len(markers), "markers": markers}
 
 
+def load_trade_markers_jsonl(
+    trade_path: Path, *, start_ts: datetime | None, end_ts: datetime | None
+) -> dict[str, Any]:
+    markers: list[dict[str, Any]] = []
+    for record in _iter_jsonl_records(trade_path, "trades.jsonl"):
+        entry_ts = record.get("entry_time")
+        exit_ts = record.get("exit_time")
+        if entry_ts is None and exit_ts is None:
+            ts_value = record.get("timestamp")
+            if ts_value is None:
+                raise RuntimeError("trades.jsonl missing entry_time/exit_time")
+            entry_ts = ts_value
+        if entry_ts is not None:
+            marker = _build_trade_marker(
+                record,
+                entry_ts,
+                record.get("entry_price"),
+                "entry",
+                start_ts=start_ts,
+                end_ts=end_ts,
+            )
+            if marker:
+                markers.append(marker)
+        if exit_ts is not None:
+            marker = _build_trade_marker(
+                record,
+                exit_ts,
+                record.get("exit_price"),
+                "exit",
+                start_ts=start_ts,
+                end_ts=end_ts,
+            )
+            if marker:
+                markers.append(marker)
+    return {"total": len(markers), "markers": markers}
+
+
 def load_ohlcv(
     ohlcv_path: Path,
     *,
@@ -577,6 +657,52 @@ def load_ohlcv(
         }
         records.append(record)
 
+    start_value = records[0]["ts"] if records else None
+    end_value = records[-1]["ts"] if records else None
+    return {"count": len(records), "start_ts": start_value, "end_ts": end_value, "candles": records}
+
+
+def load_ohlcv_jsonl(
+    ohlcv_path: Path,
+    *,
+    start_ts: datetime | None,
+    end_ts: datetime | None,
+    limit: int | None,
+) -> dict[str, Any]:
+    records_with_dt: list[tuple[datetime, dict[str, Any]]] = []
+    for record in _iter_jsonl_records(ohlcv_path, "ohlcv.jsonl"):
+        ts_value = record.get("ts") or record.get("timestamp") or record.get("time")
+        if ts_value is None:
+            raise RuntimeError("ohlcv jsonl missing ts")
+        try:
+            ts = parse_ts(ts_value)
+        except ValueError as exc:
+            raise RuntimeError("ohlcv jsonl timestamp invalid") from exc
+        if start_ts and ts < start_ts:
+            continue
+        if end_ts and ts > end_ts:
+            continue
+        missing = [name for name in _OHLCV_REQUIRED_COLUMNS if name not in record]
+        if missing:
+            raise RuntimeError(f"ohlcv jsonl missing columns: {','.join(sorted(missing))}")
+        records_with_dt.append(
+            (
+                ts,
+                {
+                    "ts": format_ts(ts),
+                    "open": float(record["open"]),
+                    "high": float(record["high"]),
+                    "low": float(record["low"]),
+                    "close": float(record["close"]),
+                    "volume": float(record["volume"]),
+                },
+            )
+        )
+
+    records_with_dt.sort(key=lambda item: item[0])
+    records = [record for _, record in records_with_dt]
+    if limit is not None and limit > 0:
+        records = records[:limit]
     start_value = records[0]["ts"] if records else None
     end_value = records[-1]["ts"] if records else None
     return {"count": len(records), "start_ts": start_value, "end_ts": end_value, "candles": records}
@@ -698,6 +824,27 @@ def _iter_trade_records(
             if timestamp_col:
                 record[timestamp_col] = format_ts(ts)
             yield record
+
+
+def _iter_trade_jsonl_records(
+    trade_path: Path, start_ts: datetime | None, end_ts: datetime | None
+) -> Iterable[dict[str, Any]]:
+    for record in _iter_jsonl_records(trade_path, "trades.jsonl"):
+        normalized = _normalize_trade_jsonl_record(record)
+        ts_value = normalized.get("timestamp")
+        if ts_value is None:
+            raise RuntimeError("trades.jsonl missing timestamp")
+        try:
+            ts = parse_ts(ts_value)
+        except ValueError as exc:
+            raise RuntimeError("trades.jsonl timestamp invalid") from exc
+        if start_ts and ts < start_ts:
+            continue
+        if end_ts and ts > end_ts:
+            continue
+        normalized["timestamp"] = format_ts(ts)
+        normalized.setdefault("ts_utc", normalized["timestamp"])
+        yield normalized
 
 
 def _build_export_stream(
@@ -912,6 +1059,11 @@ def _has_ohlcv_artifact(run_path: Path) -> bool:
     for candidate in run_path.glob("ohlcv_*.parquet"):
         if candidate.is_file():
             return True
+    for candidate in run_path.glob("ohlcv_*.jsonl"):
+        if candidate.is_file():
+            return True
+    if (run_path / "ohlcv.jsonl").exists():
+        return True
     return False
 
 
@@ -930,6 +1082,96 @@ def resolve_ohlcv_path(run_path: Path, timeframe: str | None) -> Path | None:
         if candidate.exists() and candidate.is_file():
             return candidate
     return None
+
+
+def resolve_ohlcv_jsonl_path(run_path: Path, timeframe: str | None) -> Path | None:
+    candidates: list[Path] = []
+    if timeframe:
+        candidates.append(run_path / f"ohlcv_{timeframe}.jsonl")
+        if timeframe == "1m":
+            candidates.append(run_path / "ohlcv_1m.jsonl")
+    candidates.append(run_path / "ohlcv.jsonl")
+    if not timeframe:
+        candidates.append(run_path / "ohlcv_1m.jsonl")
+        candidates.extend(sorted(run_path.glob("ohlcv_*.jsonl")))
+
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return None
+
+
+def _iter_jsonl_records(path: Path, label: str) -> Iterable[dict[str, Any]]:
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        raise RuntimeError(f"{label} missing") from exc
+    for line_number, raw_line in enumerate(lines, start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            payload = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"{label} invalid json at line {line_number}") from exc
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"{label} must contain json objects")
+        yield payload
+
+
+def _normalize_trade_jsonl_record(record: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(record)
+    if "timestamp" not in normalized:
+        for key in ("exit_time", "entry_time", "ts", "ts_utc"):
+            if key in normalized:
+                normalized["timestamp"] = normalized.get(key)
+                break
+    if "price" not in normalized:
+        if "exit_price" in normalized:
+            normalized["price"] = normalized.get("exit_price")
+        elif "entry_price" in normalized:
+            normalized["price"] = normalized.get("entry_price")
+    for key in ("price", "pnl"):
+        if key in normalized:
+            try:
+                normalized[key] = float(normalized[key])
+            except (TypeError, ValueError):
+                normalized[key] = normalized.get(key)
+    return normalized
+
+
+def _build_trade_marker(
+    record: dict[str, Any],
+    ts_value: object,
+    price_value: object,
+    marker_type: str,
+    *,
+    start_ts: datetime | None,
+    end_ts: datetime | None,
+) -> dict[str, Any] | None:
+    try:
+        ts = parse_ts(ts_value)
+    except ValueError as exc:
+        raise RuntimeError("trades.jsonl timestamp invalid") from exc
+    if start_ts and ts < start_ts:
+        return None
+    if end_ts and ts > end_ts:
+        return None
+    price = None
+    if price_value is not None:
+        try:
+            price = float(price_value)
+        except (TypeError, ValueError):
+            price = None
+    side = record.get("side") or record.get("direction") or record.get("action")
+    return {
+        "timestamp": format_ts(ts),
+        "price": price,
+        "side": str(side).upper() if side is not None else None,
+        "marker_type": marker_type,
+        "pnl": record.get("pnl"),
+        "trade_id": record.get("trade_id") or record.get("id"),
+    }
 
 
 def find_timeline_path(run_path: Path) -> Path | None:

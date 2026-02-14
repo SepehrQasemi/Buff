@@ -230,6 +230,12 @@ th {
   margin-bottom: 24px;
 }
 
+.banner.info {
+  background: rgba(15, 107, 95, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .kpi {
   display: flex;
   flex-direction: column;

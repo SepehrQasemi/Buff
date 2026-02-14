@@ -366,6 +366,7 @@ def test_error_group_404_run_not_found(monkeypatch, tmp_path):
 
 def test_error_group_503_registry_lock_timeout(monkeypatch, tmp_path):
     runs_root = tmp_path / "runs"
+    runs_root.mkdir()
     monkeypatch.setenv("RUNS_ROOT", str(runs_root))
 
     class _TimeoutLock:
@@ -384,6 +385,7 @@ def test_error_group_503_registry_lock_timeout(monkeypatch, tmp_path):
 
 def test_error_group_500_registry_write_failed(monkeypatch, tmp_path):
     runs_root = tmp_path / "runs"
+    runs_root.mkdir()
     monkeypatch.setenv("RUNS_ROOT", str(runs_root))
 
     def _boom(*_args, **_kwargs):
