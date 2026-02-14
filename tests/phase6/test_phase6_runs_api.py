@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -118,6 +119,9 @@ def _assert_decimal_precision(payload: bytes, max_decimals: int) -> None:
 def _assert_error_response(response, status_code: int, code: str) -> dict:
     assert response.status_code == status_code
     payload = response.json()
+    assert payload["code"] == code
+    assert "message" in payload
+    assert "details" in payload
     assert "error" in payload
     error = payload["error"]
     assert error["code"] == code
@@ -142,6 +146,34 @@ def test_run_create_success(phase6_runs):
     assert list_response.status_code == 200
     listed = list_response.json()
     assert any(entry.get("run_id") == run_id for entry in listed)
+
+
+def test_run_create_with_upload(monkeypatch):
+    runs_root = Path("runs") / "_upload_test"
+    if runs_root.exists():
+        shutil.rmtree(runs_root, ignore_errors=True)
+    runs_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("RUNS_ROOT", str(runs_root))
+
+    client = TestClient(app)
+    payload = _payload(path="upload.csv")
+    try:
+        with open(SAMPLE_PATH, "rb") as handle:
+            response = client.post(
+                "/api/v1/runs",
+                data={"request": json.dumps(payload)},
+                files={"file": ("sample.csv", handle, "text/csv")},
+            )
+        assert response.status_code in {200, 201}
+        run_id = response.json()["run_id"]
+        run_dir = runs_root / run_id
+        assert (run_dir / "metrics.json").exists()
+        manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+        source_path = manifest["data"]["source_path"]
+        assert source_path.startswith("runs/_upload_test/inputs/")
+    finally:
+        client.close()
+        shutil.rmtree(runs_root, ignore_errors=True)
 
 
 def test_run_idempotent(monkeypatch, tmp_path):
@@ -173,9 +205,7 @@ def test_run_conflict(monkeypatch, tmp_path):
     assert first.status_code == 201
 
     conflict = client.post("/api/v1/runs", json=_payload(run_id=run_id, risk_level=4))
-    assert conflict.status_code == 409
-    payload = conflict.json()
-    assert payload["error"]["code"] == "RUN_EXISTS"
+    _assert_error_response(conflict, 409, "RUN_EXISTS")
 
 
 def test_determinism_across_runs(monkeypatch, tmp_path):
@@ -218,8 +248,23 @@ def test_corrupted_run_detection(monkeypatch, tmp_path):
     assert entry.get("status") == "CORRUPTED"
 
     manifest = client.get(f"/api/v1/runs/{run_id}/manifest")
-    assert manifest.status_code == 409
-    assert manifest.json()["error"]["code"] == "RUN_CORRUPTED"
+    _assert_error_response(manifest, 409, "RUN_CORRUPTED")
+
+
+def test_metrics_missing_error_code(monkeypatch, tmp_path):
+    runs_root = tmp_path / "runs"
+    monkeypatch.setenv("RUNS_ROOT", str(runs_root))
+
+    client = TestClient(app)
+    response = client.post("/api/v1/runs", json=_payload())
+    assert response.status_code == 201
+    run_id = response.json()["run_id"]
+
+    metrics_path = runs_root / run_id / "metrics.json"
+    metrics_path.unlink()
+
+    metrics = client.get(f"/api/v1/runs/{run_id}/metrics")
+    _assert_error_response(metrics, 404, "metrics_missing")
 
 
 @pytest.mark.parametrize(
@@ -255,6 +300,7 @@ def test_metrics_are_meaningful(phase6_runs):
     metrics_path = phase6_runs["runs_root"] / run_id / "metrics.json"
     metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
     assert metrics["num_records"] == 1
+    assert metrics["num_trades"] == 1
     assert metrics["total_return"] > 0
 
 

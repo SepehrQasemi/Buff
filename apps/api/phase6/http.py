@@ -6,7 +6,10 @@ from fastapi.responses import JSONResponse
 
 
 def error_payload(code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
-    return {"error": {"code": code, "message": message, "details": details or {}}}
+    normalized = details or {}
+    payload = {"code": code, "message": message, "details": normalized}
+    payload["error"] = {"code": code, "message": message, "details": normalized}
+    return payload
 
 
 def error_response(

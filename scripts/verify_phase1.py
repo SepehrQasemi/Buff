@@ -39,6 +39,14 @@ def _ensure_env(base_env: dict[str, str] | None = None) -> dict[str, str]:
     return env
 
 
+def _with_pythonpath(env: dict[str, str], repo_root: Path) -> dict[str, str]:
+    updated = dict(env)
+    src_path = repo_root / "src"
+    existing = updated.get("PYTHONPATH")
+    updated["PYTHONPATH"] = str(src_path) + (os.pathsep + existing if existing else "")
+    return updated
+
+
 def _log_command(label: str, cmd: list[str]) -> None:
     print(f"Command ({label}): {cmd}")
 
@@ -201,6 +209,11 @@ def main() -> int:
         action="store_true",
         help="Leave services running after verification.",
     )
+    parser.add_argument(
+        "--real-smoke",
+        action="store_true",
+        help="Run real-user smoke with DEMO_MODE=0 and file upload.",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -221,8 +234,9 @@ def main() -> int:
                         api_port = find_free_port(8001, 8010)
                         print(f"API port {DEFAULT_API_PORT} busy, using {api_port}")
 
-                    api_env = os.environ.copy()
+                    api_env = _with_pythonpath(os.environ.copy(), repo_root)
                     api_env["ARTIFACTS_ROOT"] = str(repo_root / "tests" / "fixtures" / "artifacts")
+                    api_env["DEMO_MODE"] = "1"
                     api_proc = start_process(
                         [
                             sys.executable,
@@ -266,7 +280,15 @@ def main() -> int:
         env = os.environ.copy()
         env["API_BASE"] = f"http://127.0.0.1:{api_port}/api/v1"
         env["UI_BASE"] = f"http://127.0.0.1:{ui_port}"
-        for label, cmd in STEPS:
+        steps = list(STEPS)
+        if args.real_smoke:
+            steps.append(("real smoke", [sys.executable, "scripts/real_smoke.py"]))
+        for label, cmd in steps:
+            if label == "real smoke" and args.with_services:
+                stop_process(ui_proc, "UI")
+                stop_process(api_proc, "API")
+                ui_proc = None
+                api_proc = None
             code = run_step(label, cmd, repo_root, env=env)
             if code != 0:
                 return code

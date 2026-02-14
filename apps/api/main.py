@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import uuid
+from email.parser import BytesParser
+from email.policy import default as email_default
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
@@ -196,8 +200,6 @@ def _resolve_registry_run_dir(
     entry = _find_registry_entry(registry_result, run_id)
     if entry is None:
         return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
-    if entry.get("status") == "CORRUPTED":
-        return error_response(409, "RUN_CORRUPTED", "Run artifacts missing", {"run_id": run_id})
     run_dir = (runs_root / run_id).resolve()
     if not is_within_root(run_dir, runs_root) or not run_dir.exists():
         return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
@@ -266,6 +268,77 @@ def list_runs() -> object:
     return _build_registry_run_list(runs_root, runs if isinstance(runs, list) else [])
 
 
+def _parse_multipart_form(body: bytes, content_type: str) -> dict[str, dict[str, object]]:
+    header = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8")
+    message = BytesParser(policy=email_default).parsebytes(header + body)
+    if not message.is_multipart():
+        raise ValueError("Multipart payload expected")
+    parts: dict[str, dict[str, object]] = {}
+    for part in message.iter_parts():
+        if part.get_content_disposition() != "form-data":
+            continue
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        parts[name] = {
+            "filename": part.get_filename(),
+            "content_type": part.get_content_type(),
+            "data": part.get_payload(decode=True) or b"",
+        }
+    return parts
+
+
+def _store_uploaded_csv(upload_bytes: bytes, runs_root: Path) -> str:
+    repo_root = Path.cwd().resolve()
+    if not is_within_root(runs_root, repo_root):
+        raise RunBuilderError(
+            "RUN_CONFIG_INVALID",
+            "RUNS_ROOT must be within repo for uploads",
+            400,
+            {"runs_root": str(runs_root)},
+        )
+
+    uploads_dir = runs_root / "inputs"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    if not upload_bytes:
+        raise RunBuilderError("RUN_CONFIG_INVALID", "Uploaded file is empty", 400)
+
+    tmp_path = uploads_dir / f".tmp_upload_{uuid.uuid4().hex}.csv"
+    digest = hashlib.sha256(upload_bytes).hexdigest()
+    final_path = uploads_dir / f"{digest}.csv"
+    if final_path.exists():
+        return final_path.relative_to(repo_root).as_posix()
+
+    try:
+        tmp_path.write_bytes(upload_bytes)
+    except OSError as exc:
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        raise RunBuilderError(
+            "ARTIFACTS_WRITE_FAILED",
+            f"Failed to store upload: {exc}",
+            500,
+        ) from exc
+    if not is_within_root(final_path, repo_root):
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+        raise RunBuilderError(
+            "RUN_CONFIG_INVALID",
+            "Upload path resolved outside repo",
+            400,
+        )
+
+    os.replace(tmp_path, final_path)
+
+    return final_path.relative_to(repo_root).as_posix()
+
+
 @router.post("/runs")
 async def create_run_endpoint(request: Request) -> JSONResponse:
     if _kill_switch_enabled():
@@ -275,10 +348,44 @@ async def create_run_endpoint(request: Request) -> JSONResponse:
             "Run creation disabled",
             {"env": KILL_SWITCH_ENV},
         )
-    try:
-        payload = await request.json()
-    except Exception:
-        return error_response(400, "RUN_CONFIG_INVALID", "Invalid JSON payload")
+    content_type = request.headers.get("content-type", "")
+    if content_type.lower().startswith("multipart/form-data"):
+        try:
+            body = await request.body()
+            parts = _parse_multipart_form(body, content_type)
+        except Exception:
+            return error_response(400, "RUN_CONFIG_INVALID", "Invalid multipart payload")
+        file_part = parts.get("file")
+        request_part = parts.get("request")
+        if not file_part or not isinstance(file_part.get("data"), (bytes, bytearray)):
+            return error_response(400, "RUN_CONFIG_INVALID", "file is required")
+        if not request_part or not isinstance(request_part.get("data"), (bytes, bytearray)):
+            return error_response(400, "RUN_CONFIG_INVALID", "request is required")
+        try:
+            payload = json.loads(request_part["data"].decode("utf-8"))
+        except Exception:
+            return error_response(400, "RUN_CONFIG_INVALID", "Invalid request JSON")
+        readiness = _runs_root_readiness()
+        if isinstance(readiness, JSONResponse):
+            return readiness
+        runs_root, _ = readiness
+        try:
+            upload_path = _store_uploaded_csv(bytes(file_part["data"]), runs_root)
+        except RunBuilderError as exc:
+            return error_response(exc.status_code, exc.code, exc.message, exc.details)
+        if not isinstance(payload, dict):
+            payload = {}
+        data_source = payload.get("data_source")
+        if not isinstance(data_source, dict):
+            data_source = {}
+            payload["data_source"] = data_source
+        data_source.setdefault("type", "csv")
+        data_source["path"] = upload_path
+    else:
+        try:
+            payload = await request.json()
+        except Exception:
+            return error_response(400, "RUN_CONFIG_INVALID", "Invalid JSON payload")
 
     try:
         status_code, response = create_run(payload)
