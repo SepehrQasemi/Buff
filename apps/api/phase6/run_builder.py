@@ -544,6 +544,7 @@ def _build_config_payload(run_id: str, inputs: dict[str, Any]) -> dict[str, Any]
 
 def _build_metrics_payload(result, engine_config: EngineConfig) -> dict[str, Any]:
     payload = dict(result.metrics)
+    payload["num_trades"] = len(result.trades)
     payload["symbol"] = engine_config.symbol
     payload["timeframe"] = engine_config.timeframe
     payload["strategy_id"] = engine_config.strategy_id

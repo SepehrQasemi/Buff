@@ -77,6 +77,7 @@ export default function RunsNewPage() {
   const [submitState, setSubmitState] = useState("idle");
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
+  const [uploadFile, setUploadFile] = useState(null);
   const pluginsUrl = buildApiUrl("/plugins/active");
   const selectedStrategy = useMemo(
     () => strategies.find((strategy) => strategy.id === form.strategy.id) || null,
@@ -126,11 +127,24 @@ export default function RunsNewPage() {
     }));
   }, [form.strategy.id, strategyParams]);
 
+  const handleFileChange = (event) => {
+    const file = event.target?.files?.[0] || null;
+    setUploadFile(file);
+    if (file) {
+      setForm((current) => ({
+        ...current,
+        data_source: { ...current.data_source, path: "" },
+      }));
+    }
+  };
+
   const canSubmit = useMemo(() => {
     if (submitState === "submitting") {
       return false;
     }
-    if (!form.data_source.path.trim()) {
+    const hasFile = Boolean(uploadFile);
+    const hasPath = Boolean(form.data_source.path.trim());
+    if (!hasFile && !hasPath) {
       return false;
     }
     if (!form.data_source.symbol.trim()) {
@@ -146,7 +160,7 @@ export default function RunsNewPage() {
       return false;
     }
     return true;
-  }, [form, submitState]);
+  }, [form, submitState, uploadFile]);
 
   const handleChange = (keyPath) => (event) => {
     const value = event.target.value;
@@ -246,7 +260,7 @@ export default function RunsNewPage() {
 
     setSubmitState("submitting");
     setInfo("Submitting run request...");
-    const result = await createRun(payload);
+    const result = await createRun(payload, uploadFile);
     if (!result.ok) {
       setSubmitState("idle");
       setInfo(null);
@@ -281,9 +295,8 @@ export default function RunsNewPage() {
       </header>
 
       <div className="banner info">
-        Runs are stored under RUNS_ROOT on the API host. Set RUNS_ROOT and restart the
-        API to change storage. This form currently accepts repo-relative CSV paths
-        (temporary until file upload is enabled).
+        Runs are stored under RUNS_ROOT on the API host. Upload a CSV file to create a
+        run. A legacy repo-relative path input remains available as a temporary fallback.
       </div>
 
       <div className="card fade-up" style={{ marginBottom: "16px" }}>
@@ -301,13 +314,21 @@ export default function RunsNewPage() {
 
         <div className="grid two" style={{ marginTop: "16px" }}>
           <label>
-            CSV Path (repo-relative)
+            CSV File (upload)
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFileChange}
+            />
+          </label>
+
+          <label>
+            CSV Path (legacy, repo-relative)
             <input
               type="text"
               placeholder="tests/fixtures/phase6/sample.csv"
               value={form.data_source.path}
               onChange={handleChange("data_source.path")}
-              required
             />
           </label>
 
@@ -494,7 +515,10 @@ export default function RunsNewPage() {
           <button
             type="button"
             className="secondary"
-            onClick={() => setForm(DEFAULT_PAYLOAD)}
+            onClick={() => {
+              setForm(DEFAULT_PAYLOAD);
+              setUploadFile(null);
+            }}
           >
             Reset
           </button>

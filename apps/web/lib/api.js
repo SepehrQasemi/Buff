@@ -238,6 +238,34 @@ const post = async (path, payload) => {
   }
 };
 
+const postForm = async (path, formData) => {
+  const url = buildApiUrl(path);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      body: formData,
+    });
+    const contentType = response.headers.get("content-type") || "";
+    let data;
+    if (contentType.includes("application/json")) {
+      data = await response.json();
+    } else {
+      data = await response.text();
+    }
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error: parseErrorMessage(data, `Request failed (${response.status})`),
+        data,
+      };
+    }
+    return { ok: true, status: response.status, data };
+  } catch (error) {
+    return { ok: false, error: error?.message || "Network error" };
+  }
+};
+
 export const getRuns = (options) => request("/runs", undefined, options);
 
 export const getRunSummary = (id, options) =>
@@ -271,4 +299,12 @@ export const getChatModes = () => request("/chat/modes");
 
 export const postChat = (payload) => post("/chat", payload);
 
-export const createRun = (payload) => post("/runs", payload);
+export const createRun = (payload, file) => {
+  if (file) {
+    const formData = new FormData();
+    formData.append("request", JSON.stringify(payload || {}));
+    formData.append("file", file, file.name || "upload.csv");
+    return postForm("/runs", formData);
+  }
+  return post("/runs", payload);
+};

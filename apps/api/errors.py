@@ -8,11 +8,18 @@ from fastapi import HTTPException
 def build_error_payload(
     code: str, message: str, details: dict[str, Any] | None = None
 ) -> dict[str, Any]:
-    return {
+    normalized = details or {}
+    payload = {
         "code": code,
         "message": message,
-        "details": details or {},
+        "details": normalized,
     }
+    payload["error"] = {
+        "code": code,
+        "message": message,
+        "details": normalized,
+    }
+    return payload
 
 
 def raise_api_error(
