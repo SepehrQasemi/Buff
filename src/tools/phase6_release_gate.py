@@ -7,9 +7,22 @@ import shutil
 import sys
 from pathlib import Path
 
-from apps.api.phase6.run_builder import RunBuilderError, create_run
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SRC_ROOT = REPO_ROOT / "src"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
+
+
+def _load_run_builder():
+    from apps.api.phase6.run_builder import RunBuilderError, create_run
+
+    return RunBuilderError, create_run
+
+
+RunBuilderError, create_run = _load_run_builder()
+
 GOLDENS_ROOT = REPO_ROOT / "tests" / "goldens" / "phase6"
 
 

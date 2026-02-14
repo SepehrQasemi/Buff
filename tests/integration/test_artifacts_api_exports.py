@@ -1,9 +1,16 @@
 import json
 
 import pandas as pd
+import pytest
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+
+
+@pytest.fixture(autouse=True)
+def _enable_demo_mode(monkeypatch):
+    monkeypatch.setenv("DEMO_MODE", "1")
+    monkeypatch.delenv("RUNS_ROOT", raising=False)
 
 
 def _write_jsonl(path, rows):

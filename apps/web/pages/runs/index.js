@@ -49,6 +49,11 @@ export default function RunsPage() {
     );
   }, [runs]);
 
+  const demoDetected = useMemo(
+    () => runs.some((run) => run && run.mode === "demo"),
+    [runs]
+  );
+
   const toggleSelection = (runId) => {
     setSelectedRuns((current) => {
       if (current.includes(runId)) {
@@ -75,6 +80,17 @@ export default function RunsPage() {
     router.push(compareHref);
   };
 
+  const normalizeStatus = (value) => {
+    const label = String(value || "").toUpperCase();
+    if (!label) {
+      return { label: "UNKNOWN", kind: "invalid" };
+    }
+    if (label === "CORRUPTED" || label === "INVALID") {
+      return { label, kind: "invalid" };
+    }
+    return { label, kind: "ok" };
+  };
+
   return (
     <main>
       <header>
@@ -92,12 +108,19 @@ export default function RunsPage() {
       </header>
 
       {error && <div className="banner">{error}</div>}
+      {demoDetected && (
+        <div className="banner info">
+          Demo mode active. These runs are read from ARTIFACTS_ROOT and are labeled
+          DEMO.
+        </div>
+      )}
 
       {loading ? (
         <div className="card fade-up">Loading runs...</div>
       ) : runs.length === 0 ? (
         <div className="card fade-up">
-          No runs found. Ensure ARTIFACTS_ROOT points to the demo artifacts folder.
+          No runs found. Create a run or set RUNS_ROOT (or enable DEMO_MODE with
+          ARTIFACTS_ROOT).
         </div>
       ) : (
         <div className="grid two">
@@ -113,9 +136,12 @@ export default function RunsPage() {
                 <div className="section-title">
                   <h3>{run.id}</h3>
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    <span className={`badge ${run.status === "OK" ? "ok" : "invalid"}`}>
-                      {run.status}
+                    <span
+                      className={`badge ${normalizeStatus(run.status).kind}`}
+                    >
+                      {normalizeStatus(run.status).label}
                     </span>
+                    {run.mode === "demo" && <span className="badge info">DEMO</span>}
                     <label
                       className="muted"
                       style={{ display: "flex", gap: "6px", alignItems: "center" }}

@@ -12,7 +12,7 @@ This file records locked product decisions and their implementation status.
 ## D-002 — User runs have a single truth source
 **Decision:** User-created runs are stored under the runs root directory and listed from its atomic registry.  
 **Rationale:** Avoid multiple silent truth sources.  
-**Current status:** Demo/fixtures may exist for tests/demos, but must not be the default for user runs.
+**Current status:** RUNS_ROOT is the only truth source for runs and artifacts when configured. Demo/fixtures are only accessible when `DEMO_MODE=1`; no silent fallback to `ARTIFACTS_ROOT` is allowed.
 
 ## D-003 — Core boundaries are non-negotiable
 **Decision:** Read-only UI/assistant, artifact truth only, determinism, fail-closed safety.  

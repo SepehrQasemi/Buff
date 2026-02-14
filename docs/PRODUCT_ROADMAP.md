@@ -52,7 +52,7 @@ See `docs/DECISIONS.md` (D-001).
 
 ### Runs root requirement
 User runs must be stored under a configured runs root directory (RUNS_ROOT).  
-If missing or misconfigured, the system returns a stable error explaining how to fix it. The product must not silently fall back to demo/fixtures as a substitute for user runs.
+If missing or misconfigured, the system returns a stable error explaining how to fix it. The product must not silently fall back to demo/fixtures as a substitute for user runs. Demo/fixtures are only allowed when `DEMO_MODE=1` and must be clearly labeled.
 
 ### Demo/fixtures policy
 Demo/fixtures may exist for tests and local demos, but must be explicitly labeled and must not be the default “truth source” for user runs.

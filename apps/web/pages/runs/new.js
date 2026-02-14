@@ -280,6 +280,12 @@ export default function RunsNewPage() {
         </div>
       </header>
 
+      <div className="banner info">
+        Runs are stored under RUNS_ROOT on the API host. Set RUNS_ROOT and restart the
+        API to change storage. This form currently accepts repo-relative CSV paths
+        (temporary until file upload is enabled).
+      </div>
+
       <div className="card fade-up" style={{ marginBottom: "16px" }}>
         Active plugins endpoint: {pluginsUrl}
       </div>

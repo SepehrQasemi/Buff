@@ -12,6 +12,12 @@ from apps.api.main import app
 from apps.api.timeutils import format_ts, parse_ts
 
 
+@pytest.fixture(autouse=True)
+def _enable_demo_mode(monkeypatch):
+    monkeypatch.setenv("DEMO_MODE", "1")
+    monkeypatch.delenv("RUNS_ROOT", raising=False)
+
+
 def _write_synthetic_jsonl(path, count, start_ts):
     with path.open("w", encoding="utf-8") as handle:
         for idx in range(count):
