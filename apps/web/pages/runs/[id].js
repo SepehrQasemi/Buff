@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import CandlestickChart from "../../components/workspace/CandlestickChart";
+import ErrorNotice from "../../components/ErrorNotice";
 import { getChatModes, postChat } from "../../lib/api";
 import { MISSING_RUN_ID_MESSAGE } from "../../lib/errors";
+import { buildClientError } from "../../lib/errorMapping";
 import useWorkspace from "../../lib/useWorkspace";
 
 const formatNumber = (value, digits = 2) => {
@@ -111,6 +113,14 @@ export default function ChartWorkspace() {
   const { id } = router.query;
   const runId = Array.isArray(id) ? id[0] : id;
   const isReady = router.isReady;
+  const missingRunError =
+    isReady && !runId
+      ? buildClientError({
+          title: "Missing run id",
+          summary: MISSING_RUN_ID_MESSAGE,
+          actions: ["Open /runs/<id> with a valid run id."],
+        })
+      : null;
 
   const {
     run,
@@ -540,18 +550,18 @@ export default function ChartWorkspace() {
         </div>
       </header>
 
-      {isReady && !runId && <div className="banner">{MISSING_RUN_ID_MESSAGE}</div>}
+      {missingRunError && <ErrorNotice error={missingRunError} />}
       {demoMode && (
         <div className="banner info">
           Demo mode active. This run is loaded from ARTIFACTS_ROOT and is read-only.
         </div>
       )}
-      {networkError && <div className="banner">{networkError}</div>}
-      {pluginsError && <div className="banner">{pluginsError}</div>}
-      {runError && <div className="banner">{runError}</div>}
-      {summaryError && <div className="banner">{summaryError}</div>}
-      {ohlcvError && <div className="banner">{ohlcvError}</div>}
-      {markersError && <div className="banner">{markersError}</div>}
+      {networkError && <ErrorNotice error={networkError} onRetry={reload} />}
+      {pluginsError && <ErrorNotice error={pluginsError} onRetry={reload} />}
+      {runError && <ErrorNotice error={runError} onRetry={reload} />}
+      {summaryError && <ErrorNotice error={summaryError} onRetry={reload} />}
+      {ohlcvError && <ErrorNotice error={ohlcvError} onRetry={reload} compact />}
+      {markersError && <ErrorNotice error={markersError} onRetry={reload} compact />}
 
       <section className="workspace-meta">
         <div className="meta-card">
@@ -901,7 +911,7 @@ export default function ChartWorkspace() {
                 {tradesError ? (
                   <div className="panel-card">
                     <h3>Trades</h3>
-                    <p className="inline-warning">{tradesError}</p>
+                    <ErrorNotice error={tradesError} onRetry={reload} compact />
                   </div>
                 ) : (
                   <>
@@ -1049,7 +1059,7 @@ export default function ChartWorkspace() {
               <div className="panel-card">
                 <h3>Metrics Summary</h3>
                 {metricsError ? (
-                  <p className="inline-warning">{metricsError}</p>
+                  <ErrorNotice error={metricsError} onRetry={reload} compact />
                 ) : metrics ? (
                   <>
                     <div className="stat-grid">
@@ -1118,7 +1128,7 @@ export default function ChartWorkspace() {
               <div className="panel-card">
                 <h3>Timeline</h3>
                 {timelineError ? (
-                  <p className="inline-warning">{timelineError}</p>
+                  <ErrorNotice error={timelineError} onRetry={reload} compact />
                 ) : (
                   <div className="timeline-list">
                     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>

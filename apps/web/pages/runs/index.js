@@ -2,7 +2,8 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import { getRuns } from "../../lib/api";
-import { formatApiError } from "../../lib/errors";
+import ErrorNotice from "../../components/ErrorNotice";
+import { mapApiErrorDetails } from "../../lib/errorMapping";
 
 export default function RunsPage() {
   const router = useRouter();
@@ -10,6 +11,7 @@ export default function RunsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedRuns, setSelectedRuns] = useState([]);
+  const [reloadToken, setReloadToken] = useState(0);
 
   const compareEnabled = selectedRuns.length === 2;
   const compareHref = useMemo(() => {
@@ -30,10 +32,11 @@ export default function RunsPage() {
         return;
       }
       if (!result.ok) {
-        setError(formatApiError(result, "Failed to load runs"));
+        setError(mapApiErrorDetails(result, "Failed to load runs"));
         setLoading(false);
         return;
       }
+      setError(null);
       setRuns(Array.isArray(result.data) ? result.data : []);
       setLoading(false);
     }
@@ -41,7 +44,7 @@ export default function RunsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [reloadToken]);
 
   useEffect(() => {
     setSelectedRuns((current) =>
@@ -107,7 +110,7 @@ export default function RunsPage() {
         </div>
       </header>
 
-      {error && <div className="banner">{error}</div>}
+      {error && <ErrorNotice error={error} onRetry={retryLoad} />}
       {demoDetected && (
         <div className="banner info">
           Demo mode active. These runs are read from ARTIFACTS_ROOT and are labeled
@@ -193,3 +196,7 @@ export default function RunsPage() {
     </main>
   );
 }
+  const retryLoad = () => {
+    setLoading(true);
+    setReloadToken((value) => value + 1);
+  };

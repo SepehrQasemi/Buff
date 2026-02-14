@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ErrorNotice from "../ErrorNotice";
 
 export default function RunHeader({
   runId,
@@ -32,12 +33,7 @@ export default function RunHeader({
         </div>
       </header>
 
-      {networkError && (
-        <div className="banner" style={{ display: "flex", justifyContent: "space-between" }}>
-          <span>{networkError}</span>
-          <button onClick={onRetry}>Retry</button>
-        </div>
-      )}
+      {networkError && <ErrorNotice error={networkError} onRetry={onRetry} />}
 
       {invalidRun && (
         <div className="banner">
@@ -46,7 +42,7 @@ export default function RunHeader({
       )}
 
       {!invalidRun && missingArtifactsMessage && (
-        <div className="banner">{missingArtifactsMessage}</div>
+        <ErrorNotice error={missingArtifactsMessage} onRetry={onRetry} compact />
       )}
     </>
   );

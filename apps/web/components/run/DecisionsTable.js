@@ -1,3 +1,5 @@
+import ErrorNotice from "../ErrorNotice";
+
 export default function DecisionsTable({
   items,
   total,
@@ -11,7 +13,7 @@ export default function DecisionsTable({
 
   return (
     <>
-      {error && <div className="banner">{error}</div>}
+      {error && <ErrorNotice error={error} compact />}
       {loading ? (
         <div>Loading decisions...</div>
       ) : (

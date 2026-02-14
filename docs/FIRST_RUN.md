@@ -61,6 +61,14 @@ Inspect:
 - Trades tab.
 - Timeline tab.
 
+## CSV Requirements
+
+Your CSV must include:
+- `timestamp` (ISO-8601 or ms epoch)
+- `open`, `high`, `low`, `close`, `volume`
+
+Data must be 1-minute bars with strictly increasing timestamps and no gaps.
+
 ## Optional: Real-Smoke Check (3 minutes)
 
 Stop the dev servers, then run:
