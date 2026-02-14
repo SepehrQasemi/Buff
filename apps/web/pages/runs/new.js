@@ -2,7 +2,8 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { buildApiUrl, createRun, getActivePlugins } from "../../lib/api";
-import { formatApiError } from "../../lib/errors";
+import ErrorNotice from "../../components/ErrorNotice";
+import { mapApiErrorDetails } from "../../lib/errorMapping";
 
 const DEFAULT_PAYLOAD = {
   schema_version: "1.0.0",
@@ -75,6 +76,7 @@ export default function RunsNewPage() {
   const [strategies, setStrategies] = useState([]);
   const [loadingStrategies, setLoadingStrategies] = useState(true);
   const [submitState, setSubmitState] = useState("idle");
+  const [reloadToken, setReloadToken] = useState(0);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
   const [uploadFile, setUploadFile] = useState(null);
@@ -98,11 +100,12 @@ export default function RunsNewPage() {
         return;
       }
       if (!result.ok) {
-        setError(formatApiError(result, "Failed to load active strategies"));
+        setError(mapApiErrorDetails(result, "Failed to load active strategies"));
         setStrategies([]);
         setLoadingStrategies(false);
         return;
       }
+      setError(null);
       const data = result.data || {};
       const items = Array.isArray(data.strategies) ? data.strategies : [];
       setStrategies(items);
@@ -112,7 +115,7 @@ export default function RunsNewPage() {
     return () => {
       active = false;
     };
-  }, [pluginsUrl]);
+  }, [pluginsUrl, reloadToken]);
 
   useEffect(() => {
     const currentId = form.strategy.id;
@@ -264,7 +267,7 @@ export default function RunsNewPage() {
     if (!result.ok) {
       setSubmitState("idle");
       setInfo(null);
-      setError(formatApiError(result, "Run creation failed"));
+      setError(mapApiErrorDetails(result, "Run creation failed"));
       return;
     }
 
@@ -303,7 +306,7 @@ export default function RunsNewPage() {
         Active plugins endpoint: {pluginsUrl}
       </div>
 
-      {error && <div className="banner">{error}</div>}
+      {error && <ErrorNotice error={error} onRetry={() => setReloadToken((v) => v + 1)} />}
       {info && <div className="card fade-up">{info}</div>}
 
       <form className="card fade-up" onSubmit={handleSubmit}>

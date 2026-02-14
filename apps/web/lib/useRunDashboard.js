@@ -1,13 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/router";
 import { getDecisions, getErrors, getRuns, getRunSummary, getTrades } from "./api";
-import {
-  API_UNREACHABLE_MESSAGE,
-  MISSING_ARTIFACTS_MESSAGE,
-  RUN_NOT_INDEXED_MESSAGE,
-  formatApiError,
-  mapApiError,
-} from "./errors";
+import { MISSING_ARTIFACTS_MESSAGE, RUN_NOT_INDEXED_MESSAGE } from "./errors";
+import { buildClientError, mapApiErrorDetails } from "./errorMapping";
 import { buildQueryString, parseViewState, serializeViewState } from "./urlState";
 
 const splitList = (value) =>
@@ -157,17 +152,23 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setRunError(formatApiError(result, "Failed to load runs"));
-        if (!result.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
-        }
+        setRunError(mapApiErrorDetails(result, "Failed to load runs"));
         return;
       }
       setNetworkError(null);
       const data = Array.isArray(result.data) ? result.data : [];
       const match = data.find((item) => item.id === runId) || null;
       if (!match) {
-        setRunError(RUN_NOT_INDEXED_MESSAGE);
+        setRunError(
+          buildClientError({
+            title: "Run not found in registry",
+            summary: RUN_NOT_INDEXED_MESSAGE,
+            actions: [
+              "Confirm RUNS_ROOT points to the folder with this run.",
+              "Create a new run if the id is missing.",
+            ],
+          })
+        );
       }
       setRun(match);
     }
@@ -190,15 +191,18 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setSummaryError(formatApiError(result, "Failed to load summary"));
-        const mapped = mapApiError(result);
+        const mapped = mapApiErrorDetails(result, "Failed to load summary");
+        setSummaryError(mapped);
         if (mapped) {
           setMissingArtifactsMessage(mapped);
         } else if (result.status === 404) {
-          setMissingArtifactsMessage(MISSING_ARTIFACTS_MESSAGE);
-        }
-        if (!result.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
+          setMissingArtifactsMessage(
+            buildClientError({
+              title: "Artifacts missing",
+              summary: MISSING_ARTIFACTS_MESSAGE,
+              actions: ["Recreate the run to regenerate artifacts."],
+            })
+          );
         }
         setSummaryLoading(false);
         return;
@@ -228,10 +232,7 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setDecisionsError(formatApiError(result, "Failed to load decisions"));
-        if (!result.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
-        }
+        setDecisionsError(mapApiErrorDetails(result, "Failed to load decisions"));
         setDecisionsLoading(false);
         return;
       }
@@ -269,10 +270,7 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setTradesError(formatApiError(result, "Failed to load trades"));
-        if (!result.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
-        }
+        setTradesError(mapApiErrorDetails(result, "Failed to load trades"));
         setTradesLoading(false);
         return;
       }
@@ -297,10 +295,7 @@ export default function useRunDashboard(runId) {
         return;
       }
       if (!result.ok) {
-        setErrorsError(formatApiError(result, "Failed to load errors"));
-        if (!result.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
-        }
+        setErrorsError(mapApiErrorDetails(result, "Failed to load errors"));
         setErrorsLoading(false);
         return;
       }

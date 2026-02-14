@@ -1,3 +1,5 @@
+import ErrorNotice from "../ErrorNotice";
+
 export default function ErrorsPanel({ payload, loading, error, onExport }) {
   const errors = payload?.errors || payload?.results || [];
   const totalErrors = payload?.total_errors ?? payload?.total ?? errors.length;
@@ -23,7 +25,7 @@ export default function ErrorsPanel({ payload, loading, error, onExport }) {
           )}
         </div>
       </div>
-      {error && <div className="banner">{error}</div>}
+      {error && <ErrorNotice error={error} compact />}
       {loading ? (
         <div>Loading errors...</div>
       ) : errors.length === 0 ? (

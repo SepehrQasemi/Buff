@@ -1,4 +1,5 @@
 import LineChart from "../LineChart";
+import ErrorNotice from "../ErrorNotice";
 
 export default function TradesPanel({ trades, filters, onChange, loading, error, onExport }) {
   const rows = trades?.results || [];
@@ -46,7 +47,7 @@ export default function TradesPanel({ trades, filters, onChange, loading, error,
           )}
         </div>
       </div>
-      {error && <div className="banner">{error}</div>}
+      {error && <ErrorNotice error={error} compact />}
       <div className="toolbar">
         <label>
           Start

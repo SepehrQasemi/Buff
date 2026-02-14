@@ -1,3 +1,5 @@
+import ErrorNotice from "../ErrorNotice";
+
 const normalizeSamples = (summary) => {
   const detail = Array.isArray(summary?.malformed_samples_detail)
     ? summary.malformed_samples_detail
@@ -31,7 +33,7 @@ const truncate = (value, limit = 240) => {
 
 export default function SummaryCards({ summary, loading, error }) {
   if (error) {
-    return <div className="banner">{error}</div>;
+    return <ErrorNotice error={error} compact />;
   }
 
   if (loading) {

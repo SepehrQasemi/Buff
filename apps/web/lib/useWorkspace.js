@@ -11,7 +11,8 @@ import {
   getTrades,
   invalidateCache,
 } from "./api";
-import { API_UNREACHABLE_MESSAGE, RUN_NOT_INDEXED_MESSAGE, formatApiError } from "./errors";
+import { RUN_NOT_INDEXED_MESSAGE } from "./errors";
+import { buildClientError, mapApiErrorDetails } from "./errorMapping";
 
 const DEFAULT_TIMEFRAMES = [
   "1m",
@@ -129,17 +130,23 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setRunError(formatApiError(result, "Failed to load runs"));
-        if (!result.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
-        }
+        setRunError(mapApiErrorDetails(result, "Failed to load runs"));
         return;
       }
       setNetworkError(null);
       const list = Array.isArray(result.data) ? result.data : [];
       const match = list.find((item) => item.id === runId) || null;
       if (!match) {
-        setRunError(RUN_NOT_INDEXED_MESSAGE);
+        setRunError(
+          buildClientError({
+            title: "Run not found in registry",
+            summary: RUN_NOT_INDEXED_MESSAGE,
+            actions: [
+              "Confirm RUNS_ROOT points to the folder with this run.",
+              "Create a new run if the id is missing.",
+            ],
+          })
+        );
       }
       setRun(match);
     }
@@ -186,10 +193,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setSummaryError(formatApiError(result, "Failed to load run summary"));
-        if (!result.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
-        }
+        setSummaryError(mapApiErrorDetails(result, "Failed to load run summary"));
         setSummaryLoading(false);
         return;
       }
@@ -232,7 +236,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setOhlcvError(formatApiError(result, "Failed to load OHLCV"));
+        setOhlcvError(mapApiErrorDetails(result, "Failed to load OHLCV"));
         setOhlcvLoading(false);
         return;
       }
@@ -273,7 +277,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setMarkersError(formatApiError(result, "Failed to load trade markers"));
+        setMarkersError(mapApiErrorDetails(result, "Failed to load trade markers"));
         return;
       }
       setMarkers(Array.isArray(result.data?.markers) ? result.data.markers : []);
@@ -334,7 +338,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setTradesError(formatApiError(result, "Failed to load trades"));
+        setTradesError(mapApiErrorDetails(result, "Failed to load trades"));
         return;
       }
       setTrades(result.data || { results: [] });
@@ -366,7 +370,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setMetricsError(formatApiError(result, "Failed to load metrics"));
+        setMetricsError(mapApiErrorDetails(result, "Failed to load metrics"));
         return;
       }
       setMetrics(result.data);
@@ -402,7 +406,7 @@ export default function useWorkspace(runId) {
         return;
       }
       if (!result.ok) {
-        setTimelineError(formatApiError(result, "Failed to load timeline"));
+        setTimelineError(mapApiErrorDetails(result, "Failed to load timeline"));
         return;
       }
       const events = Array.isArray(result.data?.events) ? result.data.events : [];
@@ -444,20 +448,14 @@ export default function useWorkspace(runId) {
       });
 
       if (!activeResult.ok) {
-        setPluginsError(formatApiError(activeResult, "Failed to load active plugins"));
-        if (!activeResult.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
-        }
+        setPluginsError(mapApiErrorDetails(activeResult, "Failed to load active plugins"));
       } else {
         setActivePlugins(normalize(activeResult.data));
         setPluginsError(null);
       }
 
       if (!failedResult.ok) {
-        setPluginsError(formatApiError(failedResult, "Failed to load plugin diagnostics"));
-        if (!failedResult.status) {
-          setNetworkError(API_UNREACHABLE_MESSAGE);
-        }
+        setPluginsError(mapApiErrorDetails(failedResult, "Failed to load plugin diagnostics"));
       } else {
         setFailedPlugins(normalize(failedResult.data));
       }
