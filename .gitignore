@@ -66,6 +66,8 @@ Thumbs.db
 
 # Local runtime artifacts
 /runs/
+/.runs/
+/.runs_*/
 /.VSCodeCounter/
 src/buff.egg-info/
 
