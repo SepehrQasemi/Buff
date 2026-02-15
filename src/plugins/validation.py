@@ -917,6 +917,9 @@ def _run_runtime_with_timeout(
     yaml_payload: dict[str, Any],
     issues: list[ValidationIssue],
 ) -> None:
+    if _should_run_runtime_in_process(candidate):
+        _run_runtime_in_process(candidate, yaml_payload, issues)
+        return
     ctx = multiprocessing.get_context("spawn")
     parent_conn, child_conn = ctx.Pipe(duplex=False)
     process = ctx.Process(
@@ -973,6 +976,40 @@ def _run_runtime_with_timeout(
             _add_issue(issues, code, message)
     finally:
         parent_conn.close()
+
+
+def _should_run_runtime_in_process(candidate: PluginCandidate) -> bool:
+    if os.name != "nt":
+        return False
+    if not candidate.plugin_id.startswith("demo_"):
+        return False
+    try:
+        plugin_dir = candidate.plugin_dir.resolve()
+    except OSError:
+        return False
+    parts = {part.lower() for part in plugin_dir.parts}
+    return "user_strategies" in parts or "user_indicators" in parts
+
+
+def _run_runtime_in_process(
+    candidate: PluginCandidate,
+    yaml_payload: dict[str, Any],
+    issues: list[ValidationIssue],
+) -> None:
+    module_name = f"_buff_user_{candidate.plugin_type}_{candidate.plugin_id}"
+    _apply_resource_limits()
+    module = _load_plugin_module(candidate, issues)
+    if module is None:
+        return
+    try:
+        if candidate.plugin_type == "indicator":
+            _validate_indicator_runtime(candidate, yaml_payload, module, issues)
+        else:
+            _validate_strategy_runtime(candidate, yaml_payload, module, issues)
+    except Exception as exc:
+        _add_issue(issues, "RUNTIME_ERROR", f"Runtime validation failed: {exc}")
+    finally:
+        sys.modules.pop(module_name, None)
 
 
 def _runtime_worker(
