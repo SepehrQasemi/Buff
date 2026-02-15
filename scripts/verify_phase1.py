@@ -205,34 +205,6 @@ def _select_port(preferred: int, label: str) -> int:
     raise RuntimeError(f"No free {label} port found")
 
 
-def _pick_ephemeral_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
-
-
-def _resolve_preferred_port(raw: str | None, default: int, label: str) -> int:
-    if raw is None or raw == "":
-        return default
-    try:
-        port = int(raw)
-    except ValueError as exc:
-        raise ValueError(f"{label}_PORT must be an integer") from exc
-    if not 1 <= port <= 65535:
-        raise ValueError(f"{label}_PORT must be between 1 and 65535")
-    return port
-
-
-def _select_port(preferred: int, label: str) -> int:
-    if is_port_free(preferred):
-        return preferred
-    for _ in range(50):
-        candidate = _pick_ephemeral_port()
-        if candidate != preferred and is_port_free(candidate):
-            return candidate
-    raise RuntimeError(f"No free {label} port found")
-
-
 def detect_running_ui(ports: list[int]) -> int | None:
     for port in ports:
         url = f"http://127.0.0.1:{port}/runs/phase1_demo"
@@ -269,48 +241,6 @@ def resolve_ui_command(repo_root: Path, port: int) -> list[str]:
         return [node, str(next_js), "dev", "--port", str(port)]
 
     raise RuntimeError("npm or node not found for UI startup")
-
-
-def _next_dev_running() -> bool:
-    try:
-        if os.name == "nt":
-            proc = subprocess.run(
-                ["wmic", "process", "get", "CommandLine"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            output = proc.stdout or ""
-        else:
-            proc = subprocess.run(
-                ["ps", "-ax", "-o", "command="],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            output = proc.stdout or ""
-    except Exception:
-        return False
-
-    for line in output.splitlines():
-        lowered = line.lower()
-        if "next" in lowered and "dev" in lowered:
-            return True
-    return False
-
-
-def _clear_next_dev_lock(repo_root: Path) -> None:
-    lock_path = repo_root / "apps" / "web" / ".next" / "dev" / "lock"
-    if not lock_path.exists():
-        return
-    if _next_dev_running():
-        print("WARN: next dev appears to be running; skipping lock removal.")
-        return
-    try:
-        lock_path.unlink()
-        print("Removed stale Next.js dev lock.")
-    except OSError as exc:
-        print(f"WARN: failed to remove Next.js dev lock: {exc}")
 
 
 def _next_dev_running() -> bool:
