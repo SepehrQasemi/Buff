@@ -3,18 +3,27 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import socket
 import subprocess
 import sys
-import time
 import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
-DEFAULT_API_PORT = 8000
-DEFAULT_UI_PORT = 3000
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from _orchestrator import (  # noqa: E402
+    is_port_free,
+    kill_process_tree,
+    pick_free_port,
+    pick_two_free_ports,
+    start_process,
+    wait_http_200,
+)
+
 WORKSPACE_MARKER = 'data-testid="chart-workspace"'
 
 
@@ -38,89 +47,9 @@ def _with_pythonpath(env: dict[str, str], repo_root: Path) -> dict[str, str]:
     return updated
 
 
-def _process_kwargs() -> dict:
-    if os.name == "nt":
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-    return {"start_new_session": True}
-
-
-def start_process(cmd: list[str], cwd: Path, env: dict[str, str]) -> subprocess.Popen:
-    _log(f"Command (start_process): {cmd}")
-    return subprocess.Popen(cmd, cwd=str(cwd), env=_ensure_env(env), **_process_kwargs())
-
-
-def stop_process(proc: subprocess.Popen | None, label: str) -> None:
-    if proc is None:
-        return
-    _log(f"Stopping {label}...")
-    if os.name == "nt":
-        try:
-            subprocess.run(
-                ["taskkill", "/PID", str(proc.pid), "/T", "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                check=False,
-            )
-            return
-        except Exception:
-            pass
-    try:
-        proc.terminate()
-        proc.wait(timeout=10)
-    except Exception:
-        try:
-            proc.kill()
-        except Exception:
-            pass
-
-
-def _port_in_use(family: int, address: str, port: int) -> bool:
-    try:
-        sock = socket.socket(family, socket.SOCK_STREAM)
-    except OSError:
-        return False
-    with sock:
-        sock.settimeout(0.2)
-        return sock.connect_ex((address, port)) == 0
-
-
-def _can_bind(family: int, address: str, port: int) -> bool:
-    try:
-        sock = socket.socket(family, socket.SOCK_STREAM)
-    except OSError:
-        return True
-    with sock:
-        try:
-            sock.bind((address, port))
-            return True
-        except OSError:
-            return False
-
-
-def is_port_free(port: int) -> bool:
-    if _port_in_use(socket.AF_INET, "127.0.0.1", port):
-        return False
-    if _port_in_use(socket.AF_INET6, "::1", port):
-        return False
-    return _can_bind(socket.AF_INET, "127.0.0.1", port) and _can_bind(socket.AF_INET6, "::1", port)
-
-
-def find_free_port(start: int, end: int) -> int:
-    for port in range(start, end + 1):
-        if is_port_free(port):
-            return port
-    raise RuntimeError(f"No free port available in range {start}-{end}")
-
-
-def _pick_ephemeral_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return sock.getsockname()[1]
-
-
-def _resolve_preferred_port(raw: str | None, default: int, label: str) -> int:
+def _parse_port(raw: str | None, label: str) -> int | None:
     if raw is None or raw == "":
-        return default
+        return None
     try:
         port = int(raw)
     except ValueError as exc:
@@ -130,14 +59,21 @@ def _resolve_preferred_port(raw: str | None, default: int, label: str) -> int:
     return port
 
 
-def _select_port(preferred: int, label: str) -> int:
-    if is_port_free(preferred):
-        return preferred
-    for _ in range(50):
-        candidate = _pick_ephemeral_port()
-        if candidate != preferred and is_port_free(candidate):
-            return candidate
-    raise RuntimeError(f"No free {label} port found")
+def _select_ports(api_override: int | None, ui_override: int | None) -> tuple[int, int]:
+    if api_override is not None and not is_port_free(api_override):
+        raise RuntimeError(f"API port {api_override} is already in use.")
+    if ui_override is not None and not is_port_free(ui_override):
+        raise RuntimeError(f"UI port {ui_override} is already in use.")
+
+    if api_override is None and ui_override is None:
+        return pick_two_free_ports()
+    if api_override is None:
+        return pick_free_port({ui_override}), ui_override
+    if ui_override is None:
+        return api_override, pick_free_port({api_override})
+    if api_override == ui_override:
+        raise RuntimeError("API and UI ports must be distinct.")
+    return api_override, ui_override
 
 
 def _port_from_url(raw: str) -> int | None:
@@ -148,21 +84,6 @@ def _port_from_url(raw: str) -> int | None:
     if parsed.port:
         return parsed.port
     return None
-
-
-def wait_for_http(url: str, *, expect_text: str | None, timeout: float) -> None:
-    start = time.monotonic()
-    while True:
-        try:
-            with urllib.request.urlopen(url, timeout=5) as response:
-                body = response.read().decode("utf-8", errors="ignore")
-                if expect_text and expect_text not in body:
-                    raise ValueError("expected text missing")
-                return
-        except (urllib.error.URLError, ValueError, TimeoutError):
-            if time.monotonic() - start > timeout:
-                raise TimeoutError(f"Timed out waiting for {url}")
-            time.sleep(0.5)
 
 
 def request_json(url: str, *, data: bytes | None = None, headers: dict[str, str] | None = None):
@@ -241,23 +162,24 @@ def main() -> int:
     try:
         api_base_env = os.environ.get("API_BASE_URL") or os.environ.get("API_BASE")
         ui_base_env = os.environ.get("UI_BASE_URL") or os.environ.get("UI_BASE")
-        api_port_pref = _resolve_preferred_port(os.environ.get("API_PORT"), DEFAULT_API_PORT, "API")
-        ui_port_pref = _resolve_preferred_port(os.environ.get("UI_PORT"), DEFAULT_UI_PORT, "UI")
+        api_override = _parse_port(os.environ.get("API_PORT"), "API")
+        ui_override = _parse_port(os.environ.get("UI_PORT"), "UI")
+
         if api_base_env:
             parsed = _port_from_url(api_base_env)
             if parsed:
-                api_port_pref = parsed
+                api_override = parsed
         if ui_base_env:
             parsed = _port_from_url(ui_base_env)
             if parsed:
-                ui_port_pref = parsed
+                ui_override = parsed
 
-        api_port = _select_port(api_port_pref, "API")
-        ui_port = _select_port(ui_port_pref, "UI")
+        api_port, ui_port = _select_ports(api_override, ui_override)
 
         api_env = _with_pythonpath(os.environ.copy(), repo_root)
         api_env["RUNS_ROOT"] = str(runs_root)
         api_env["DEMO_MODE"] = "0"
+        api_env = _ensure_env(api_env)
         api_proc = start_process(
             [
                 sys.executable,
@@ -271,20 +193,21 @@ def main() -> int:
             ],
             repo_root,
             api_env,
+            "start_process",
         )
         api_base = f"http://127.0.0.1:{api_port}/api/v1"
-        if api_base_env and api_port == api_port_pref:
+        if api_base_env and api_port == api_override:
             api_base = api_base_env.rstrip("/")
-        wait_for_http(f"{api_base}/health", expect_text="ok", timeout=60)
+        wait_http_200(f"{api_base}/health", 60, expect_text="ok")
 
-        ui_env = os.environ.copy()
+        ui_env = _ensure_env(os.environ.copy())
         ui_env["NEXT_PUBLIC_API_BASE"] = api_base
         ui_cmd = resolve_ui_command(repo_root, ui_port)
-        ui_proc = start_process(ui_cmd, repo_root / "apps" / "web", ui_env)
+        ui_proc = start_process(ui_cmd, repo_root / "apps" / "web", ui_env, "start_process")
         ui_base = f"http://127.0.0.1:{ui_port}"
-        if ui_base_env and ui_port == ui_port_pref:
+        if ui_base_env and ui_port == ui_override:
             ui_base = ui_base_env.rstrip("/")
-        wait_for_http(f"{ui_base}/runs/new", expect_text="Create Run", timeout=120)
+        wait_http_200(f"{ui_base}/runs/new", 120, expect_text="Create Run")
 
         status, active = request_json(f"{api_base}/plugins/active")
         if status != 200:
@@ -330,8 +253,8 @@ def main() -> int:
         _log(f"real_smoke FAILED: {exc}")
         return 1
     finally:
-        stop_process(ui_proc, "UI")
-        stop_process(api_proc, "API")
+        kill_process_tree(ui_proc, "UI")
+        kill_process_tree(api_proc, "API")
         if runs_root.exists():
             shutil.rmtree(runs_root, ignore_errors=True)
 
