@@ -21,6 +21,33 @@ def _log(message: str) -> None:
     print(message, flush=True)
 
 
+def _fail(message: str) -> int:
+    print(message, file=sys.stderr, flush=True)
+    return 1
+
+
+def _format_port_in_use_error(label: str, port: int) -> str:
+    env_var = f"{label.upper()}_PORT"
+    return (
+        f"ERROR: {label} port {port} is already in use. "
+        "Choose a free port or stop the process using it. "
+        f"Set {env_var} to override."
+    )
+
+
+def _handle_port_error(label: str, preferred_raw: str | None, exc: RuntimeError) -> int:
+    message = str(exc)
+    env_var = f"{label.upper()}_PORT"
+    if preferred_raw:
+        try:
+            preferred = int(preferred_raw)
+        except ValueError:
+            preferred = None
+        if preferred is not None and "already in use" in message:
+            return _fail(_format_port_in_use_error(label, preferred))
+    return _fail(f"ERROR: {message} Set {env_var} to override.")
+
+
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
@@ -193,16 +220,22 @@ def main() -> int:
 
     api_port_env = os.environ.get("API_PORT")
     ui_port_env = os.environ.get("UI_PORT")
-    api_port = pick_port(
-        int(api_port_env) if api_port_env else None,
-        API_PORT_RANGE,
-        "API",
-    )
-    ui_port = pick_port(
-        int(ui_port_env) if ui_port_env else None,
-        UI_PORT_RANGE,
-        "UI",
-    )
+    try:
+        api_port = pick_port(
+            int(api_port_env) if api_port_env else None,
+            API_PORT_RANGE,
+            "API",
+        )
+    except RuntimeError as exc:
+        return _handle_port_error("API", api_port_env, exc)
+    try:
+        ui_port = pick_port(
+            int(ui_port_env) if ui_port_env else None,
+            UI_PORT_RANGE,
+            "UI",
+        )
+    except RuntimeError as exc:
+        return _handle_port_error("UI", ui_port_env, exc)
 
     _clear_next_dev_lock(repo_root)
 
