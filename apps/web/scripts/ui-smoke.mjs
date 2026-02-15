@@ -1,11 +1,13 @@
 const defaultApi = "http://127.0.0.1:8000/api/v1";
 const defaultUi = "http://127.0.0.1:3000";
 
-const apiBase = (process.env.NEXT_PUBLIC_API_BASE || process.env.API_BASE || defaultApi).replace(
-  /\/+$/,
-  ""
-);
-const uiBase = (process.env.UI_BASE || defaultUi).replace(/\/+$/, "");
+const apiBase = (
+  process.env.API_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_BASE ||
+  process.env.API_BASE ||
+  defaultApi
+).replace(/\/+$/, "");
+const uiBase = (process.env.UI_BASE_URL || process.env.UI_BASE || defaultUi).replace(/\/+$/, "");
 
 const buildUrl = (base, path) => new URL(String(path || "").replace(/^\/+/, ""), `${base}/`).toString();
 
