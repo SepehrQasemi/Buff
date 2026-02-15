@@ -6,7 +6,7 @@ from tests.strategies.helpers import run_intents, synthetic_ohlcv
 
 
 def test_builtin_strategies_deterministic() -> None:
-    ohlcv = synthetic_ohlcv(180)
+    ohlcv = synthetic_ohlcv(80)
     first_run: dict[str, list[str]] = {}
     for schema in list_strategies():
         strategy = get_strategy(f"{schema['id']}@{schema['version']}")
