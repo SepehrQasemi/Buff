@@ -1,13 +1,18 @@
-const defaultApi = "http://127.0.0.1:8000/api/v1";
-const defaultUi = "http://127.0.0.1:3000";
+const apiBaseRaw =
+  process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE || process.env.API_BASE;
+const uiBaseRaw = process.env.UI_BASE_URL || process.env.UI_BASE;
 
-const apiBase = (
-  process.env.API_BASE_URL ||
-  process.env.NEXT_PUBLIC_API_BASE ||
-  process.env.API_BASE ||
-  defaultApi
-).replace(/\/+$/, "");
-const uiBase = (process.env.UI_BASE_URL || process.env.UI_BASE || defaultUi).replace(/\/+$/, "");
+if (!apiBaseRaw) {
+  console.error("UI smoke FAILED: API_BASE_URL is not set");
+  process.exit(1);
+}
+if (!uiBaseRaw) {
+  console.error("UI smoke FAILED: UI_BASE_URL is not set");
+  process.exit(1);
+}
+
+const apiBase = apiBaseRaw.replace(/\/+$/, "");
+const uiBase = uiBaseRaw.replace(/\/+$/, "");
 
 const buildUrl = (base, path) => new URL(String(path || "").replace(/^\/+/, ""), `${base}/`).toString();
 
@@ -31,7 +36,7 @@ const requestText = async (url) => {
 
 const WORKSPACE_MARKER = 'data-testid="chart-workspace"';
 
-const waitForMarker = async (url, marker, timeoutMs = 30000) => {
+const waitForMarker = async (url, marker, timeoutMs = 60000) => {
   const start = Date.now();
   let lastError;
   while (Date.now() - start < timeoutMs) {
