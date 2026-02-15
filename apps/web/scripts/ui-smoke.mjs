@@ -1,17 +1,34 @@
-const apiBaseRaw =
-  process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE || process.env.API_BASE;
-const uiBaseRaw = process.env.UI_BASE_URL || process.env.UI_BASE;
+const apiBaseRaw = process.env.API_BASE_URL;
+const uiBaseRaw = process.env.UI_BASE_URL;
 
-if (!apiBaseRaw) {
-  console.error("UI smoke FAILED: API_BASE_URL is not set");
-  process.exit(1);
-}
-if (!uiBaseRaw) {
-  console.error("UI smoke FAILED: UI_BASE_URL is not set");
-  process.exit(1);
+const missing = [];
+if (!apiBaseRaw) missing.push("API_BASE_URL");
+if (!uiBaseRaw) missing.push("UI_BASE_URL");
+
+if (missing.length) {
+  const lines = [
+    "UI smoke FAILED: missing required environment variables.",
+    `Missing: ${missing.join(", ")}`,
+    "API_BASE_URL is the API base URL.",
+    "UI_BASE_URL is the UI base URL.",
+    "",
+    "Fix A (recommended): run `python scripts/verify_phase1.py --with-services --real-smoke`",
+    "Fix B: set the variables manually:",
+    "PowerShell:",
+    '  $env:API_BASE_URL=\"http://127.0.0.1:8000\"',
+    '  $env:UI_BASE_URL=\"http://127.0.0.1:3000\"',
+    "Bash:",
+    '  export API_BASE_URL=\"http://127.0.0.1:8000\"',
+    '  export UI_BASE_URL=\"http://127.0.0.1:3000\"',
+  ];
+  console.error(lines.join("\n"));
+  process.exit(2);
 }
 
-const apiBase = apiBaseRaw.replace(/\/+$/, "");
+let apiBase = apiBaseRaw.replace(/\/+$/, "");
+if (!apiBase.endsWith("/api/v1")) {
+  apiBase = `${apiBase}/api/v1`;
+}
 const uiBase = uiBaseRaw.replace(/\/+$/, "");
 
 const buildUrl = (base, path) => new URL(String(path || "").replace(/^\/+/, ""), `${base}/`).toString();
