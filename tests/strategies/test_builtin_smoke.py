@@ -17,7 +17,7 @@ def _wrapper_params(strategy_id: str) -> dict[str, float | int]:
 
 
 def test_builtin_strategies_smoke_artifacts() -> None:
-    ohlcv = synthetic_ohlcv(150)
+    ohlcv = synthetic_ohlcv(100)
     for schema in list_strategies():
         strategy = get_strategy(f"{schema['id']}@{schema['version']}")
         initial_position = None
