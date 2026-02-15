@@ -11,6 +11,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 DEFAULT_API_PORT = 8000
 DEFAULT_UI_PORT = 3000
@@ -111,6 +112,44 @@ def find_free_port(start: int, end: int) -> int:
     raise RuntimeError(f"No free port available in range {start}-{end}")
 
 
+def _pick_ephemeral_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _resolve_preferred_port(raw: str | None, default: int, label: str) -> int:
+    if raw is None or raw == "":
+        return default
+    try:
+        port = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{label}_PORT must be an integer") from exc
+    if not 1 <= port <= 65535:
+        raise ValueError(f"{label}_PORT must be between 1 and 65535")
+    return port
+
+
+def _select_port(preferred: int, label: str) -> int:
+    if is_port_free(preferred):
+        return preferred
+    for _ in range(50):
+        candidate = _pick_ephemeral_port()
+        if candidate != preferred and is_port_free(candidate):
+            return candidate
+    raise RuntimeError(f"No free {label} port found")
+
+
+def _port_from_url(raw: str) -> int | None:
+    try:
+        parsed = urlparse(raw)
+    except Exception:
+        return None
+    if parsed.port:
+        return parsed.port
+    return None
+
+
 def wait_for_http(url: str, *, expect_text: str | None, timeout: float) -> None:
     start = time.monotonic()
     while True:
@@ -200,8 +239,21 @@ def main() -> int:
     ui_proc: subprocess.Popen | None = None
 
     try:
-        api_port = find_free_port(DEFAULT_API_PORT, DEFAULT_API_PORT + 20)
-        ui_port = find_free_port(DEFAULT_UI_PORT, DEFAULT_UI_PORT + 20)
+        api_base_env = os.environ.get("API_BASE_URL") or os.environ.get("API_BASE")
+        ui_base_env = os.environ.get("UI_BASE_URL") or os.environ.get("UI_BASE")
+        api_port_pref = _resolve_preferred_port(os.environ.get("API_PORT"), DEFAULT_API_PORT, "API")
+        ui_port_pref = _resolve_preferred_port(os.environ.get("UI_PORT"), DEFAULT_UI_PORT, "UI")
+        if api_base_env:
+            parsed = _port_from_url(api_base_env)
+            if parsed:
+                api_port_pref = parsed
+        if ui_base_env:
+            parsed = _port_from_url(ui_base_env)
+            if parsed:
+                ui_port_pref = parsed
+
+        api_port = _select_port(api_port_pref, "API")
+        ui_port = _select_port(ui_port_pref, "UI")
 
         api_env = _with_pythonpath(os.environ.copy(), repo_root)
         api_env["RUNS_ROOT"] = str(runs_root)
@@ -221,6 +273,8 @@ def main() -> int:
             api_env,
         )
         api_base = f"http://127.0.0.1:{api_port}/api/v1"
+        if api_base_env and api_port == api_port_pref:
+            api_base = api_base_env.rstrip("/")
         wait_for_http(f"{api_base}/health", expect_text="ok", timeout=60)
 
         ui_env = os.environ.copy()
@@ -228,6 +282,8 @@ def main() -> int:
         ui_cmd = resolve_ui_command(repo_root, ui_port)
         ui_proc = start_process(ui_cmd, repo_root / "apps" / "web", ui_env)
         ui_base = f"http://127.0.0.1:{ui_port}"
+        if ui_base_env and ui_port == ui_port_pref:
+            ui_base = ui_base_env.rstrip("/")
         wait_for_http(f"{ui_base}/runs/new", expect_text="Create Run", timeout=120)
 
         status, active = request_json(f"{api_base}/plugins/active")
