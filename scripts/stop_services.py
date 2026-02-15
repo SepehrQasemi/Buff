@@ -146,31 +146,25 @@ def main() -> int:
             except (TypeError, ValueError):
                 continue
 
-            _log(f"PID {pid_int} EXE={exe} CMD={cmd}")
             cmd_lower = _normalize(cmd)
+            is_api_sig = "uvicorn" in cmd_lower and "apps.api.main:app" in cmd_lower
+            is_ui_sig = ("next dev" in cmd_lower) or ("run dev" in cmd_lower)
+            if not (is_api_sig or is_ui_sig):
+                continue
+
+            _log(f"PID {pid_int} EXE={exe} CMD={cmd}")
             port = _extract_port(cmd_lower)
-            valid = False
             if port is not None:
-                if is_valid_api(cmd_lower, port) or is_valid_ui(cmd_lower, port):
-                    valid = True
+                valid = is_valid_api(cmd_lower, port) or is_valid_ui(cmd_lower, port)
             else:
-                if repo_norm in cmd_lower and (
-                    ("uvicorn" in cmd_lower and "apps.api.main:app" in cmd_lower)
-                    or ("next dev" in cmd_lower)
-                    or ("run dev" in cmd_lower)
-                ):
-                    valid = True
+                valid = repo_norm in cmd_lower and (is_api_sig or is_ui_sig)
 
             if not valid:
                 _log(f"REFUSING to stop PID {pid_int}: does not match Buff signature.")
-                refused = True
                 continue
 
-            kill_pid_tree(pid_int, "API" if "uvicorn" in cmd_lower else "UI")
+            kill_pid_tree(pid_int, "API" if is_api_sig else "UI")
             killed.append(f"pid:{pid_int}")
-
-        if refused:
-            return 2
 
     if killed:
         _log("Stopped Buff services: " + ", ".join(killed))
