@@ -61,6 +61,16 @@ Inspect:
 - Trades tab.
 - Timeline tab.
 
+## Export Report (1 minute)
+
+Export a Markdown report from existing artifacts:
+
+```bash
+python scripts/export_report.py --run-id <RUN_ID>
+```
+
+By default, this writes to `RUNS_ROOT/<RUN_ID>/report.md`.
+
 ## CSV Requirements
 
 Your CSV must include:
