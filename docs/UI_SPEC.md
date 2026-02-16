@@ -1,4 +1,4 @@
-﻿# UI_SPEC — Buff TradingView-like UI (Read-only)
+# UI_SPEC — Buff TradingView-like UI (Read-only)
 
 ## North Star
 A chart-first experience like TradingView, focused on:
@@ -7,6 +7,13 @@ A chart-first experience like TradingView, focused on:
 - Helping users iterate quickly
 
 UI must remain **read-only for execution** (no buy/sell, no broker actions).
+
+## Runtime Contract Alignment
+- UI MUST render the API error envelope exactly as returned.
+- UI MUST NOT transform error codes.
+- UI MUST NOT infer execution state.
+- UI MUST be artifact-driven and read-only.
+- Canonical schema reference: [03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema](./03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema)
 
 ## Run Creation UX (File-based)
 
@@ -54,7 +61,7 @@ Core layout:
 - Parameter form auto-generated from strategy parameter schema
 - Risk Level selector (1..5)
 - Buttons:
-  - Run (paper/backtest mode only; if UI triggers runs, it triggers local compute and stores artifacts; still no live)
+  - Run analysis (artifact generation only). This MUST NOT trigger trade execution, broker actions, or live-order state changes
   - Save preset (strategy+params)
 - Output:
   - Strategy status (valid/invalid)
@@ -189,5 +196,6 @@ UI must not invent trades; it must plot from artifacts.
 - Fast: avoid blocking UI on heavy computation; show progress
 - Deterministic: if run_id loaded, UI must render same view every time
 - Error clarity: show actionable messages, not stack traces
+
 
 

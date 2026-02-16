@@ -1,4 +1,4 @@
-# RISK_MODEL_SPEC ó Default + User-customizable Risk (5 levels)
+# RISK_MODEL_SPEC ‚Äî Default + User-customizable Risk (5 levels)
 
 ## Goal
 Risk is present in the product even though UI is execution-free.
@@ -6,7 +6,12 @@ Risk impacts:
 - whether signals are allowed
 - sizing recommendations (if shown)
 - warnings and timeline events
-- trade filtering in analysis (e.g., ìblocked by riskî)
+- trade filtering in analysis (e.g., ‚Äúblocked by risk‚Äù)
+
+## Contract Alignment
+- All numeric handling MUST align with deterministic backend policy.
+- Validation errors MUST propagate as canonical error codes defined in [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+- This specification MUST NOT override runtime contract enforcement.
 
 ## Two-layer Risk Model (Recommended)
 ### Layer 1: Hard Safety Caps (Non-negotiable)
@@ -29,21 +34,21 @@ User risk policy may only restrict or annotate; it must not bypass hard caps.
 ## Risk Levels (1..5)
 Each level is a preset that sets default parameters for both layers.
 
-Level 1 ó Ultra Conservative
+Level 1 ‚Äî Ultra Conservative
 - smallest exposure caps, strict circuit breakers, conservative sizing
 
-Level 2 ó Conservative
+Level 2 ‚Äî Conservative
 - tighter caps than default, conservative thresholds
 
-Level 3 ó Balanced (Default)
+Level 3 ‚Äî Balanced (Default)
 - reasonable caps, standard circuit breakers
 
-Level 4 ó Aggressive
+Level 4 ‚Äî Aggressive
 - higher caps within safe bounds, less strict triggers
 
-Level 5 ó Experimental
+Level 5 ‚Äî Experimental
 - highest caps still bounded by hard safety caps
-- extra warnings and ìexperimentalî label in UI
+- extra warnings and ‚Äúexperimental‚Äù label in UI
 
 ## Required UI Behavior
 - Risk level selector must be visible in Strategy tab.
@@ -68,3 +73,4 @@ When risk blocks an action, artifacts must record:
 - risk verdict (ALLOW/BLOCK)
 - rule id and reason
 - risk level in effect
+

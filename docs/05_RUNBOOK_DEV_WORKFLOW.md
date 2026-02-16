@@ -32,7 +32,7 @@ python -m tools.release_gate --strict --timeout-seconds 900
 ```
 
 Contract reference for fail-closed errors and required artifacts:
-- [03_CONTRACTS_AND_SCHEMAS.md#error-schema](./03_CONTRACTS_AND_SCHEMAS.md#error-schema)
+- [03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema](./03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema)
 - [03_CONTRACTS_AND_SCHEMAS.md#artifact-contract-matrix](./03_CONTRACTS_AND_SCHEMAS.md#artifact-contract-matrix)
 
 ## Service Lifecycle
@@ -117,3 +117,4 @@ Acceptance:
 - [RELEASE_GATE.md](./RELEASE_GATE.md)
 - [long_run_playbook.md](./long_run_playbook.md)
 - [VERIFY_PHASE1_DIAGNOSIS.md](./VERIFY_PHASE1_DIAGNOSIS.md)
+

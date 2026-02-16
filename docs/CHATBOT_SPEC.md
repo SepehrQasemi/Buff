@@ -1,4 +1,4 @@
-# CHATBOT_SPEC ó AI Assistant (Guide + Reviewer)
+# CHATBOT_SPEC ‚Äî AI Assistant (Guide + Reviewer)
 
 ## Purpose
 The chatbot helps users:
@@ -8,6 +8,14 @@ The chatbot helps users:
 - review strategy/indicator for common pitfalls
 
 Chatbot is an assistant, not an execution controller.
+
+## Contract And Safety Constraints
+- Chatbot responses are advisory only and MUST NOT be treated as execution commands.
+- Chatbot MUST NOT create runs through any path that bypasses validation.
+- Any chatbot run-creation flow MUST call the same validated API endpoint (`/api/v1/runs`).
+- Chatbot MUST NOT initiate trade execution.
+- Chatbot MUST NOT mutate artifacts directly.
+- Chatbot behavior and error handling MUST align with [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
 
 ## Modes
 ### Draft Mode (Default)
@@ -94,9 +102,10 @@ Chatbot must not:
 - recommend live deployment actions
 - circumvent validation gates
 
-## ìExact Stepsî Requirement
-When user asks ìI want to add Xî the chatbot must respond with:
+## ‚ÄúExact Steps‚Äù Requirement
+When user asks ‚ÄúI want to add X‚Äù the chatbot must respond with:
 1) exact files to create
 2) exact fields to fill
 3) exact commands to run
 4) what success looks like in UI
+

@@ -1,4 +1,4 @@
-# STRATEGY_PACK_SPEC ó Built-in Strategy Catalog (20)
+# STRATEGY_PACK_SPEC ‚Äî Built-in Strategy Catalog (20)
 
 ## Goal
 Provide 20 well-known, rule-based strategies as first-class built-ins:
@@ -7,10 +7,15 @@ Provide 20 well-known, rule-based strategies as first-class built-ins:
 - Testable
 - Visualizable (entries/exits and outcomes)
 
+## Contract Alignment
+- All numeric handling MUST align with deterministic backend policy.
+- Validation errors MUST propagate as canonical error codes defined in [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+- This specification MUST NOT override runtime contract enforcement.
+
 ## Rules for Inclusion
 Each built-in strategy must have:
 - Stable name and semantic version
-- Clear entry/exit rules (no vague ìintuitionî)
+- Clear entry/exit rules (no vague ‚Äúintuition‚Äù)
 - Parameter schema (types, ranges, defaults)
 - Warmup requirement stated
 - Basic tests:
@@ -46,7 +51,7 @@ Market Structure (Rule-based)
 16) Pivot Breakout
 17) Support/Resistance Retest (rule-based)
 
-Exits / Risk Wrappers (still ìstrategiesî for users)
+Exits / Risk Wrappers (still ‚Äústrategies‚Äù for users)
 18) Time-based Exit Wrapper
 19) Trailing Stop Wrapper
 20) Fixed RR Stop/Target Wrapper
@@ -73,3 +78,4 @@ Optionally:
     - trade list
     - metrics summary
     - timeline events
+

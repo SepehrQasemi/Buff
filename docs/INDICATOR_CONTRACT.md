@@ -7,6 +7,11 @@ Indicators must be:
 - deterministic
 - pure (no side effects)
 
+## Contract Alignment
+- All numeric handling MUST align with deterministic backend policy.
+- Validation errors MUST propagate as canonical error codes defined in [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+- This specification MUST NOT override runtime contract enforcement.
+
 ## Indicator Definition
 Indicator = Pure function:
 - inputs: one or more series (close/high/low/volume) + params
@@ -70,3 +75,4 @@ ALLOWED_NAN_POLICIES: ["propagate", "fill", "error"]
 ALLOWED_INTENTS: ["HOLD", "ENTER_LONG", "ENTER_SHORT", "EXIT_LONG", "EXIT_SHORT"]
 ```
 These constants are shared by indicator and strategy contracts.
+
