@@ -1,5 +1,10 @@
 # RISK_MODEL_SPEC — Default + User-customizable Risk (5 levels)
 
+## Contract Alignment
+- All numeric handling MUST align with deterministic backend policy.
+- Validation errors MUST propagate as canonical error codes defined in [03_CONTRACTS_AND_SCHEMAS.md#error-code-registry](./03_CONTRACTS_AND_SCHEMAS.md#error-code-registry).
+- This specification is descriptive and MUST NOT override runtime contract enforcement.
+
 ## Goal
 Risk is present in the product even though UI is execution-free.
 Risk impacts:

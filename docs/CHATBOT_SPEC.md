@@ -9,6 +9,14 @@ The chatbot helps users:
 
 Chatbot is an assistant, not an execution controller.
 
+## Contract And Safety Constraints
+- Chatbot responses are advisory only.
+- Chatbot MUST NOT bypass the `/api/v1/runs` validation path.
+- Chatbot MUST NOT initiate or execute trades.
+- Chatbot MUST NOT mutate artifacts directly.
+- Any run creation requested through chatbot MUST call the same validated API endpoints used by the UI.
+- Canonical contract reference: [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+
 ## Modes
 ### Draft Mode (Default)
 Chatbot outputs:

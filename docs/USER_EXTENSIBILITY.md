@@ -1,5 +1,12 @@
 # User Extensibility Quickstart (Phase-3 MVP)
 
+## Hard Safety Constraints
+- User extensibility MUST NOT include trade execution.
+- User strategies and indicators MUST NOT access broker APIs.
+- User logic MUST NOT bypass API validation or contract enforcement.
+- User-provided logic MUST be evaluated in deterministic, sandboxed backend validation.
+- Produced artifacts MUST conform to [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+
 This is a concise, contract-aligned quickstart for user strategies and indicators.
 UI is fail-closed: only validated plugins (VALID) appear in selection lists.
 
@@ -207,5 +214,4 @@ Note: run without PowerShell piping to preserve exit codes.
 - **Schema missing fields**: YAML missing required keys (see contracts).
 - **Warmup not honored**: ENTER intents emitted before `warmup_bars` complete.
 - **NaN policy violation** (indicators): `nan_policy` not respected after warmup.
-
 

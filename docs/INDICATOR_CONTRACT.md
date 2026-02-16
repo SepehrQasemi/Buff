@@ -1,5 +1,10 @@
 # INDICATOR_CONTRACT — Built-in and User-defined Indicators
 
+## Contract Alignment
+- All numeric handling MUST align with deterministic backend policy.
+- Validation errors MUST propagate as canonical error codes defined in [03_CONTRACTS_AND_SCHEMAS.md#error-code-registry](./03_CONTRACTS_AND_SCHEMAS.md#error-code-registry).
+- This specification is descriptive and MUST NOT override runtime contract enforcement.
+
 ## Purpose
 Indicators are reusable computations that produce series used in strategies and overlays.
 Indicators must be:
