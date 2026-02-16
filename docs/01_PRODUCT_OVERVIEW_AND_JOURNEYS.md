@@ -25,9 +25,9 @@ Primary journeys:
 3. Export a run report for sharing and review.
 
 Detailed references:
-- First run: [FIRST_RUN.md](./FIRST_RUN.md)
+- First run: [05_RUNBOOK_DEV_WORKFLOW.md#quickstart](./05_RUNBOOK_DEV_WORKFLOW.md#quickstart)
 - Run workspace behavior: [UI_SPEC.md](./UI_SPEC.md)
-- Export report workflow: [FIRST_RUN.md#export-report-1-minute](./FIRST_RUN.md#export-report-1-minute)
+- Export report workflow: [05_RUNBOOK_DEV_WORKFLOW.md#export-report-workflow](./05_RUNBOOK_DEV_WORKFLOW.md#export-report-workflow)
 
 ## Key Invariants
 - Determinism: same canonical inputs produce the same run identity and artifacts.

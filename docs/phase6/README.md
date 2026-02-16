@@ -1,4 +1,4 @@
-﻿# Phase-6: Make Buff Actually Usable
+# Phase-6: Make Buff Actually Usable
 
 ## Purpose
 Phase-6 moves Buff from fixture-driven demos to real, user-created runs with durable storage, real data ingest, and a safe run-creation UX. It keeps the system read-only for execution and does not introduce live trading.
@@ -51,7 +51,7 @@ Success criteria:
 Run Python commands via `\.venv\Scripts\python.exe` to ensure the venv interpreter is used.
 
 ```powershell
-.\.venv\Scripts\python.exe scripts\verify_phase1.py --with-services
+### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
 .\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
 .\.venv\Scripts\python.exe scripts\phase6_release_gate.py
 .\.venv\Scripts\python.exe scripts\verify_phase6_stage5.py --with-services
@@ -64,3 +64,5 @@ node apps/web/scripts/ui-smoke.mjs
 - [CONTRACTS.md](CONTRACTS.md): Run builder, data, storage, and API contracts.
 
 Status reference: [Current Status](../04_ROADMAP_AND_DELIVERY_CHECKLIST.md#current-status).
+
+

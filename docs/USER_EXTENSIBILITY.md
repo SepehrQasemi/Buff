@@ -191,7 +191,7 @@ Operational notes:
 
 You can also run the full gate:
 ```
-python scripts/verify_phase1.py --with-services
+[runbook Phase-1 gate](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)
 ```
 Note: run without PowerShell piping to preserve exit codes.
 
@@ -207,3 +207,5 @@ Note: run without PowerShell piping to preserve exit codes.
 - **Schema missing fields**: YAML missing required keys (see contracts).
 - **Warmup not honored**: ENTER intents emitted before `warmup_bars` complete.
 - **NaN policy violation** (indicators): `nan_policy` not respected after warmup.
+
+

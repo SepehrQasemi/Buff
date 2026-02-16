@@ -85,14 +85,14 @@ Keyword-cluster coverage (files containing the keyword):
 | docs/phase6/STAGES.md | 133 | 8ad1e94 | 2026-02-11 | docs(phase6): consolidate execution spec and contracts (#162) | H1: None<br>H2: None |
 | docs/phase6/UX.md | 133 | 8ad1e94 | 2026-02-11 | docs(phase6): consolidate execution spec and contracts (#162) | H1: None<br>H2: None |
 | docs/PHASE6_USABLE_PRODUCT.md | 175 | 8ad1e94 | 2026-02-11 | docs(phase6): consolidate execution spec and contracts (#162) | H1: None<br>H2: None |
-| docs/PR_RELEASE_GATE.md | 1222 | 48e26b5 | 2026-02-11 | docs: finalize PR release gate formatting | H1: L1: Release Gate: local preflight + CI workflow (fail-closed, timed, reported)<br>H2: L3: Summary; L10: Local Usage; L17: CI; L25: Safety Properties; L34: Proof (local) |
+| docs/PR_release_gate.md | 1222 | 48e26b5 | 2026-02-11 | docs: finalize PR release gate formatting | H1: L1: Release Gate: local preflight + CI workflow (fail-closed, timed, reported)<br>H2: L3: Summary; L10: Local Usage; L17: CI; L25: Safety Properties; L34: Proof (local) |
 | docs/PRODUCT_ROADMAP.md | 3958 | 4e68d03 | 2026-02-14 | chore(layer1): close out core stabilization invariants (#171) | H1: L2: Product Roadmap (Official)<br>H2: L4: Product Identity; L18: Core Principles (Non-Negotiable); L35: Canonical User Outcome; L42: Decisions (Locked); L60: Evolution Layers; L101: Required Docs Links |
 | docs/PRODUCT_SPEC.md | 3606 | 396c7df | 2026-02-13 | docs: add roadmap, decisions, and delivery checklist (#170) | H1: None<br>H2: L3: Product Identity; L7: Roadmap Alignment; L16: Target User; L20: Core Value Proposition; L25: Scope (Product v1); L58: Explicit Non-goals; L64: Product Principles (Non-negotiable); L69: Definition of “Usable” |
 | docs/PROJECT_SPEC.md | 7238 | c38a1a3 | 2026-02-04 | docs/spec: unify contracts for replay/snapshot/migration | H1: L1: PROJECT_SPEC - Buff<br>H2: L7: Status Legend; L11: Canonical Data Rule (Non-Negotiable); L17: Determinism Guarantees (DONE); L29: Safety & Governance Model (DONE); L39: Current System Behavior; L89: Related Docs |
 | docs/README.md | 1517 | 396c7df | 2026-02-13 | docs: add roadmap, decisions, and delivery checklist (#170) | H1: L1: Buff Phase-0 Product Specs<br>H2: L14: Roadmap & Identity; L22: Roadmap / Next |
 | docs/REGIME_SEMANTICS.md | 1568 | 8803f0c | 2026-02-01 | M2.5: deterministic regime semantics and strategy-family gating (#73) | H1: None<br>H2: L5: Regimes (7); L14: Default thresholds (conservative, not optimized); L26: Fail-closed rules; L30: Adding a new regime safely; L37: Feature references |
-| docs/RELEASE_GATE.md | 1233 | 42096af | 2026-02-11 | docs: polish release gate docs and PR text | H1: L1: Release Gate (Local)<br>H2: L11: Checks; L17: Flags; L22: Outputs; L32: Troubleshooting |
-| docs/RELEASE_PRECHECK.md | 1748 | 42096af | 2026-02-11 | docs: polish release gate docs and PR text | H1: L1: Release Precheck (Local)<br>H2: L31: Notes; L40: Examples |
+| docs/release_gate.md | 1233 | 42096af | 2026-02-11 | docs: polish release gate docs and PR text | H1: L1: Release Gate (Local)<br>H2: L11: Checks; L17: Flags; L22: Outputs; L32: Troubleshooting |
+| docs/release_precheck.md | 1748 | 42096af | 2026-02-11 | docs: polish release gate docs and PR text | H1: L1: Release Precheck (Local)<br>H2: L31: Notes; L40: Examples |
 | docs/REPLAY.md | 3144 | c38a1a3 | 2026-02-04 | docs/spec: unify contracts for replay/snapshot/migration | H1: L1: Replay & Reproducibility (M7)<br>H2: L5: Snapshot format; L27: Replay equivalence; L47: CLI usage |
 | docs/resampling.md | 1233 | 77fd099 | 2026-02-02 | feat(data): deterministic 1m resampling with no lookahead | H1: L1: Deterministic 1m Resampling<br>H2: L5: Input schema; L15: Window alignment; L25: Aggregation rules; L34: Completeness rule (no lookahead); L41: Determinism |
 | docs/RISK_MODEL_SPEC.md | 2119 | 9873e0e | 2026-02-08 | Add phase-0 product spec files | H1: L1: RISK_MODEL_SPEC � Default + User-customizable Risk (5 levels)<br>H2: L3: Goal; L11: Two-layer Risk Model (Recommended); L29: Risk Levels (1..5); L48: Required UI Behavior; L55: Custom Risk Definition; L64: Minimum Artifact Requirements |
@@ -176,8 +176,8 @@ Keyword-cluster coverage (files containing the keyword):
 - Topic: operational commands duplicated across user runbook and one-off diagnosis report.
 - Involved files: `docs/FIRST_RUN.md`, `docs/VERIFY_PHASE1_DIAGNOSIS.md`.
 - Evidence:
-  - `docs/FIRST_RUN.md:37` ? "python scripts/dev_start.py"
-  - `docs/FIRST_RUN.md:87` ? "python scripts/verify_phase1.py --with-services --real-smoke"
+  - `docs/FIRST_RUN.md:37` ? "dev_start.py command"
+  - `docs/FIRST_RUN.md:87` ? "see runbook real-smoke gate"
   - `docs/VERIFY_PHASE1_DIAGNOSIS.md:5` ? verify command runtime claim.
   - `docs/VERIFY_PHASE1_DIAGNOSIS.md:78` ? conclusion about exit behavior.
 - Recommendation: **KEEP** `docs/FIRST_RUN.md` as user-facing runbook; **MOVE** diagnosis doc under archive/incidents and link only from troubleshooting appendix.
@@ -249,7 +249,7 @@ docs/
 | `docs/ARCHITECTURE_BOUNDARIES.md`, `ARCHITECTURE.md`, `PROJECT_SCOPE.md` | `docs/02_ARCHITECTURE_BOUNDARIES.md` | **MERGE** |
 | `docs/PHASE1_API_CONTRACTS.md`, `docs/phase6/CONTRACTS.md`, `docs/artifacts.md`, `docs/STRATEGY_CONTRACT.md`, `docs/INDICATOR_CONTRACT.md`, `DECISION_RECORD_SCHEMA.md` | `docs/03_CONTRACTS_AND_SCHEMAS.md` (+ appendices) | **MERGE** |
 | `docs/PRODUCT_ROADMAP.md`, `docs/DELIVERY_CHECKLIST.md`, `docs/phase6/SPEC.md`, `docs/phase6/STAGES.md`, `docs/PHASE5_BACKLOG.md` | `docs/04_ROADMAP_AND_DELIVERY_CHECKLIST.md` | **MERGE** |
-| `docs/FIRST_RUN.md`, `docs/RELEASE_PRECHECK.md`, `docs/RELEASE_GATE.md`, `docs/VERIFY_PHASE1_DIAGNOSIS.md`, `docs/long_run_playbook.md` | `docs/05_RUNBOOK_DEV_WORKFLOW.md` | **MERGE/MOVE** |
+| `docs/FIRST_RUN.md`, `docs/release_precheck.md`, `docs/release_gate.md`, `docs/VERIFY_PHASE1_DIAGNOSIS.md`, `docs/long_run_playbook.md` | `docs/05_RUNBOOK_DEV_WORKFLOW.md` | **MERGE/MOVE** |
 | `STRATEGY_GOVERNANCE.md` (root duplicate) | `docs/STRATEGY_GOVERNANCE.md` | **DEPRECATE** root file |
 | `docs/PHASE6_USABLE_PRODUCT.md`, `docs/phase6/ROADMAP.md` | Archive with pointer retained | **DEPRECATE** (already marked) |
 | `docs/UNIFIED_PROJECT_SPEC.md` | Canonical docs + appendix evidence index | **MOVE** evidence, **DEPRECATE** stale metadata sections |
@@ -311,3 +311,4 @@ Acceptance checks:
 
 This audit did not rename, move, or delete documentation files. The only file created in this step is:
 - `docs/DOCS_AUDIT_REPORT.md`
+

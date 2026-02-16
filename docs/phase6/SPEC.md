@@ -1,4 +1,4 @@
-﻿# Phase-6 Execution Spec
+# Phase-6 Execution Spec
 
 ## No-skip Rule
 Stage N must meet its Definition of Done and pass its mandatory gates before Stage N+1 begins. No parallel execution across stages and no partial carryover of unfinished requirements.
@@ -42,7 +42,7 @@ A completion-ready product core means:
 - A user can create a run from CSV + selected strategy using UI and CLI.
 - The created run is stored under the runs root directory and is visible in the run list.
 - The workspace page renders the run strictly from artifacts.
-- The system is deterministic and reproducible (same inputs → same run id and artifacts).
+- The system is deterministic and reproducible (same inputs -> same run id and artifacts).
 - Fail-closed behavior is preserved with stable, user-explainable error codes.
 - Local quality gates pass consistently.
 Note: If current UI implementation is path-based, it must be treated as a temporary bridge and tracked via `docs/DECISIONS.md` (D-001).
@@ -93,7 +93,7 @@ Definition of Done:
 
 Mandatory Gates:
 ```powershell
-.\.venv\Scripts\python.exe scripts\verify_phase1.py --with-services
+### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
 .\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
 pytest -q tests/phase6/test_run_builder.py
 node apps/web/scripts/ui-smoke.mjs
@@ -132,7 +132,7 @@ Definition of Done:
 
 Mandatory Gates:
 ```powershell
-.\.venv\Scripts\python.exe scripts\verify_phase1.py --with-services
+### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
 .\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
 pytest -q tests/phase6/test_run_registry.py
 ```
@@ -170,7 +170,7 @@ Definition of Done:
 
 Mandatory Gates:
 ```powershell
-.\.venv\Scripts\python.exe scripts\verify_phase1.py --with-services
+### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
 .\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
 pytest -q tests/phase6/test_ingest_csv.py
 pytest -q tests/phase6/test_data_quality.py
@@ -208,7 +208,7 @@ Definition of Done:
 
 Mandatory Gates:
 ```powershell
-.\.venv\Scripts\python.exe scripts\verify_phase1.py --with-services
+### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
 .\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
 pytest -q tests/phase6/test_runs_new_ui.py
 node apps/web/scripts/ui-smoke.mjs
@@ -248,7 +248,7 @@ Definition of Done:
 
 Mandatory Gates:
 ```powershell
-.\.venv\Scripts\python.exe scripts\verify_phase1.py --with-services
+### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
 .\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
 pytest -q tests/phase6/test_safety_limits.py
 pytest -q tests/phase6/test_kill_switch.py
@@ -293,6 +293,8 @@ Milestone demos:
 - Stage 3: CSV ingest produces canonical 1m data and a data quality report; deterministic resampling for fixed windows.
 - Stage 4: /runs/new creates a run and redirects to /runs/{run_id}; UI shows progress and success state.
 - Stage 5: Kill switch blocks new run creation; health endpoint reports readiness; limits enforced.
+
+
 
 
 
