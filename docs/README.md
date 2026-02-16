@@ -14,7 +14,7 @@
 - [Verification Gates](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)
 - [Service Lifecycle](./05_RUNBOOK_DEV_WORKFLOW.md#service-lifecycle)
 - [Troubleshooting Matrix](./05_RUNBOOK_DEV_WORKFLOW.md#troubleshooting-matrix)
-- [Before Opening A PR](./05_RUNBOOK_DEV_WORKFLOW.md#before-opening-a-pr)
+- [Before Opening A PR](./05_RUNBOOK_DEV_WORKFLOW.md#pre-pr-checklist)
 
 ## Detailed Specs And Historical Context
 

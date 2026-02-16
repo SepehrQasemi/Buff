@@ -1,5 +1,13 @@
 ﻿# PRODUCT_SPEC — Buff (TradingView-like Strategy Lab)
 
+## Normative Authority
+Runtime behavior is normatively defined by:
+- [02_ARCHITECTURE_BOUNDARIES.md](./02_ARCHITECTURE_BOUNDARIES.md)
+- [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md)
+
+If this document conflicts with either normative document, the normative document takes precedence.
+This file is descriptive and is not authoritative for canonical error codes or HTTP status mapping.
+
 ## Product Identity
 Buff is a TradingView-like **strategy analysis lab**: a chart-first UI for visualizing signals, trades, and outcomes of strategies on historical data and paper runs.
 Buff is **read-only** in the UI: it does not provide Buy/Sell buttons, broker connections, or live execution controls.
@@ -74,5 +82,4 @@ A user can:
    - each trade outcome
    - summary metrics and timeline events
 3) Add a new indicator or strategy using guided chatbot steps, validate it, and see it appear in UI.
-
 

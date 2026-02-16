@@ -1,5 +1,12 @@
 ﻿# UI_SPEC — Buff TradingView-like UI (Read-only)
 
+## Runtime Contract Alignment
+- UI MUST render the API error envelope exactly as returned.
+- UI MUST NOT transform error codes.
+- UI MUST NOT infer execution state.
+- UI is artifact-driven and read-only.
+- Canonical contract reference: [03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema](./03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema)
+
 ## North Star
 A chart-first experience like TradingView, focused on:
 - Visualizing strategy signals and trades
@@ -189,5 +196,4 @@ UI must not invent trades; it must plot from artifacts.
 - Fast: avoid blocking UI on heavy computation; show progress
 - Deterministic: if run_id loaded, UI must render same view every time
 - Error clarity: show actionable messages, not stack traces
-
 
