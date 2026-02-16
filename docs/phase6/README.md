@@ -63,4 +63,4 @@ node apps/web/scripts/ui-smoke.mjs
 - [SPEC.md](SPEC.md): Execution spec, stages, UX, and milestone demos.
 - [CONTRACTS.md](CONTRACTS.md): Run builder, data, storage, and API contracts.
 
-Current status: Phase-6 not started (Stage 1 next).
+Status reference: [Current Status](../04_ROADMAP_AND_DELIVERY_CHECKLIST.md#current-status).

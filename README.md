@@ -70,6 +70,14 @@ Boundary:
 - `PROJECT_SCOPE.md`
 - `EXECUTION_SAFETY.md`
 
+## Docs (Canonical)
+
+- `docs/01_PRODUCT_OVERVIEW_AND_JOURNEYS.md`
+- `docs/02_ARCHITECTURE_BOUNDARIES.md`
+- `docs/03_CONTRACTS_AND_SCHEMAS.md`
+- `docs/04_ROADMAP_AND_DELIVERY_CHECKLIST.md`
+- `docs/05_RUNBOOK_DEV_WORKFLOW.md`
+
 ## Product Specs
 
 Phase-0 product/spec index: [docs/README.md](docs/README.md)
@@ -78,7 +86,7 @@ Phase-0 product/spec index: [docs/README.md](docs/README.md)
 
 - Phase-6: Make Buff Actually Usable (`docs/phase6/README.md`).
 
-Current status: Phase-1 verification + release gate pass; Phase-6 not started (Stage 1 next).
+Status reference: `docs/04_ROADMAP_AND_DELIVERY_CHECKLIST.md#current-status`.
 
 ## Quickstart
 
