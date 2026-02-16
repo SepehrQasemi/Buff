@@ -66,7 +66,7 @@ Note: Run `python scripts/verify_phase1.py --with-services` without output pipin
 - [ ] Validation artifact/status record written and stored.
 
 **STRATEGY_CONTRACT**
-- [ ] Required files: `user_strategies/<id>/strategy.yaml` + `strategy.py` (README/tests recommended).
+- [ ] Mandatory files: `user_strategies/<id>/strategy.yaml` + `strategy.py` (README/tests recommended).
 - [ ] `strategy.yaml` includes id/name/version/author/category/warmup_bars/inputs/params/outputs.
 - [ ] Inputs declare required series + indicator IDs.
 - [ ] Outputs declare intents list + provides_confidence.
@@ -79,7 +79,7 @@ Note: Run `python scripts/verify_phase1.py --with-services` without output pipin
 - [ ] UI shows strategies only after validation; schema drives parameter forms; errors link to chatbot flow.
 
 **INDICATOR_CONTRACT**
-- [ ] Required files: `user_indicators/<id>/indicator.yaml` + `indicator.py` (tests recommended).
+- [ ] Mandatory files: `user_indicators/<id>/indicator.yaml` + `indicator.py` (tests recommended).
 - [ ] `indicator.yaml` includes id/name/version/category/inputs/outputs/params/warmup_bars/nan_policy.
 - [ ] `indicator.py` implements `get_schema()` + `compute(ctx)` returning output series keys.
 - [ ] Causal: no future access in computations.
