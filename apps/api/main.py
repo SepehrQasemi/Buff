@@ -398,9 +398,10 @@ async def create_run_endpoint(request: Request) -> JSONResponse:
 
 @router.get("/runs/{run_id}/manifest")
 def run_manifest(run_id: str) -> JSONResponse:
-    runs_root = get_runs_root()
-    if runs_root is None:
-        return error_response(404, "RUN_NOT_FOUND", "Run not found")
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        return readiness
+    runs_root, _ = readiness
     invalid = _is_invalid_component(run_id)
     if invalid:
         return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
@@ -430,9 +431,10 @@ def run_manifest(run_id: str) -> JSONResponse:
 
 @router.get("/runs/{run_id}/artifacts/{name}", response_model=None)
 def run_artifact(run_id: str, name: str):
-    runs_root = get_runs_root()
-    if runs_root is None:
-        return error_response(404, "RUN_NOT_FOUND", "Run not found")
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        return readiness
+    runs_root, _ = readiness
     if _is_invalid_component(run_id):
         return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
     if _is_invalid_component(name):
