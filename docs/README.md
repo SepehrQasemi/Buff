@@ -1,5 +1,13 @@
 # Buff Phase-0 Product Specs
 
+## Canonical Docs (PR1)
+
+- [01_PRODUCT_OVERVIEW_AND_JOURNEYS.md](./01_PRODUCT_OVERVIEW_AND_JOURNEYS.md)
+- [02_ARCHITECTURE_BOUNDARIES.md](./02_ARCHITECTURE_BOUNDARIES.md)
+- [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md)
+- [04_ROADMAP_AND_DELIVERY_CHECKLIST.md](./04_ROADMAP_AND_DELIVERY_CHECKLIST.md)
+- [05_RUNBOOK_DEV_WORKFLOW.md](./05_RUNBOOK_DEV_WORKFLOW.md)
+
 - [PRODUCT_SPEC.md](PRODUCT_SPEC.md): Product identity, scope, non-goals, and usability definition.
 - [UI_SPEC.md](UI_SPEC.md): Read-only TradingView-like UI pages, components, and behaviors.
 - [STRATEGY_PACK_SPEC.md](STRATEGY_PACK_SPEC.md): Built-in 20-strategy catalog requirements and categories.
@@ -23,4 +31,4 @@
 
 - [phase6/README.md](phase6/README.md): Phase-6 plan to make Buff actually usable.
 
-Current status: Phase-1 verification + release gate pass; Phase-6 not started (Stage 1 next).
+Status reference: [Current Status](./04_ROADMAP_AND_DELIVERY_CHECKLIST.md#current-status).
