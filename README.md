@@ -22,6 +22,7 @@ Invariants:
 
 Non-goals:
 - No prediction.
+- Buff does not forecast future prices or claim directional certainty.
 - Live broker execution in current scope.
 - Strategy invention in UI.
 - Multi-tenant hosted accounts in current scope.
@@ -40,8 +41,10 @@ Roadmap and current status:
 ```bash
 python -m pip install -e ".[dev]"
 npm --prefix apps/web install
-python scripts/verify_phase1.py --with-services --real-smoke
 ```
+
+Run verification from:
+- `docs/05_RUNBOOK_DEV_WORKFLOW.md#verification-gates`
 
 For full run/verify/recover workflows, use the canonical runbook:
 - `docs/05_RUNBOOK_DEV_WORKFLOW.md`

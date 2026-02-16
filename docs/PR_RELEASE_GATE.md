@@ -7,19 +7,18 @@
 - Allows preflight to pass when local `main` is ahead of `origin/main` (ancestor check).
 - Adds CI workflow to run the strict gate and upload the report artifact.
 
-## Local Usage
+## Canonical Command Source
 
-```bash
-python -m tools.release_preflight --timeout-seconds 900
-python -m tools.release_gate --strict --timeout-seconds 900
-```
+Use the runbook for all executable commands:
+- [05_RUNBOOK_DEV_WORKFLOW.md#verification-gates](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)
+- [05_RUNBOOK_DEV_WORKFLOW.md#pre-pr-checklist](./05_RUNBOOK_DEV_WORKFLOW.md#pre-pr-checklist)
 
 ## CI
 
 Workflow: `release-gate.yml`
 
 - Installs dependencies using `uv sync --frozen --extra dev`
-- Runs `python -m tools.release_gate --strict`
+- Runs the strict release gate workflow step defined in CI config.
 - Uploads `reports/release_gate_report.json` as an artifact
 
 ## Safety Properties
