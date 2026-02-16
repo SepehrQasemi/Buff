@@ -17,7 +17,7 @@ from buff.data.resample import resample_ohlcv
 from .canonical import to_canonical_bytes, write_canonical_json, write_canonical_jsonl
 from .engine import EngineConfig, run_engine
 from .numeric import NonFiniteNumberError
-from .paths import ensure_runs_root, is_within_root
+from .paths import RUNS_ROOT_ENV, get_runs_root, is_within_root
 from .registry import compute_inputs_hash, lock_registry, upsert_registry_entry
 
 ENGINE_VERSION = "phase6-1.0.0"
@@ -148,10 +148,47 @@ def create_run(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
 
 
 def _resolve_runs_root() -> Path:
+    runs_root = get_runs_root()
+    if runs_root is None:
+        raise RunBuilderError(
+            "RUNS_ROOT_UNSET",
+            "RUNS_ROOT is not set",
+            503,
+            {"env": RUNS_ROOT_ENV},
+        )
+    if not runs_root.exists():
+        raise RunBuilderError(
+            "RUNS_ROOT_MISSING",
+            "RUNS_ROOT does not exist",
+            503,
+            {"path": str(runs_root)},
+        )
+    if not runs_root.is_dir():
+        raise RunBuilderError(
+            "RUNS_ROOT_INVALID",
+            "RUNS_ROOT is not a directory",
+            503,
+            {"path": str(runs_root)},
+        )
+    writable, error = _check_runs_root_writable(runs_root)
+    if not writable:
+        raise RunBuilderError(
+            "RUNS_ROOT_NOT_WRITABLE",
+            "RUNS_ROOT is not writable",
+            503,
+            {"path": str(runs_root), "error": error or "permission denied"},
+        )
+    return runs_root
+
+
+def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
+    probe = runs_root / f".buff_write_check_{os.getpid()}"
     try:
-        return ensure_runs_root()
-    except RuntimeError:
-        raise RunBuilderError("RUNS_ROOT_UNSET", "RUNS_ROOT is not set", 500)
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink()
+    except OSError as exc:
+        return False, str(exc)
+    return True, None
 
 
 def _normalize_request(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:

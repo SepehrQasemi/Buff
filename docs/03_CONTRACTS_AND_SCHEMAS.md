@@ -39,7 +39,7 @@ Canonical names below are based on runtime responses in `apps/api/main.py` and c
 
 | Canonical Code | Aliases | HTTP Status | When It Happens | Client Action (Recovery Hint) |
 | --- | --- | --- | --- | --- |
-| `RUNS_ROOT_UNSET` | none | `503` | `RUNS_ROOT` env is missing. Verified on `GET /api/v1/ready` and `GET /api/v1/runs` paths. Exception: `POST /api/v1/runs` (JSON body path through `run_builder`) may return `500` in current runtime. | Set `RUNS_ROOT` to a repo-local directory and restart services |
+| `RUNS_ROOT_UNSET` | none | `503` | `RUNS_ROOT` env is missing. Verified on `GET /api/v1/ready`, `GET /api/v1/runs`, and `POST /api/v1/runs`. | Set `RUNS_ROOT` to a repo-local directory and restart services |
 | `RUNS_ROOT_MISSING` | none | `503` | `RUNS_ROOT` path does not exist | Create the directory or point env to a valid path |
 | `RUNS_ROOT_INVALID` | none | `503` | `RUNS_ROOT` exists but is not a directory | Point `RUNS_ROOT` to a directory |
 | `RUNS_ROOT_NOT_WRITABLE` | none | `503` | Process cannot write to `RUNS_ROOT` | Fix permissions and retry |

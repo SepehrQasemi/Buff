@@ -178,6 +178,7 @@ def test_run_create_with_upload(monkeypatch):
 
 def test_run_idempotent(monkeypatch, tmp_path):
     runs_root = tmp_path / "runs"
+    runs_root.mkdir()
     monkeypatch.setenv("RUNS_ROOT", str(runs_root))
 
     client = TestClient(app)
@@ -197,6 +198,7 @@ def test_run_idempotent(monkeypatch, tmp_path):
 
 def test_run_conflict(monkeypatch, tmp_path):
     runs_root = tmp_path / "runs"
+    runs_root.mkdir()
     monkeypatch.setenv("RUNS_ROOT", str(runs_root))
 
     client = TestClient(app)
@@ -211,6 +213,8 @@ def test_run_conflict(monkeypatch, tmp_path):
 def test_determinism_across_runs(monkeypatch, tmp_path):
     runs_root_a = tmp_path / "runs_a"
     runs_root_b = tmp_path / "runs_b"
+    runs_root_a.mkdir()
+    runs_root_b.mkdir()
 
     client = TestClient(app)
 
@@ -232,6 +236,7 @@ def test_determinism_across_runs(monkeypatch, tmp_path):
 
 def test_corrupted_run_detection(monkeypatch, tmp_path):
     runs_root = tmp_path / "runs"
+    runs_root.mkdir()
     monkeypatch.setenv("RUNS_ROOT", str(runs_root))
 
     client = TestClient(app)
@@ -253,6 +258,7 @@ def test_corrupted_run_detection(monkeypatch, tmp_path):
 
 def test_metrics_missing_error_code(monkeypatch, tmp_path):
     runs_root = tmp_path / "runs"
+    runs_root.mkdir()
     monkeypatch.setenv("RUNS_ROOT", str(runs_root))
 
     client = TestClient(app)
@@ -316,6 +322,8 @@ def test_ma_cross_produces_trade(phase6_runs):
 def test_numeric_policy_rounding_and_determinism(monkeypatch, tmp_path):
     runs_root_a = tmp_path / "runs_a"
     runs_root_b = tmp_path / "runs_b"
+    runs_root_a.mkdir()
+    runs_root_b.mkdir()
 
     client = TestClient(app)
     payload = _payload(slippage_bps=12.3456789)
