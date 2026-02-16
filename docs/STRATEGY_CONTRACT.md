@@ -7,6 +7,10 @@ Strategies must be:
 - side-effect free
 - purely decision logic (no execution, no I/O)
 
+## Contract Alignment
+- All numeric handling MUST align with deterministic backend policy.
+- Validation errors MUST propagate as canonical error codes defined in [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+- This specification MUST NOT override runtime contract enforcement.
 ## Strategy Lifecycle
 A strategy is a plugin with:
 - metadata (name, version, author)
@@ -84,3 +88,4 @@ A strategy is considered loadable only if:
 - strategies appear in Strategy dropdown only after validation passes
 - parameter forms are generated from schema
 - errors show actionable guidance and link to chatbot help flow
+

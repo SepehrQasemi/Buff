@@ -9,6 +9,14 @@ The chatbot helps users:
 
 Chatbot is an assistant, not an execution controller.
 
+## Contract And Safety Constraints
+- Chatbot responses are advisory only and MUST NOT be treated as execution commands.
+- Chatbot MUST NOT create runs through any path that bypasses runtime validation.
+- Any run creation triggered from chatbot flows MUST call the same validated API endpoints used by the UI (`/api/v1/runs` contract path).
+- Chatbot MUST NOT initiate trade execution or broker actions.
+- Chatbot output MUST NOT mutate run artifacts directly.
+- Error handling and payload expectations MUST align with [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+
 ## Modes
 ### Draft Mode (Default)
 Chatbot outputs:
@@ -100,3 +108,4 @@ When user asks “I want to add X” the chatbot must respond with:
 2) exact fields to fill
 3) exact commands to run
 4) what success looks like in UI
+

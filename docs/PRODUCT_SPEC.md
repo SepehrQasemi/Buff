@@ -1,4 +1,13 @@
-Ôªø# PRODUCT_SPEC ‚Äî Buff (TradingView-like Strategy Lab)
+# PRODUCT_SPEC ó Buff (TradingView-like Strategy Lab)
+
+## Normative Authority
+Runtime behavior is normatively defined by:
+- `docs/02_ARCHITECTURE_BOUNDARIES.md`
+- `docs/03_CONTRACTS_AND_SCHEMAS.md`
+
+Precedence:
+- If this file conflicts with those contract/boundary documents, those documents take precedence.
+- This file is descriptive and MUST NOT be treated as authoritative for error-code or HTTP-status mapping.
 
 ## Product Identity
 Buff is a TradingView-like **strategy analysis lab**: a chart-first UI for visualizing signals, trades, and outcomes of strategies on historical data and paper runs.
@@ -9,7 +18,8 @@ Buff is **read-only** in the UI: it does not provide Buy/Sell buttons, broker co
 The official roadmap and locked product decisions live in:
 - `docs/PRODUCT_ROADMAP.md`
 - `docs/USER_JOURNEY.md`
-- `docs/ARCHITECTURE_BOUNDARIES.md`
+- `docs/02_ARCHITECTURE_BOUNDARIES.md`
+- `docs/03_CONTRACTS_AND_SCHEMAS.md`
 
 If any document conflicts with these boundaries, the boundaries win.
 
@@ -58,7 +68,7 @@ If any document conflicts with these boundaries, the boundaries win.
 ## Explicit Non-goals
 - No buy/sell buttons or trading execution from UI.
 - No broker connections or live trading controls in UI.
-- No ‚ÄúAI that guarantees profits‚Äù or ‚Äúsignals marketplace‚Äù.
+- No ìAI that guarantees profitsî or ìsignals marketplaceî.
 - No multi-tenant SaaS or hosted user accounts (v1).
 
 ## Product Principles (Non-negotiable)
@@ -66,7 +76,7 @@ If any document conflicts with these boundaries, the boundaries win.
 - Deterministic, explainable outputs; every plotted trade/outcome has traceable provenance.
 - Extensibility must be safe: user code cannot bypass core contracts, risk safety caps, or artifacts integrity.
 
-## Definition of ‚ÄúUsable‚Äù
+## Definition of ìUsableî
 A user can:
 1) Open the UI and load data / runs.
 2) Select a built-in strategy, tune parameters, run, and see:
@@ -74,5 +84,9 @@ A user can:
    - each trade outcome
    - summary metrics and timeline events
 3) Add a new indicator or strategy using guided chatbot steps, validate it, and see it appear in UI.
+
+
+
+
 
 

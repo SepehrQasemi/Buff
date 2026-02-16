@@ -8,6 +8,10 @@ Risk impacts:
 - warnings and timeline events
 - trade filtering in analysis (e.g., “blocked by risk”)
 
+## Contract Alignment
+- All numeric handling MUST align with deterministic backend policy.
+- Validation errors MUST propagate as canonical error codes defined in [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+- This specification MUST NOT override runtime contract enforcement.
 ## Two-layer Risk Model (Recommended)
 ### Layer 1: Hard Safety Caps (Non-negotiable)
 These are always enforced and cannot be disabled by user customization:
@@ -68,3 +72,4 @@ When risk blocks an action, artifacts must record:
 - risk verdict (ALLOW/BLOCK)
 - rule id and reason
 - risk level in effect
+

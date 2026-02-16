@@ -15,7 +15,7 @@ All future implementation work (including AI-generated changes) must treat `/doc
 ## Definition, Goals, Non-Goals
 - Definition: Buff is a modular crypto trading system intended for real personal use with real money in the future. (Evidence: `README.md#L6-L6`)
 - Phase-0 product scope is a TradingView-like strategy analysis lab with a read-only UI (no buy/sell, no broker connections, no live execution controls). (Evidence: `docs/PRODUCT_SPEC.md#L1-L5`, `README.md#L6-L8`)
-- Strategy invention is disallowed; users define indicators/strategies and the system only executes registered, approved strategies through a controlled pipeline. (Evidence: `README.md#L9-L10`)
+- Strategy invention is disallowed; users define indicators/strategies and the system only evaluates registered, approved strategies in a deterministic artifact pipeline, and live trade execution is out of Phase-0 scope. (Evidence: `README.md#L9-L10`)
 - Goals: user-defined indicators/strategies, TradingView-like strategy analysis lab (chart-first, visual signals/trades/outcomes), read-only UI (no buy/sell/broker/live controls), menu-based strategy selection (no invention), deterministic/auditable pipeline, canonical 1m ingest with deterministic resampling. (Evidence: `PROJECT_SCOPE.md#L3-L9`)
 - Non-goals: price prediction/forecasting, autonomous strategy generation by AI/LLMs (chatbot provides templates based on user-defined rules), direct UI-triggered order placement or live execution controls, broker connections or live trading controls in UI, multi-tenant SaaS or hosted user accounts (v1), hidden execution logic, signal selling/trading advice, live trading (out of Phase-0 product scope; future only), guaranteed profit claims. (Evidence: `PROJECT_SCOPE.md#L11-L17`, `README.md#L30-L36`)
 
@@ -100,3 +100,4 @@ Phase-0 is complete and locked.
 Product scope, UI behavior, extensibility rules, risk model, and AI assistant roles are frozen as specified under `/docs`.
 
 All subsequent work must be treated as Phase-1+ implementation and MUST NOT redefine Phase-0 decisions.
+

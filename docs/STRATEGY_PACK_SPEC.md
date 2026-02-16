@@ -7,6 +7,10 @@ Provide 20 well-known, rule-based strategies as first-class built-ins:
 - Testable
 - Visualizable (entries/exits and outcomes)
 
+## Contract Alignment
+- All numeric handling MUST align with deterministic backend policy.
+- Validation errors MUST propagate as canonical error codes defined in [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md).
+- This specification MUST NOT override runtime contract enforcement.
 ## Rules for Inclusion
 Each built-in strategy must have:
 - Stable name and semantic version
@@ -73,3 +77,4 @@ Optionally:
     - trade list
     - metrics summary
     - timeline events
+
