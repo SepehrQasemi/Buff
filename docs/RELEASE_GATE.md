@@ -1,37 +1,17 @@
-# Release Gate (Local)
+# Release Gate (Deprecated Pointer)
 
-`tools.release_gate` runs a local release gate with fail-closed behavior and a JSON report.
+Canonical source:
+- [05_RUNBOOK_DEV_WORKFLOW.md](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)
 
-Command:
+Use this command from the runbook:
+- `python -m tools.release_gate --strict --timeout-seconds 900`
 
-```bash
-python -m tools.release_gate --strict --timeout-seconds 900
-```
+Related sections:
+- [Before Opening A PR](./05_RUNBOOK_DEV_WORKFLOW.md#before-opening-a-pr)
+- [Troubleshooting Matrix](./05_RUNBOOK_DEV_WORKFLOW.md#troubleshooting-matrix)
 
-## Checks
-- `ruff check .`
-- `ruff format --check .`
-- `pytest -q`
-- Optional MVP smoke (`src.tools.mvp_smoke`) when `--with-network-smoke` is enabled
+Why this file is thin:
+- PR3 moved release-gate execution and recovery guidance to a single runbook source.
 
-## Flags
-- `--strict`: stop at the first failing step (fast-fail).
-- `--with-network-smoke`: run the MVP smoke test (requires network access).
-- `--timeout-seconds`: per-step timeout for subprocess commands (default: 900).
-
-## Outputs
-- Report: `reports/release_gate_report.json`
-- High-level fields include:
-  - `timestamp_utc`, `finished_at_utc`
-  - `strict`, `with_network_smoke`
-  - `git_branch`, `git_sha`
-  - `python_version`, `ruff_version`, `pytest_version`
-  - `steps` (name, status, duration, details)
-  - `overall_status`
-
-## Troubleshooting
-- Timeout: increase `--timeout-seconds` or investigate the stalled step.
-- Ruff/format failures: run `python -m ruff format .` and recheck.
-- Pytest failures: run `python -m pytest -q` and fix failing tests.
-- Network smoke failures: ensure outbound HTTPS access to `fapi.binance.com` or keep
-  `--with-network-smoke` disabled.
+Historical note:
+- Prior details on checks/flags/outputs are preserved in git history and command help output.

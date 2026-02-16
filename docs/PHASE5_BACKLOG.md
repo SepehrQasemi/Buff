@@ -1,8 +1,8 @@
-Ôªø# PHASE5_BACKLOG ‚Äî Phase-3/4 Readiness + Phase-5 Execution Backlog
+# PHASE5_BACKLOG ó Phase-3/4 Readiness + Phase-5 Execution Backlog
 Date: 2026-02-10
 
 **Gate / Preconditions**
-Note: Run `python scripts/verify_phase1.py --with-services` without output piping in PowerShell; pipelines can mask the true exit code.
+Note: Run `[runbook Phase-1 gate](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)` without output piping in PowerShell; pipelines can mask the true exit code.
 
 **Acceptance Criteria Checklists**
 
@@ -149,11 +149,11 @@ Phase-5 PRs may proceed in parallel as long as UI stays read-only and artifact-d
 - [x] Review Mode expanded checks (warmup/NaN + basic overfitting smells). Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
 - [x] Explain Trade references artifacts (markers/decisions/trades) and has an integration test. Suggested files: `apps/api/chat.py`, `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
 - [x] Integration tests for all Phase-4 modes exist and pass. Suggested files: `tests/integration/test_chatbot_api_phase4.py`. Verify: `pytest -q tests/integration/test_chatbot_api_phase4.py`.
-- [x] UI shows all modes in AI Chat tab and each mode returns structured output. Suggested files: `apps/web/pages/runs/[id].js`, `apps/api/chat.py`. Verify: `python scripts/verify_phase1.py --with-services` (open `/runs/phase1_demo` and confirm all modes render and return structured sections).
+- [x] UI shows all modes in AI Chat tab and each mode returns structured output. Suggested files: `apps/web/pages/runs/[id].js`, `apps/api/chat.py`. Verify: `[runbook Phase-1 gate](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)` (open `/runs/phase1_demo` and confirm all modes render and return structured sections).
 
 **Verification Scripts / Tests (Phase-1/Phase-2 relevant)**
 Recommended:
-- `python scripts/verify_phase1.py --with-services`
+- `[runbook Phase-1 gate](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)`
 - `node apps/web/scripts/ui-smoke.mjs`
 - `node apps/web/scripts/smoke.mjs`
 - `python scripts/verify_m1.py`
@@ -162,7 +162,7 @@ Recommended:
 - `pytest -q`
 
 Latest run (2026-02-10):
-- `python scripts/verify_phase1.py --with-services` -> PASS
+- `[runbook Phase-1 gate](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)` -> PASS
 - `python -m ruff check .` -> PASS
 - `python -m ruff format --check .` -> PASS
 - `pytest -q` -> PASS (511 passed)
@@ -176,7 +176,7 @@ Latest run (2026-02-10):
 
 **Phase-5 PR Execution Plan**
 PR order rationale: stabilize data fetching and paging (PR-01/PR-02) before adding compare flows to reduce UI regression risk and ensure baseline performance. Compare features build on reliable artifact loading, while docs follow feature shape to avoid churn.
-Status: PR-01 through PR-08 merged (PRs #144‚Äì#151). Hygiene PR #153 merged.
+Status: PR-01 through PR-08 merged (PRs #144ñ#151). Hygiene PR #153 merged.
 Order: PR-01 -> PR-02 -> PR-03 -> PR-04 -> PR-05 -> PR-06 -> PR-07 -> PR-08.
 
 **Performance / Smooth UX**
@@ -289,7 +289,7 @@ Does NOT change:
 - Any non-metrics tabs or chart behavior.
 Acceptance criteria:
 - [ ] If `metrics.time_breakdown` exists, render a table with period, total_return, max_drawdown, win_rate, and num_trades when present.
-- [ ] If the field is missing, show a clear ‚Äúnot available‚Äù message.
+- [ ] If the field is missing, show a clear ìnot availableî message.
 - [ ] All values are displayed exactly as provided by artifacts.
 Target files:
 - `apps/web/pages/runs/[id].js`
@@ -376,9 +376,11 @@ Before opening a Phase-5 PR:
 - [ ] Run `python -m ruff check .`.
 - [ ] Run `python -m ruff format --check .`.
 - [ ] Run `pytest -q`.
-- [ ] Run `python scripts/verify_phase1.py --with-services`.
+- [ ] Run `[runbook Phase-1 gate](./05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)`.
 
 After merging a Phase-5 PR:
 - [ ] Start API/UI and open `/runs/phase1_demo` to confirm artifacts render.
 - [ ] Verify metrics, timeline, and trades render with no UI recomputation.
 - [ ] Verify compare view or new UI features load without API errors.
+
+
