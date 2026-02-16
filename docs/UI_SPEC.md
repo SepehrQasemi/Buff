@@ -164,6 +164,10 @@ Error handling:
   - parameters schema
 
 ## Data Sources for UI (Truth Sources)
+Canonical contract reference:
+- [03_CONTRACTS_AND_SCHEMAS.md#artifact-contract-matrix](./03_CONTRACTS_AND_SCHEMAS.md#artifact-contract-matrix)
+- [03_CONTRACTS_AND_SCHEMAS.md#error-code-registry](./03_CONTRACTS_AND_SCHEMAS.md#error-code-registry)
+
 UI reads:
 - Market data snapshot/manifest (or configured data source)
 - Run artifacts:
@@ -185,6 +189,5 @@ UI must not invent trades; it must plot from artifacts.
 - Fast: avoid blocking UI on heavy computation; show progress
 - Deterministic: if run_id loaded, UI must render same view every time
 - Error clarity: show actionable messages, not stack traces
-
 
 

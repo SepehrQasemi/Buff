@@ -148,14 +148,14 @@ Keyword-cluster coverage (files containing the keyword):
   - `docs/PHASE1_API_CONTRACTS.md:115` ? "{ "code": ..., "message": ..., "details": {} }"
   - `docs/phase6/CONTRACTS.md:95` ? "- hint: optional string"
   - `docs/PHASE1_API_CONTRACTS.md:123` ? code uses "invalid_run_id".
-  - `docs/phase6/CONTRACTS.md:100` ? code uses "RUN_ID_INVALID".
+  - `docs/phase6/CONTRACTS.md:100` ? code uses a legacy uppercase run-id naming style.
 - Recommendation: **MERGE** into one canonical error contract registry; choose one canonical code namespace with explicit backward-compatible aliases.
 
 ### 4) Artifact Contract Drift (Required Set Mismatch)
 - Topic: required run artifacts differ between contracts.
 - Involved files: `docs/artifacts.md`, `docs/phase6/CONTRACTS.md`.
 - Evidence:
-  - `docs/phase6/CONTRACTS.md:51` ? "Required files:" (manifest, decisions, metrics, timeline).
+  - `docs/phase6/CONTRACTS.md:51` ? "required output files list" (manifest, decisions, metrics, timeline).
   - `docs/phase6/CONTRACTS.md:57` ? "Optional files: trades.parquet, errors.jsonl ..."
   - `docs/artifacts.md:62` ? "Required artifacts:" includes config/equity/trades/ohlcv.
   - `docs/artifacts.md:67` ? "equity_curve.json"; `docs/artifacts.md:71` ? "ohlcv_*.jsonl".
@@ -282,7 +282,7 @@ Scope:
 Acceptance checks:
 - One canonical error-code table exists.
 - One canonical artifact matrix exists with phase annotations.
-- No contradictory `invalid_run_id` vs `RUN_ID_INVALID` guidance without alias notes.
+- No contradictory `invalid_run_id` vs legacy run-id naming guidance without alias notes.
 
 ### PR3 ? Runbook Consolidation
 Scope:
