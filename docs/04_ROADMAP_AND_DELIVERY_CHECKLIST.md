@@ -1,5 +1,13 @@
 # Roadmap And Delivery Checklist
 
+## Stage Authority
+
+The active project stage is determined exclusively by:
+docs/PROJECT_STATE.md
+
+This roadmap defines possible stages only.
+It does NOT define the current stage.
+
 ## Table Of Contents
 - [Current Status](#current-status)
 - [Layers 1 To 6 Roadmap](#layers-1-to-6-roadmap)
