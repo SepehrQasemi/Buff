@@ -55,7 +55,7 @@ Harden documentation boundaries and enforce contract authority.
 - All normative constraints centralized
 - No broken links
 - Single-source operational command strings
-- CI green
+- CI green (latest runs for active workflows on `main` pass; historical runs from decommissioned workflows may remain in history)
 - release_gate PASS
 
 ## Active Constraints
