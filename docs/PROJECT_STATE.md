@@ -1,3 +1,18 @@
+﻿CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
+OPEN_PRS_TO_DECIDE=0
+LAST_MERGE_PR=199
+LAST_MERGE_SHA=535cfd7542144ec36fa9c1cb94f049af3bb43f2c
+
+NEXT_3_ACTIONS=
+- Keep docs PRs in Lane 1 (docs/** and README.md only).
+- Keep tooling changes in Lane 2 (scripts/**) and never mix them into docs-only PRs.
+- Refresh PROJECT_STATE after each merge with PR number and merge SHA.
+
+HOW_TO_REFRESH=
+- Run: python -m tools.release_gate --strict --timeout-seconds 900
+- Run: gh pr list --state open --limit 30
+- Update: LAST_MERGE_PR / LAST_MERGE_SHA / OPEN_PRS_TO_DECIDE / NEXT_3_ACTIONS
+
 # PROJECT_STATE
 
 ## Authoritative Notice
@@ -14,21 +29,11 @@ No other document determines current stage.
 ---
 
 ## Machine-Readable Snapshot
-CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
-LAST_MERGED_PR=#197 https://github.com/Buff-Trading-AI/Buff/pull/197
-LAST_MERGED_SHA=c28f4e80a199bd95f1ce730b81951ecf7d445fe9
-OPEN_PRS_TO_DECIDE=none
 
-NEXT_3_ACTIONS=
-1) Keep docs PRs in Lane 1 (docs/** and README.md only).
-2) Keep tooling changes in Lane 2 (scripts/**) and never mix them into docs-only PRs.
-3) Refresh PROJECT_STATE after each merge with PR number and merge SHA.
 
-HOW_TO_REFRESH=
-gh pr list --state open --limit 50
-gh pr view <number> --json number,url,state,mergedAt,mergeCommit,headRefName,baseRefName
-gh pr checks <number>
-git log -1 --oneline
+- Run: python -m tools.release_gate --strict --timeout-seconds 900
+- Run: gh pr list --state open --limit 30
+- Update: LAST_MERGE_PR / LAST_MERGE_SHA / OPEN_PRS_TO_DECIDE / NEXT_3_ACTIONS
 
 ---
 
@@ -81,4 +86,4 @@ S1 - Observability And Run Intelligence Layer
   - removed from local workspace.
 
 ## Last Verified Commit
-PR #197 - chore(tooling): add docs PR autopilot script
+
