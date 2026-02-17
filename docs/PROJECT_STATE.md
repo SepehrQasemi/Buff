@@ -15,11 +15,11 @@ No other document determines current stage.
 
 ## Machine-Readable Snapshot
 CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
-LAST_MERGED_PR=#195 https://github.com/Buff-Trading-AI/Buff/pull/195
-LAST_MERGED_SHA=ffefbfd54014973276b1eefe4c1132694d705018
+LAST_MERGED_PR=#196 https://github.com/Buff-Trading-AI/Buff/pull/196
+LAST_MERGED_SHA=ef639c7fff45e45bcbe01278c4ed761677353696
 
 NEXT_3_ACTIONS:
-1) Merge PR #196 after green checks and update this snapshot to that merge commit.
+1) Decide merge/close outcome for open docs-hardening PRs (#193 and #194).
 2) Keep docs PRs in Lane 1 (docs/** and README.md only).
 3) Keep tooling changes in Lane 2 (scripts/**) and never mix them into docs-only PRs.
 
@@ -80,4 +80,4 @@ S1 - Observability And Run Intelligence Layer
   - removed from local workspace.
 
 ## Last Verified Commit
-PR #195 - docs hardening and normalization
+PR #196 - docs: introduce authoritative PROJECT_STATE and system evolution roadmap
