@@ -54,7 +54,8 @@ Harden documentation boundaries and enforce contract authority.
 ## Definition of Done
 - All normative constraints centralized
 - No broken links
-- Single-source operational command strings
+- Single-source operational command strings: runnable command blocks and inline runnable commands appear only in `docs/05_RUNBOOK_DEV_WORKFLOW.md`.
+  Other docs may mention gate names but must link to the runbook.
 - CI green (latest runs for active workflows on `main` pass; historical runs from decommissioned workflows may remain in history)
 - release_gate PASS
 
