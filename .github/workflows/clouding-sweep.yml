@@ -1,0 +1,26 @@
+name: clouding-sweep
+# DECOMMISSIONED: historical invalid disable config caused workflow-file failures on main.
+# Keep this path as a valid manual-only no-op to prevent accidental push-trigger regressions.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type DECOMMISSIONED to run no-op"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  decommissioned-noop:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm decommissioned workflow
+        env:
+          CONFIRM: ${{ github.event.inputs.confirm }}
+        run: |
+          if [ "${CONFIRM}" != "DECOMMISSIONED" ]; then
+            echo "Confirmation mismatch; no action taken."
+          fi
+          echo "clouding-sweep is decommissioned."
