@@ -1,8 +1,8 @@
 ﻿CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
 OPEN_PRS_TO_DECIDE=0
-LAST_MERGE_PR=205
-LAST_MERGE_SHA=c38729470bee206c1fe4ba95a9bc94dfcba5a84d
-SNAPSHOT_SEMANTICS=Snapshot fields must match the most recent PR merged into main (GitHub mergedAt order) at update time.
+LAST_STAGE_RELEVANT_PR=207
+LAST_STAGE_RELEVANT_SHA=289a8f0fcd1856448e364a3d6c254dde974ea526
+SNAPSHOT_SEMANTICS=Stage snapshot fields track stage/governance-relevant merges, not every merge on main.
 
 NEXT_3_ACTIONS=
 - Keep docs PRs in Lane 1 (docs/** and README.md only).
@@ -12,7 +12,7 @@ NEXT_3_ACTIONS=
 HOW_TO_REFRESH=
 - Use canonical operational commands from docs/05_RUNBOOK_DEV_WORKFLOW.md.
 - Query live PR state from GitHub before refreshing this snapshot.
-- Update: LAST_MERGE_PR / LAST_MERGE_SHA / OPEN_PRS_TO_DECIDE / NEXT_3_ACTIONS
+- Update: LAST_STAGE_RELEVANT_PR / LAST_STAGE_RELEVANT_SHA / OPEN_PRS_TO_DECIDE / NEXT_3_ACTIONS
 
 # PROJECT_STATE
 
@@ -34,8 +34,8 @@ No other document determines current stage.
 
 CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
 OPEN_PRS_TO_DECIDE=0
-LAST_MERGE_PR=205
-LAST_MERGE_SHA=c38729470bee206c1fe4ba95a9bc94dfcba5a84d
+LAST_STAGE_RELEVANT_PR=207
+LAST_STAGE_RELEVANT_SHA=289a8f0fcd1856448e364a3d6c254dde974ea526
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
