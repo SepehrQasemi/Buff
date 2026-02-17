@@ -8,6 +8,14 @@ docs/PROJECT_STATE.md
 This roadmap defines possible stages only.
 It does NOT define the current stage.
 
+## Solo Mode
+- Two-lane workflow is required.
+- Lane 1 (DocsOnly): `docs/**` and `README.md`.
+- Lane 2 (Tooling): `scripts/**` and automation.
+- Local development rules are warn-only.
+- PR gate rules are enforced.
+- Untracked `scripts/**` files are allowed locally, but before a DocsOnly PR merge they must be committed in Lane 2 or removed locally.
+
 ## Table Of Contents
 - [Current Status](#current-status)
 - [Layers 1 To 6 Roadmap](#layers-1-to-6-roadmap)
