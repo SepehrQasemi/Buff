@@ -4,6 +4,7 @@ import json
 import os
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -21,9 +22,26 @@ REQUIRED_ARTIFACTS = (
     "config.json",
     "metrics.json",
     "equity_curve.json",
-    "trades.jsonl",
-    "timeline.json",
     "decision_records.jsonl",
+)
+
+TIMELINE_ARTIFACTS = (
+    "timeline.json",
+    "timeline_events.json",
+    "risk_timeline.json",
+    "selector_trace.json",
+)
+
+OHLCV_PRIMARY_ARTIFACTS = (
+    "ohlcv.parquet",
+    "ohlcv_1m.parquet",
+    "ohlcv.jsonl",
+    "ohlcv_1m.jsonl",
+)
+
+JSON_VALIDATION_ARTIFACTS = (
+    "manifest.json",
+    "metrics.json",
 )
 
 
@@ -115,11 +133,11 @@ def _load_registry_payload(runs_root: Path) -> dict[str, Any]:
     return payload
 
 
-def _artifact_status(run_dir: Path) -> tuple[str, list[str]]:
-    missing = [name for name in REQUIRED_ARTIFACTS if not (run_dir / name).exists()]
-    if missing:
-        return "CORRUPTED", missing
-    return "OK", []
+def _utc_now_iso() -> str:
+    text = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    if text.endswith("+00:00"):
+        return text[:-6] + "Z"
+    return text
 
 
 def _manifest_path(run_id: str) -> str:
@@ -131,12 +149,145 @@ def _artifacts_present(run_dir: Path) -> list[str]:
     return sorted(items)
 
 
-def build_registry_entry(run_dir: Path, manifest: dict[str, Any]) -> dict[str, Any]:
-    run_id = str(manifest.get("run_id") or run_dir.name)
-    status, missing = _artifact_status(run_dir)
+def _resolve_trades_artifact(artifacts_present: set[str]) -> str | None:
+    if "trades.parquet" in artifacts_present:
+        return "trades.parquet"
+    if "trades.jsonl" in artifacts_present:
+        return "trades.jsonl"
+    return None
+
+
+def _resolve_ohlcv_artifact(run_dir: Path, artifacts_present: set[str]) -> str | None:
+    for name in OHLCV_PRIMARY_ARTIFACTS:
+        if name in artifacts_present:
+            return name
+    for name in sorted(artifacts_present):
+        if name.startswith("ohlcv_") and (name.endswith(".parquet") or name.endswith(".jsonl")):
+            return name
+    for candidate in sorted(run_dir.glob("ohlcv_*.parquet")):
+        if candidate.is_file():
+            return candidate.name
+    for candidate in sorted(run_dir.glob("ohlcv_*.jsonl")):
+        if candidate.is_file():
+            return candidate.name
+    return None
+
+
+def _resolve_timeline_artifact(artifacts_present: set[str]) -> str | None:
+    for name in TIMELINE_ARTIFACTS:
+        if name in artifacts_present:
+            return name
+    return None
+
+
+def _json_parse_status(path: Path) -> tuple[str, bool]:
+    if not path.exists():
+        return "missing", False
+    try:
+        json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "invalid", True
+    return "ok", False
+
+
+def _evaluate_artifacts(run_dir: Path) -> dict[str, Any]:
+    artifacts_present = _artifacts_present(run_dir)
+    present_set = set(artifacts_present)
+
+    required_checks: dict[str, dict[str, Any]] = {}
+    missing_artifacts: list[str] = []
+    for name in REQUIRED_ARTIFACTS:
+        status = "ok" if name in present_set else "missing"
+        required_checks[name] = {"status": status}
+        if status == "missing":
+            missing_artifacts.append(name)
+
+    trades_source = _resolve_trades_artifact(present_set)
+    required_checks["trades"] = {
+        "status": "ok" if trades_source else "missing",
+        "source": trades_source,
+    }
+    if trades_source is None:
+        missing_artifacts.append("trades")
+
+    ohlcv_source = _resolve_ohlcv_artifact(run_dir, present_set)
+    required_checks["ohlcv"] = {
+        "status": "ok" if ohlcv_source else "missing",
+        "source": ohlcv_source,
+    }
+    if ohlcv_source is None:
+        missing_artifacts.append("ohlcv")
+
+    timeline_source = _resolve_timeline_artifact(present_set)
+    if timeline_source is not None:
+        timeline_required_status = "artifact"
+    elif "decision_records.jsonl" in present_set:
+        timeline_required_status = "derived"
+    else:
+        timeline_required_status = "missing"
+    required_checks["timeline"] = {"status": timeline_required_status, "source": timeline_source}
+    if timeline_required_status == "missing":
+        missing_artifacts.append("timeline")
+
+    json_checks: dict[str, dict[str, Any]] = {}
+    invalid_artifacts: list[str] = []
+    for name in JSON_VALIDATION_ARTIFACTS:
+        status, invalid = _json_parse_status(run_dir / name)
+        json_checks[name] = {"status": status}
+        if invalid:
+            invalid_artifacts.append(name)
+        if status == "invalid" and name in required_checks:
+            required_checks[name]["status"] = "invalid"
+
+    if timeline_source is not None:
+        timeline_status, timeline_invalid = _json_parse_status(run_dir / timeline_source)
+        json_checks["timeline"] = {"status": timeline_status, "source": timeline_source}
+        if timeline_invalid:
+            invalid_artifacts.append(timeline_source)
+            required_checks["timeline"]["status"] = "invalid"
+    else:
+        json_checks["timeline"] = {"status": timeline_required_status, "source": timeline_source}
+
+    return {
+        "artifacts_present": artifacts_present,
+        "missing_artifacts": sorted(set(missing_artifacts)),
+        "invalid_artifacts": sorted(set(invalid_artifacts)),
+        "checks": {"required": required_checks, "json_parse": json_checks},
+    }
+
+
+def _derive_status_and_health(
+    missing_artifacts: list[str],
+    invalid_artifacts: list[str],
+    manifest: dict[str, Any],
+    *,
+    fallback_status: str | None = None,
+) -> tuple[str, str]:
+    if missing_artifacts:
+        return "CORRUPTED", "CORRUPTED"
     manifest_status = manifest.get("status")
-    if status != "CORRUPTED" and isinstance(manifest_status, str):
+    if isinstance(manifest_status, str) and manifest_status.strip():
         status = manifest_status
+    elif fallback_status and str(fallback_status).strip():
+        status = str(fallback_status)
+    else:
+        status = "OK"
+    if invalid_artifacts:
+        return status, "DEGRADED"
+    return status, "HEALTHY"
+
+
+def build_registry_entry(
+    run_dir: Path, manifest: dict[str, Any], *, fallback_status: str | None = None
+) -> dict[str, Any]:
+    run_id = str(manifest.get("run_id") or run_dir.name)
+    artifact_eval = _evaluate_artifacts(run_dir)
+    status, health = _derive_status_and_health(
+        artifact_eval["missing_artifacts"],
+        artifact_eval["invalid_artifacts"],
+        manifest,
+        fallback_status=fallback_status,
+    )
 
     entry = {
         "run_id": run_id,
@@ -144,14 +295,83 @@ def build_registry_entry(run_dir: Path, manifest: dict[str, Any]) -> dict[str, A
         "symbol": (manifest.get("data") or {}).get("symbol"),
         "timeframe": (manifest.get("data") or {}).get("timeframe"),
         "status": status,
+        "health": health,
         "manifest_path": _manifest_path(run_id),
-        "artifacts_present": _artifacts_present(run_dir),
+        "artifacts_present": artifact_eval["artifacts_present"],
         "inputs_hash": manifest.get("inputs_hash"),
         "strategy_id": (manifest.get("strategy") or {}).get("id"),
+        "missing_artifacts": artifact_eval["missing_artifacts"],
+        "invalid_artifacts": artifact_eval["invalid_artifacts"],
+        "checks": artifact_eval["checks"],
+        "last_verified_at": _utc_now_iso(),
     }
-    if missing:
-        entry["missing_artifacts"] = missing
     return entry
+
+
+def _load_manifest_from_run_dir(run_dir: Path) -> dict[str, Any]:
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _is_candidate_run_dir(run_dir: Path) -> bool:
+    if not run_dir.is_dir():
+        return False
+    name = run_dir.name.strip()
+    if not name or name.startswith("."):
+        return False
+    lowered = name.lower()
+    if lowered in {"inputs", "__pycache__", "tmp", "temp"}:
+        return False
+    if lowered.startswith("tmp_") or lowered.startswith("tmp-"):
+        return False
+    if lowered.startswith(".tmp_") or lowered.startswith(".tmp-"):
+        return False
+    has_sentinel = (run_dir / "manifest.json").exists() or (
+        run_dir / "decision_records.jsonl"
+    ).exists()
+    if not has_sentinel:
+        return False
+    return True
+
+
+def _missing_run_dir_entry(run_id: str, existing: dict[str, Any]) -> dict[str, Any]:
+    created_at = existing.get("created_at")
+    if not isinstance(created_at, str):
+        created_at = None
+    symbol = existing.get("symbol")
+    if not isinstance(symbol, str):
+        symbol = None
+    timeframe = existing.get("timeframe")
+    if not isinstance(timeframe, str):
+        timeframe = None
+    inputs_hash = existing.get("inputs_hash")
+    if not isinstance(inputs_hash, str):
+        inputs_hash = None
+    strategy_id = existing.get("strategy_id")
+    if not isinstance(strategy_id, str):
+        strategy_id = None
+    return {
+        "run_id": run_id,
+        "created_at": created_at,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "status": "CORRUPTED",
+        "health": "CORRUPTED",
+        "manifest_path": _manifest_path(run_id),
+        "artifacts_present": [],
+        "inputs_hash": inputs_hash,
+        "strategy_id": strategy_id,
+        "missing_artifacts": ["run_dir"],
+        "invalid_artifacts": [],
+        "checks": {"required": {"run_dir": {"status": "missing"}}, "json_parse": {}},
+        "last_verified_at": _utc_now_iso(),
+    }
 
 
 def upsert_registry_entry(
@@ -171,36 +391,66 @@ def upsert_registry_entry(
     if not replaced:
         runs.append(entry)
     registry["runs"] = _sorted_runs(runs)
-    if registry.get("generated_at") is None:
-        registry["generated_at"] = manifest.get("created_at")
-    registry["generated_at"] = registry.get("generated_at") or manifest.get("created_at")
+    registry["generated_at"] = _utc_now_iso()
     _write_registry_payload(runs_root, registry)
     return entry
 
 
 def reconcile_registry(runs_root: Path) -> dict[str, Any]:
     registry = _load_registry_payload(runs_root)
-    runs = registry.get("runs", [])
+    runs = registry.get("runs")
+    existing_entries = runs if isinstance(runs, list) else []
+
+    reconciled: list[dict[str, Any]] = []
+    seen_run_ids: set[str] = set()
     updated = False
-    for idx, entry in enumerate(runs):
+
+    for entry in existing_entries:
         if not isinstance(entry, dict):
+            updated = True
             continue
-        run_id = entry.get("run_id")
-        if not run_id:
+        run_id_raw = entry.get("run_id")
+        run_id = str(run_id_raw).strip() if run_id_raw is not None else ""
+        if not run_id or run_id in seen_run_ids:
+            updated = True
             continue
+        seen_run_ids.add(run_id)
         run_dir = (runs_root / run_id).resolve()
-        if not is_within_root(run_dir, runs_root) or not run_dir.exists():
-            entry["status"] = "CORRUPTED"
+        if not is_within_root(run_dir, runs_root) or not run_dir.exists() or not run_dir.is_dir():
+            rebuilt = _missing_run_dir_entry(run_id, entry)
+        else:
+            manifest = _load_manifest_from_run_dir(run_dir)
+            status_hint = entry.get("status")
+            fallback_status = str(status_hint) if isinstance(status_hint, str) else None
+            rebuilt = build_registry_entry(
+                run_dir,
+                manifest,
+                fallback_status=fallback_status,
+            )
+        if rebuilt != entry:
             updated = True
+        reconciled.append(rebuilt)
+
+    for child in runs_root.iterdir():
+        if not _is_candidate_run_dir(child):
             continue
-        status, missing = _artifact_status(run_dir)
-        if status == "CORRUPTED" and entry.get("status") != "CORRUPTED":
-            entry["status"] = "CORRUPTED"
-            entry["missing_artifacts"] = missing
-            updated = True
-        entry["artifacts_present"] = _artifacts_present(run_dir)
-    registry["runs"] = _sorted_runs(runs)
-    if updated:
+        run_dir = child.resolve()
+        if not is_within_root(run_dir, runs_root):
+            continue
+        run_id = child.name
+        if run_id in seen_run_ids:
+            continue
+        manifest = _load_manifest_from_run_dir(run_dir)
+        reconciled.append(build_registry_entry(run_dir, manifest))
+        seen_run_ids.add(run_id)
+        updated = True
+
+    sorted_runs = _sorted_runs(reconciled)
+    if sorted_runs != registry.get("runs"):
+        updated = True
+    registry["runs"] = sorted_runs
+    if updated or registry.get("generated_at") is None:
+        registry["generated_at"] = _utc_now_iso()
         _write_registry_payload(runs_root, registry)
     return registry
 

@@ -11,6 +11,7 @@ from threading import Lock
 from typing import Any, Callable, Iterable
 
 from .errors import raise_api_error
+from .phase6.registry import build_registry_entry
 from .timeutils import format_ts, parse_ts
 
 _CACHE_MAX_ENTRIES = 32
@@ -138,24 +139,31 @@ def discover_runs() -> list[dict[str, Any]]:
     for child in root.iterdir():
         if not child.is_dir():
             continue
-        run_id = child.name
+        manifest = _load_discovery_manifest(child)
+        entry = build_registry_entry(child, manifest)
+        run_id = str(entry.get("run_id") or child.name)
         decision_path = child / "decision_records.jsonl"
-        status = "OK" if decision_path.exists() else "INVALID"
         created_at_dt = _get_created_at(child, decision_path)
-        created_at = format_ts(created_at_dt)
-        strategy = None
-        symbols = None
-        timeframe = None
+        created_at = entry.get("created_at") or format_ts(created_at_dt)
+        strategy = entry.get("strategy_id")
+        symbols = [entry["symbol"]] if isinstance(entry.get("symbol"), str) else None
+        timeframe = entry.get("timeframe")
         if decision_path.exists():
-            strategy, symbols, timeframe = extract_run_metadata(decision_path)
+            strategy_hint, symbols_hint, timeframe_hint = extract_run_metadata(decision_path)
+            if strategy is None:
+                strategy = strategy_hint
+            if symbols is None:
+                symbols = symbols_hint
+            if timeframe is None:
+                timeframe = timeframe_hint
         artifacts = collect_run_artifacts(child)
         has_trades = artifacts["trades"]
         runs.append(
             {
+                **entry,
                 "id": run_id,
                 "path": str(child),
                 "created_at": created_at,
-                "status": status,
                 "strategy": strategy,
                 "symbols": symbols,
                 "timeframe": timeframe,
@@ -169,6 +177,17 @@ def discover_runs() -> list[dict[str, Any]]:
     for run in runs:
         run.pop("_sort", None)
     return runs
+
+
+def _load_discovery_manifest(run_dir: Path) -> dict[str, Any]:
+    manifest_path = run_dir / "manifest.json"
+    if not manifest_path.exists():
+        return {}
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def extract_run_metadata(decision_path: Path) -> tuple[str | None, list[str] | None, str | None]:

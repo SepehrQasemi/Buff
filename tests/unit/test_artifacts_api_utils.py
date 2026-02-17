@@ -70,7 +70,7 @@ def test_parse_ts_and_format_ts_contract():
     assert formatted.endswith("Z")
 
 
-def test_discover_runs_marks_invalid_and_sorts(monkeypatch, tmp_path):
+def test_discover_runs_uses_registry_style_status_and_sorts(monkeypatch, tmp_path):
     artifacts_root = tmp_path / "artifacts"
     artifacts_root.mkdir()
 
@@ -96,8 +96,9 @@ def test_discover_runs_marks_invalid_and_sorts(monkeypatch, tmp_path):
 
     assert len(runs) == 2
     assert runs[0]["id"] == "run_invalid"
-    assert runs[0]["status"] == "INVALID"
-    assert runs[1]["status"] == "OK"
+    assert runs[0]["status"] == "CORRUPTED"
+    assert runs[0]["health"] == "CORRUPTED"
+    assert runs[1]["status"] == "CORRUPTED"
 
 
 def test_resolve_run_dir_rejects_traversal(tmp_path):

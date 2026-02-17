@@ -45,7 +45,7 @@ from .plugins import get_validation_summary, list_active_plugins, list_failed_pl
 from .timeutils import coerce_ts_param
 from .phase6.http import error_response
 from .phase6.paths import RUNS_ROOT_ENV, get_runs_root, is_within_root
-from .phase6.registry import lock_registry, reconcile_registry
+from .phase6.registry import build_registry_entry, lock_registry, reconcile_registry
 from .phase6.run_builder import RunBuilderError, create_run
 
 router = APIRouter()
@@ -135,12 +135,24 @@ def _artifact_flags_from_present(run_dir: Path, artifacts_present: list[object])
         if name.startswith("ohlcv_") and (name.endswith(".parquet") or name.endswith(".jsonl")):
             has_ohlcv = True
             break
+    has_timeline = False
+    for name in names:
+        if name in {
+            "timeline.json",
+            "timeline_events.json",
+            "risk_timeline.json",
+            "selector_trace.json",
+        }:
+            has_timeline = True
+            break
+    if not has_timeline:
+        has_timeline = find_timeline_path(run_dir) is not None
     return {
         "decisions": "decision_records.jsonl" in names,
         "trades": has_trades,
         "metrics": "metrics.json" in names,
         "ohlcv": has_ohlcv,
-        "timeline": find_timeline_path(run_dir) is not None,
+        "timeline": has_timeline,
         "risk_report": "risk_report.json" in names,
         "manifest": "manifest.json" in names,
     }
@@ -164,9 +176,16 @@ def _build_registry_run_list(runs_root: Path, runs: list[object]) -> list[dict[s
         timeframe = entry.get("timeframe") or (manifest_data or {}).get("timeframe")
         created_at = entry.get("created_at") or manifest.get("created_at")
         status = entry.get("status") or "UNKNOWN"
+        health = entry.get("health") or ("CORRUPTED" if status == "CORRUPTED" else "UNKNOWN")
         artifacts_present = entry.get("artifacts_present")
         if not isinstance(artifacts_present, list):
             artifacts_present = []
+        missing_artifacts = entry.get("missing_artifacts")
+        if not isinstance(missing_artifacts, list):
+            missing_artifacts = []
+        invalid_artifacts = entry.get("invalid_artifacts")
+        if not isinstance(invalid_artifacts, list):
+            invalid_artifacts = []
         artifacts = _artifact_flags_from_present(run_dir, artifacts_present)
         listings.append(
             {
@@ -175,14 +194,57 @@ def _build_registry_run_list(runs_root: Path, runs: list[object]) -> list[dict[s
                 "path": str(run_dir),
                 "created_at": created_at,
                 "status": status,
+                "health": health,
                 "strategy": strategy,
                 "symbols": [symbol] if symbol else None,
                 "timeframe": timeframe,
                 "has_trades": artifacts.get("trades", False),
                 "artifacts": artifacts,
+                "missing_artifacts": missing_artifacts,
+                "invalid_artifacts": invalid_artifacts,
+                "last_verified_at": entry.get("last_verified_at"),
             }
         )
     return listings
+
+
+def _normalize_artifact_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if isinstance(item, str)]
+
+
+def _diagnostics_payload(entry: dict[str, object]) -> dict[str, object]:
+    run_id = str(entry.get("run_id") or "")
+    status = str(entry.get("status") or "UNKNOWN")
+    missing_artifacts = _normalize_artifact_list(entry.get("missing_artifacts"))
+    invalid_artifacts = _normalize_artifact_list(entry.get("invalid_artifacts"))
+    checks = entry.get("checks")
+    if not isinstance(checks, dict):
+        checks = {}
+
+    health_raw = entry.get("health")
+    health = str(health_raw).strip() if isinstance(health_raw, str) else ""
+    if not health:
+        if missing_artifacts:
+            health = "CORRUPTED"
+        elif invalid_artifacts:
+            health = "DEGRADED"
+        else:
+            health = "HEALTHY"
+
+    return {
+        "run_id": run_id,
+        "status": status,
+        "health": health,
+        "missing_artifacts": missing_artifacts,
+        "invalid_artifacts": invalid_artifacts,
+        "checks": checks,
+        "artifacts_present": entry.get("artifacts_present")
+        if isinstance(entry.get("artifacts_present"), list)
+        else [],
+        "last_verified_at": entry.get("last_verified_at"),
+    }
 
 
 def _invalid_run_id_response(run_id: str) -> JSONResponse:
@@ -258,7 +320,8 @@ def list_runs() -> object:
                 {"path": str(artifacts_root)},
             )
         runs = discover_runs()
-        return _mark_demo_runs(runs)
+        listings = _build_registry_run_list(artifacts_root, runs)
+        return _mark_demo_runs(listings)
 
     runs_root, _ = readiness
     registry_result = _load_registry_with_lock(runs_root)
@@ -473,6 +536,31 @@ def run_artifact(run_id: str, name: str):
             {"run_id": run_id, "name": name},
         )
     return StreamingResponse(iter([content]), media_type=media_type)
+
+
+@router.get("/runs/{run_id}/diagnostics")
+def run_diagnostics(run_id: str) -> object:
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        if not _demo_mode_enabled():
+            return readiness
+        run_path = resolve_run_dir(run_id, get_artifacts_root())
+        manifest = _load_manifest(run_path)
+        payload = _diagnostics_payload(build_registry_entry(run_path, manifest))
+        payload["mode"] = "demo"
+        return payload
+
+    runs_root, _ = readiness
+    if _is_invalid_component(run_id):
+        return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
+
+    registry_result = _load_registry_with_lock(runs_root)
+    if isinstance(registry_result, JSONResponse):
+        return registry_result
+    entry = _find_registry_entry(registry_result, run_id)
+    if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    return _diagnostics_payload(entry)
 
 
 @router.get("/plugins/active")

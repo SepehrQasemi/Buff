@@ -7,6 +7,7 @@ import re
 import shutil
 from pathlib import Path
 
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
@@ -254,6 +255,121 @@ def test_corrupted_run_detection(monkeypatch, tmp_path):
 
     manifest = client.get(f"/api/v1/runs/{run_id}/manifest")
     _assert_error_response(manifest, 409, "RUN_CORRUPTED")
+
+
+def test_parquet_only_trades_not_corrupted(monkeypatch, tmp_path):
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    monkeypatch.setenv("RUNS_ROOT", str(runs_root))
+
+    client = TestClient(app)
+    response = client.post("/api/v1/runs", json=_payload())
+    assert response.status_code == 201
+    run_id = response.json()["run_id"]
+    run_dir = runs_root / run_id
+
+    trade_rows: list[dict[str, object]] = []
+    trades_jsonl = run_dir / "trades.jsonl"
+    for line in trades_jsonl.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        trade_rows.append(json.loads(line))
+    pd.DataFrame(trade_rows).to_parquet(run_dir / "trades.parquet", index=False)
+    trades_jsonl.unlink()
+
+    listed = client.get("/api/v1/runs")
+    assert listed.status_code == 200
+    entry = next(item for item in listed.json() if item.get("run_id") == run_id)
+    assert entry.get("status") != "CORRUPTED"
+    assert entry.get("health") in {"HEALTHY", "DEGRADED"}
+
+
+def test_metrics_invalid_sets_degraded_and_diagnostics(monkeypatch, tmp_path):
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    monkeypatch.setenv("RUNS_ROOT", str(runs_root))
+
+    client = TestClient(app)
+    response = client.post("/api/v1/runs", json=_payload())
+    assert response.status_code == 201
+    run_id = response.json()["run_id"]
+
+    metrics_path = runs_root / run_id / "metrics.json"
+    metrics_path.write_text("{bad json", encoding="utf-8")
+
+    listed = client.get("/api/v1/runs")
+    assert listed.status_code == 200
+    entry = next(item for item in listed.json() if item.get("run_id") == run_id)
+    assert entry.get("health") == "DEGRADED"
+
+    diagnostics = client.get(f"/api/v1/runs/{run_id}/diagnostics")
+    assert diagnostics.status_code == 200
+    payload = diagnostics.json()
+    assert payload["run_id"] == run_id
+    assert payload["health"] == "DEGRADED"
+    assert "metrics.json" in payload["invalid_artifacts"]
+    assert payload["checks"]["json_parse"]["metrics.json"]["status"] == "invalid"
+    assert payload["checks"]["required"]["metrics.json"]["status"] == "invalid"
+
+
+def test_reconcile_discovers_missing_run_dirs(monkeypatch, tmp_path):
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    monkeypatch.setenv("RUNS_ROOT", str(runs_root))
+
+    client = TestClient(app)
+    response = client.post("/api/v1/runs", json=_payload())
+    assert response.status_code == 201
+    run_id = response.json()["run_id"]
+
+    index_path = runs_root / "index.json"
+    index_path.write_text(
+        json.dumps({"schema_version": "1.0.0", "generated_at": None, "runs": []}),
+        encoding="utf-8",
+    )
+
+    listed = client.get("/api/v1/runs")
+    assert listed.status_code == 200
+    assert any(item.get("run_id") == run_id for item in listed.json())
+
+    index_payload = json.loads(index_path.read_text(encoding="utf-8"))
+    assert any(item.get("run_id") == run_id for item in index_payload.get("runs", []))
+
+
+def test_reconcile_ignores_non_run_directories(monkeypatch, tmp_path):
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    monkeypatch.setenv("RUNS_ROOT", str(runs_root))
+
+    client = TestClient(app)
+    response = client.post("/api/v1/runs", json=_payload())
+    assert response.status_code == 201
+    run_id = response.json()["run_id"]
+
+    (runs_root / "inputs").mkdir(parents=True, exist_ok=True)
+    (runs_root / "tmp_cache").mkdir(parents=True, exist_ok=True)
+    (runs_root / "scratch_area").mkdir(parents=True, exist_ok=True)
+    (runs_root / "run_noise").mkdir(parents=True, exist_ok=True)
+
+    listed = client.get("/api/v1/runs")
+    assert listed.status_code == 200
+    run_ids = {item.get("run_id") for item in listed.json()}
+    assert run_id in run_ids
+    assert "inputs" not in run_ids
+    assert "tmp_cache" not in run_ids
+    assert "scratch_area" not in run_ids
+    assert "run_noise" not in run_ids
+
+    index_payload = json.loads((runs_root / "index.json").read_text(encoding="utf-8"))
+    indexed_ids = {
+        item.get("run_id") for item in index_payload.get("runs", []) if isinstance(item, dict)
+    }
+    assert run_id in indexed_ids
+    assert "inputs" not in indexed_ids
+    assert "tmp_cache" not in indexed_ids
+    assert "scratch_area" not in indexed_ids
+    assert "run_noise" not in indexed_ids
 
 
 def test_metrics_missing_error_code(monkeypatch, tmp_path):
