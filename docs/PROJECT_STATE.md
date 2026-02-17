@@ -1,4 +1,4 @@
-﻿CURRENT_STAGE=S1_OBSERVABILITY_AND_RUN_INTELLIGENCE_LAYER
+﻿CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
 OPEN_PRS_TO_DECIDE=0
 LAST_STAGE_RELEVANT_PR=209
 LAST_STAGE_RELEVANT_SHA=254707b1700def672c0d465223cb2b0a383328db
@@ -32,7 +32,7 @@ No other document determines current stage.
 ## Machine-Readable Snapshot
 
 
-CURRENT_STAGE=S1_OBSERVABILITY_AND_RUN_INTELLIGENCE_LAYER
+CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
 OPEN_PRS_TO_DECIDE=0
 LAST_STAGE_RELEVANT_PR=209
 LAST_STAGE_RELEVANT_SHA=254707b1700def672c0d465223cb2b0a383328db
@@ -50,14 +50,14 @@ No broker integration.
 No live state mutation.
 
 ## Current Objective
-Harden documentation boundaries and enforce contract authority.
+Close S0 -> S1 transition gaps with verifiable CI and observability documentation.
 
 ## Definition of Done
 - All normative constraints centralized
 - No broken links
 - Single-source operational command strings: runnable command blocks and inline runnable commands appear only in `docs/05_RUNBOOK_DEV_WORKFLOW.md`.
   Other docs may mention gate names but must link to the runbook.
-- CI green (latest runs for active workflows on `main` pass; historical runs from decommissioned workflows may remain in history)
+- CI green on current `main` tip SHA for active workflows (historical runs from decommissioned workflows may remain in history)
 - release_gate PASS
 
 ## Active Constraints
@@ -74,7 +74,7 @@ S1 - Observability And Run Intelligence Layer
 - Run indexing layer
 - Queryable artifact registry
 - Structured runtime metrics
-- Observability documentation
+- Observability documentation: `docs/OBSERVABILITY.md`
 - Updated PROJECT_STATE.md
 
 ## Workflow Lanes
@@ -91,4 +91,5 @@ S1 - Observability And Run Intelligence Layer
 
 ## Last Verified Commit
 
-6337a0be9274bbd39ec6433133878914b7deed9c
+UNVERIFIED_MAIN_TIP=847a3628287a7dbe0960fcc28438199a4ed1bef6
+UNVERIFIED_REASON=No workflow run/check-run attached to this SHA on main as of 2026-02-17.

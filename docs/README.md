@@ -7,6 +7,7 @@
 - [03 Contracts And Schemas](./03_CONTRACTS_AND_SCHEMAS.md)
 - [04 Roadmap And Delivery Checklist](./04_ROADMAP_AND_DELIVERY_CHECKLIST.md)
 - [05 Runbook Dev Workflow](./05_RUNBOOK_DEV_WORKFLOW.md)
+- [Observability](./OBSERVABILITY.md)
 
 ## Runbook Anchors
 
