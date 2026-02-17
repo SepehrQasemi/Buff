@@ -1,6 +1,9 @@
 ﻿# PRODUCT_SPEC — Buff (TradingView-like Strategy Lab)
 
 ## Normative Authority
+Current stage is defined exclusively by:
+docs/PROJECT_STATE.md
+
 Runtime behavior is normatively defined by:
 - [02_ARCHITECTURE_BOUNDARIES.md](./02_ARCHITECTURE_BOUNDARIES.md)
 - [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md)
@@ -82,4 +85,3 @@ A user can:
    - each trade outcome
    - summary metrics and timeline events
 3) Add a new indicator or strategy using guided chatbot steps, validate it, and see it appear in UI.
-

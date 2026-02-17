@@ -1,6 +1,13 @@
 # Buff
 [![CI](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml/badge.svg)](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml)
 
+## 🔎 Project State (Authoritative)
+
+The active stage, objectives, and transition gates are defined exclusively in:
+docs/PROJECT_STATE.md
+
+All reasoning about project direction must begin from that file.
+
 ## Overview
 
 Buff is a safety-first, artifact-driven crypto strategy analysis system.
