@@ -15,15 +15,16 @@ No other document determines current stage.
 
 ## Machine-Readable Snapshot
 CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
-LAST_MERGED_PR=#196 https://github.com/Buff-Trading-AI/Buff/pull/196
-LAST_MERGED_SHA=ef639c7fff45e45bcbe01278c4ed761677353696
+LAST_MERGED_PR=#197 https://github.com/Buff-Trading-AI/Buff/pull/197
+LAST_MERGED_SHA=c28f4e80a199bd95f1ce730b81951ecf7d445fe9
+OPEN_PRS_TO_DECIDE=none
 
-NEXT_3_ACTIONS:
-1) Decide merge/close outcome for open docs-hardening PRs (#193 and #194).
-2) Keep docs PRs in Lane 1 (docs/** and README.md only).
-3) Keep tooling changes in Lane 2 (scripts/**) and never mix them into docs-only PRs.
+NEXT_3_ACTIONS=
+1) Keep docs PRs in Lane 1 (docs/** and README.md only).
+2) Keep tooling changes in Lane 2 (scripts/**) and never mix them into docs-only PRs.
+3) Refresh PROJECT_STATE after each merge with PR number and merge SHA.
 
-HOW_TO_REFRESH:
+HOW_TO_REFRESH=
 gh pr list --state open --limit 50
 gh pr view <number> --json number,url,state,mergedAt,mergeCommit,headRefName,baseRefName
 gh pr checks <number>
@@ -80,4 +81,4 @@ S1 - Observability And Run Intelligence Layer
   - removed from local workspace.
 
 ## Last Verified Commit
-PR #196 - docs: introduce authoritative PROJECT_STATE and system evolution roadmap
+PR #197 - chore(tooling): add docs PR autopilot script
