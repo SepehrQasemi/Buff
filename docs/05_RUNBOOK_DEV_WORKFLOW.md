@@ -1,6 +1,6 @@
 # Runbook And Dev Workflow
 
-Canonical operational guide for local run, verification, and recovery flows. All operational command strings live in this file only.
+Canonical operational guide for core local run, verification, and recovery flows. These core operational command strings are maintained here as the single source.
 
 ## Table Of Contents
 - [Quickstart](#quickstart)

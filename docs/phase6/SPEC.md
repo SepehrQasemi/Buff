@@ -1,7 +1,8 @@
 # Phase-6 Execution Spec
 
-## No-skip Rule
-Stage N must meet its Definition of Done and pass its mandatory gates before Stage N+1 begins. No parallel execution across stages and no partial carryover of unfinished requirements.
+## Stage Authority
+Global stage status, Definition of Done, and transition gating are authoritative in `../PROJECT_STATE.md`.
+This spec is an implementation plan for Phase-6 scope and must remain aligned with that authority.
 
 ## Problem Statement
 Phase-1 relies on fixture artifacts and manual file placement. Users cannot create new runs from real inputs or persist them safely. This is a demo capability, not a usable product.
@@ -92,13 +93,9 @@ Definition of Done:
 - manifest.json contains schema_version, inputs_hash, and artifact list.
 
 Mandatory Gates:
-```powershell
-### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
-.\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
-pytest -q tests/phase6/test_run_builder.py
-node apps/web/scripts/ui-smoke.mjs
-```
-Expected outcomes: all commands exit 0; verify_phase1 prints "Phase-1 verification complete"; ui-smoke prints "UI smoke OK".
+- Core verification commands: `../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates`
+- Stage-specific checks: `tests/phase6/test_run_builder.py`, `apps/web/scripts/ui-smoke.mjs`
+Expected outcomes: core verification gates and listed stage checks pass; UI smoke reports `UI smoke OK`.
 
 Risks and Anti-goals:
 - Do not add live trading or broker integration.
@@ -131,12 +128,9 @@ Definition of Done:
 - Corrupt or partial runs never appear in listings.
 
 Mandatory Gates:
-```powershell
-### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
-.\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
-pytest -q tests/phase6/test_run_registry.py
-```
-Expected outcomes: all commands exit 0; registry tests verify atomicity and restart behavior.
+- Core verification commands: `../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates`
+- Stage-specific checks: `tests/phase6/test_run_registry.py`
+Expected outcomes: core verification gates and listed stage checks pass; registry checks verify atomicity and restart behavior.
 
 Risks and Anti-goals:
 - Do not create multiple competing roots.
@@ -169,13 +163,9 @@ Definition of Done:
 - Re-running with identical inputs yields identical outputs.
 
 Mandatory Gates:
-```powershell
-### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
-.\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
-pytest -q tests/phase6/test_ingest_csv.py
-pytest -q tests/phase6/test_data_quality.py
-```
-Expected outcomes: all commands exit 0; data quality tests verify gap and schema handling.
+- Core verification commands: `../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates`
+- Stage-specific checks: `tests/phase6/test_ingest_csv.py`, `tests/phase6/test_data_quality.py`
+Expected outcomes: core verification gates and listed stage checks pass; data quality checks verify gap and schema handling.
 
 Risks and Anti-goals:
 - Do not allow ambiguous timezones or mixed timeframes.
@@ -207,14 +197,9 @@ Definition of Done:
 - New run appears in /runs and renders in /runs/{run_id}.
 
 Mandatory Gates:
-```powershell
-### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
-.\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
-pytest -q tests/phase6/test_runs_new_ui.py
-node apps/web/scripts/ui-smoke.mjs
-node apps/web/scripts/smoke.mjs
-```
-Expected outcomes: all commands exit 0; UI smoke validates run list and render.
+- Core verification commands: `../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates`
+- Stage-specific checks: `tests/phase6/test_runs_new_ui.py`, `apps/web/scripts/ui-smoke.mjs`, `apps/web/scripts/smoke.mjs`
+Expected outcomes: core verification gates and listed stage checks pass; UI smoke validates run list and render.
 
 Risks and Anti-goals:
 - Do not add execution controls to UI.
@@ -247,13 +232,9 @@ Definition of Done:
 - Reliability regressions are blocked by CI gates.
 
 Mandatory Gates:
-```powershell
-### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
-.\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
-pytest -q tests/phase6/test_safety_limits.py
-pytest -q tests/phase6/test_kill_switch.py
-```
-Expected outcomes: all commands exit 0; safety tests confirm enforcement and fail-closed behavior.
+- Core verification commands: `../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates`
+- Stage-specific checks: `tests/phase6/test_safety_limits.py`, `tests/phase6/test_kill_switch.py`
+Expected outcomes: core verification gates and listed stage checks pass; safety checks confirm enforcement and fail-closed behavior.
 
 Risks and Anti-goals:
 - Do not add silent retries that could create duplicate runs.
@@ -293,8 +274,6 @@ Milestone demos:
 - Stage 3: CSV ingest produces canonical 1m data and a data quality report; deterministic resampling for fixed windows.
 - Stage 4: /runs/new creates a run and redirects to /runs/{run_id}; UI shows progress and success state.
 - Stage 5: Kill switch blocks new run creation; health endpoint reports readiness; limits enforced.
-
-
 
 
 

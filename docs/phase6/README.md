@@ -3,8 +3,9 @@
 ## Purpose
 Phase-6 moves Buff from fixture-driven demos to real, user-created runs with durable storage, real data ingest, and a safe run-creation UX. It keeps the system read-only for execution and does not introduce live trading.
 
-## No-skip Rule
-Stage N must meet its Definition of Done and pass its mandatory gates before Stage N+1 begins. No parallel execution across stages and no partial carryover of unfinished requirements.
+## Stage Authority
+Global stage status, Definition of Done, and transition gating are authoritative in [../PROJECT_STATE.md](../PROJECT_STATE.md).
+This document is a Phase-6 implementation summary and must remain aligned with that authority.
 
 ## Scope Boundary
 In-scope:
@@ -48,21 +49,15 @@ Success criteria:
 - UI remains read-only (no execution controls).
 
 ## Single Source of Truth Gates
-Run Python commands via `\.venv\Scripts\python.exe` to ensure the venv interpreter is used.
+Use the canonical operational commands in:
+- [../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates](../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates)
 
-```powershell
-### Verification gate moved: see ../05_RUNBOOK_DEV_WORKFLOW.md#verification-gates
-.\.venv\Scripts\python.exe -m tools.release_gate --strict --timeout-seconds 900
-.\.venv\Scripts\python.exe scripts\phase6_release_gate.py
-.\.venv\Scripts\python.exe scripts\verify_phase6_stage5.py --with-services
-node apps/web/scripts/smoke.mjs
-node apps/web/scripts/ui-smoke.mjs
-```
+Phase-6 specific checks are cataloged in:
+- [SPEC.md](SPEC.md) under each stage's "Mandatory Gates" section.
 
 ## References
 - [SPEC.md](SPEC.md): Execution spec, stages, UX, and milestone demos.
 - [CONTRACTS.md](CONTRACTS.md): Run builder, data, storage, and API contracts.
 
 Status reference: [Current Status](../04_ROADMAP_AND_DELIVERY_CHECKLIST.md#current-status).
-
 

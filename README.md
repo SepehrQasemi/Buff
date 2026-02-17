@@ -1,20 +1,22 @@
 # Buff
 [![CI](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml/badge.svg)](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml)
 
-## 🔎 Project State (Authoritative)
+## Project State (Authoritative)
 
 The active stage, objectives, and transition gates are defined exclusively in:
 docs/PROJECT_STATE.md
 
 All reasoning about project direction must begin from that file.
+This README is a non-normative summary.
 
 ## Overview
 
 Buff is a safety-first, artifact-driven crypto strategy analysis system.
-Phase-0 scope is read-only analysis UX and deterministic run artifacts.
+Current stage details are authoritative in `docs/PROJECT_STATE.md`.
 
 ## Scope And Boundaries
 
+Summary only (non-authoritative):
 - Read-only UI: no buy/sell controls, no broker execution actions.
 - Fail-closed behavior on missing/invalid inputs.
 - Deterministic outputs from artifact inputs.
@@ -45,10 +47,8 @@ Roadmap and current status:
 
 ## Quickstart
 
-```bash
-python -m pip install -e ".[dev]"
-npm --prefix apps/web install
-```
+Use the canonical quickstart commands from:
+- `docs/05_RUNBOOK_DEV_WORKFLOW.md#quickstart`
 
 Run verification from:
 - `docs/05_RUNBOOK_DEV_WORKFLOW.md#verification-gates`
@@ -72,3 +72,4 @@ For full run/verify/recover workflows, use the canonical runbook:
 
 - `SECURITY.md`
 - `GITHUB_SETTINGS_CHECKLIST.md`
+
