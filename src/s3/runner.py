@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import json
 import re
+import socket
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
+from unittest.mock import patch
 
 from .canonical import (
     canonical_json_bytes,
@@ -412,6 +415,33 @@ def _run_corrupted_error(
     return S3RunnerError(code="RUN_CORRUPTED", message=message, details=details)
 
 
+def _network_disabled_error(operation: str) -> S3RunnerError:
+    return S3RunnerError(
+        code="NETWORK_DISABLED",
+        message="Network egress is disabled in S3 simulation runtime",
+        details={"operation": operation},
+    )
+
+
+@contextmanager
+def _s3_no_network_guard() -> Any:
+    def _blocked_create_connection(*args: Any, **kwargs: Any) -> Any:
+        raise _network_disabled_error("socket.create_connection")
+
+    def _blocked_getaddrinfo(*args: Any, **kwargs: Any) -> Any:
+        raise _network_disabled_error("socket.getaddrinfo")
+
+    def _blocked_socket_connect(*args: Any, **kwargs: Any) -> Any:
+        raise _network_disabled_error("socket.connect")
+
+    with (
+        patch("socket.create_connection", _blocked_create_connection),
+        patch("socket.getaddrinfo", _blocked_getaddrinfo),
+        patch.object(socket.socket, "connect", _blocked_socket_connect),
+    ):
+        yield
+
+
 def _validate_loaded_result_payload(
     payload: dict[str, Any], tenant_id: str, simulation_run_id: str
 ) -> dict[str, Any]:
@@ -520,7 +550,11 @@ def load_simulation_result(
     return replay_simulation_result(output_root, tenant_id, simulation_run_id)
 
 
-def run_simulation_request(request_file: Path, output_root: Path) -> Path:
+def run_simulation_request(
+    request_file: Path,
+    output_root: Path,
+    simulation_hook: Callable[[], None] | None = None,
+) -> Path:
     request_data = json.loads(request_file.read_text(encoding="utf-8"))
     request = _validate_request(request_data)
 
@@ -538,115 +572,120 @@ def run_simulation_request(request_file: Path, output_root: Path) -> Path:
     simulation_run_id = _simulation_run_id(request)
 
     run_dir = _resolve_simulation_run_dir(output_root, request["tenant_id"], simulation_run_id)
-    run_dir.mkdir(parents=True, exist_ok=True)
 
-    event_rows: list[dict[str, Any]] = [
-        {
-            "event_seq": 1,
-            "event_type": "SIMULATION_STARTED",
-            "seed": request["seed"],
-            "simulation_run_id": simulation_run_id,
-            "ts_epoch_ms": 0,
-        }
-    ]
-    fills_rows: list[dict[str, Any]] = []
-    _validate_event_seq(event_rows, "event_log")
-    _validate_event_seq(fills_rows, "fills")
+    with _s3_no_network_guard():
+        if simulation_hook is not None:
+            simulation_hook()
 
-    metrics_values = {
-        "perf.net_pnl_e8": 0,
-        "risk.max_drawdown_e8": 0,
-        "trade.fill_count_i64": 0,
-    }
-
-    manifest_payload = {
-        "schema_version": "s3.simulation_manifest.v1",
-        "simulation_run_id": simulation_run_id,
-        "tenant_id": request["tenant_id"],
-        "request_digest_sha256": request_sha256,
-        "artifacts": {
-            "digests": "digests.json",
-            "event_log": "event_log.jsonl",
-            "fills": "fills.jsonl",
-            "metrics": "metrics.json",
-            "report": "report_summary.json",
-            "result": "result.json",
-        },
-    }
-    metrics_payload = {
-        "artifact_ref": "metrics.json",
-        "values": metrics_values,
-    }
-    report_payload = {
-        "schema_version": "s3.report_summary.v1",
-        "simulation_run_id": simulation_run_id,
-        "status": "skeleton",
-    }
-
-    write_canonical_json(run_dir / "manifest.json", manifest_payload)
-    write_canonical_jsonl(run_dir / "event_log.jsonl", event_rows)
-    write_canonical_jsonl(run_dir / "fills.jsonl", fills_rows)
-    write_canonical_json(run_dir / "metrics.json", metrics_payload)
-    write_canonical_json(run_dir / "report_summary.json", report_payload)
-
-    manifest_sha256 = sha256_hex_file(run_dir / "manifest.json")
-    event_log_sha256 = sha256_hex_file(run_dir / "event_log.jsonl")
-    fills_sha256 = sha256_hex_file(run_dir / "fills.jsonl")
-    metrics_sha256 = sha256_hex_file(run_dir / "metrics.json")
-    report_sha256 = sha256_hex_file(run_dir / "report_summary.json")
-
-    digests_payload = {
-        "event_log_sha256": event_log_sha256,
-        "fills_sha256": fills_sha256,
-        "manifest_sha256": manifest_sha256,
-        "metrics_sha256": metrics_sha256,
-        "report_sha256": report_sha256,
-        "request_sha256": request_sha256,
-    }
-
-    result_payload: dict[str, Any] = {
-        "digests": {
-            **digests_payload,
-            # Deterministic preimage placeholder to avoid self-referential hashing cycles.
-            "result_sha256": "",
-        },
-        "engine": request["engine"],
-        "fills": {
-            "artifact_ref": "fills.jsonl",
-            "entries": fills_rows,
-            "row_count": 0,
-            "sha256": fills_sha256,
-        },
-        "metrics": {
-            "artifact_ref": "metrics.json",
-            "sha256": metrics_sha256,
-            "values": metrics_values,
-        },
-        "report_refs": [
+        event_rows: list[dict[str, Any]] = [
             {
-                "artifact_ref": "report_summary.json",
-                "kind": "summary",
-                "sha256": report_sha256,
+                "event_seq": 1,
+                "event_type": "SIMULATION_STARTED",
+                "seed": request["seed"],
+                "simulation_run_id": simulation_run_id,
+                "ts_epoch_ms": 0,
             }
-        ],
-        "request_digest_sha256": request_sha256,
-        "schema_version": RESULT_SCHEMA_VERSION,
-        "simulation_run_id": simulation_run_id,
-        "status": "succeeded",
-        "tenant_id": request["tenant_id"],
-        "traces": {
-            "artifact_ref": "event_log.jsonl",
-            "event_count": len(event_rows),
-            "sha256": event_log_sha256,
-        },
-    }
+        ]
+        fills_rows: list[dict[str, Any]] = []
+        _validate_event_seq(event_rows, "event_log")
+        _validate_event_seq(fills_rows, "fills")
 
-    result_sha256 = sha256_hex_bytes(canonical_json_bytes(result_payload))
-    result_payload["digests"]["result_sha256"] = result_sha256
-    digests_payload["result_sha256"] = result_sha256
+        metrics_values = {
+            "perf.net_pnl_e8": 0,
+            "risk.max_drawdown_e8": 0,
+            "trade.fill_count_i64": 0,
+        }
 
-    write_canonical_json(run_dir / "result.json", result_payload)
-    write_canonical_json(run_dir / "digests.json", digests_payload)
+        manifest_payload = {
+            "schema_version": "s3.simulation_manifest.v1",
+            "simulation_run_id": simulation_run_id,
+            "tenant_id": request["tenant_id"],
+            "request_digest_sha256": request_sha256,
+            "artifacts": {
+                "digests": "digests.json",
+                "event_log": "event_log.jsonl",
+                "fills": "fills.jsonl",
+                "metrics": "metrics.json",
+                "report": "report_summary.json",
+                "result": "result.json",
+            },
+        }
+        metrics_payload = {
+            "artifact_ref": "metrics.json",
+            "values": metrics_values,
+        }
+        report_payload = {
+            "schema_version": "s3.report_summary.v1",
+            "simulation_run_id": simulation_run_id,
+            "status": "skeleton",
+        }
+
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        write_canonical_json(run_dir / "manifest.json", manifest_payload)
+        write_canonical_jsonl(run_dir / "event_log.jsonl", event_rows)
+        write_canonical_jsonl(run_dir / "fills.jsonl", fills_rows)
+        write_canonical_json(run_dir / "metrics.json", metrics_payload)
+        write_canonical_json(run_dir / "report_summary.json", report_payload)
+
+        manifest_sha256 = sha256_hex_file(run_dir / "manifest.json")
+        event_log_sha256 = sha256_hex_file(run_dir / "event_log.jsonl")
+        fills_sha256 = sha256_hex_file(run_dir / "fills.jsonl")
+        metrics_sha256 = sha256_hex_file(run_dir / "metrics.json")
+        report_sha256 = sha256_hex_file(run_dir / "report_summary.json")
+
+        digests_payload = {
+            "event_log_sha256": event_log_sha256,
+            "fills_sha256": fills_sha256,
+            "manifest_sha256": manifest_sha256,
+            "metrics_sha256": metrics_sha256,
+            "report_sha256": report_sha256,
+            "request_sha256": request_sha256,
+        }
+
+        result_payload: dict[str, Any] = {
+            "digests": {
+                **digests_payload,
+                # Deterministic preimage placeholder to avoid self-referential hashing cycles.
+                "result_sha256": "",
+            },
+            "engine": request["engine"],
+            "fills": {
+                "artifact_ref": "fills.jsonl",
+                "entries": fills_rows,
+                "row_count": 0,
+                "sha256": fills_sha256,
+            },
+            "metrics": {
+                "artifact_ref": "metrics.json",
+                "sha256": metrics_sha256,
+                "values": metrics_values,
+            },
+            "report_refs": [
+                {
+                    "artifact_ref": "report_summary.json",
+                    "kind": "summary",
+                    "sha256": report_sha256,
+                }
+            ],
+            "request_digest_sha256": request_sha256,
+            "schema_version": RESULT_SCHEMA_VERSION,
+            "simulation_run_id": simulation_run_id,
+            "status": "succeeded",
+            "tenant_id": request["tenant_id"],
+            "traces": {
+                "artifact_ref": "event_log.jsonl",
+                "event_count": len(event_rows),
+                "sha256": event_log_sha256,
+            },
+        }
+
+        result_sha256 = sha256_hex_bytes(canonical_json_bytes(result_payload))
+        result_payload["digests"]["result_sha256"] = result_sha256
+        digests_payload["result_sha256"] = result_sha256
+
+        write_canonical_json(run_dir / "result.json", result_payload)
+        write_canonical_json(run_dir / "digests.json", digests_payload)
 
     return run_dir
 
