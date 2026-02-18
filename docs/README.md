@@ -9,6 +9,7 @@
 - [05 Runbook Dev Workflow](./05_RUNBOOK_DEV_WORKFLOW.md)
 - [Observability](./OBSERVABILITY.md)
 - [Multi-User Isolation Layer (S2)](./MULTI_USER.md)
+- [S3 Controlled Execution Simulation Spec](./stages/S3_CONTROLLED_EXECUTION_SIMULATION_SPEC.md)
 
 ## Runbook Anchors
 

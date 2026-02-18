@@ -5,6 +5,10 @@
 - [Alias Policy](#alias-policy)
 - [Error Code Registry](#error-code-registry)
 - [Artifact Contract Matrix](#artifact-contract-matrix)
+- [S3 Fixed-Point Numeric Policy](#s3-fixed-point-numeric-policy)
+- [SimulationRunRequest Schema](#simulationrunrequest-schema)
+- [SimulationRunResult Schema](#simulationrunresult-schema)
+- [S3 Canonicalization And Digest Rules](#s3-canonicalization-and-digest-rules)
 - [Strategy And Plugin Contracts](#strategy-and-plugin-contracts)
 - [Consolidation Notes](#consolidation-notes)
 
@@ -96,6 +100,242 @@ Verified vs documented note:
 Format precedence notes:
 - If parquet variants are present (`trades.parquet`, `ohlcv_*.parquet`), API loaders prefer parquet; JSONL remains valid fallback.
 - Optional artifacts must never silently replace required-core artifacts.
+
+## S3 Fixed-Point Numeric Policy
+- Money, price, quantity, fee, and PnL fields in S3 contracts MUST use fixed-point integers with `e8` scale (`*_e8`).
+- Floating-point JSON numbers are forbidden in `SimulationRunRequest`, `SimulationRunResult`, and canonicalized S3 artifacts.
+- Contract validators for S3 schemas MUST reject payloads that encode money/price/qty as float or decimal string.
+
+## SimulationRunRequest Schema
+Schema version: `s3.simulation_run_request.v1`  
+Normative stage spec: [stages/S3_CONTROLLED_EXECUTION_SIMULATION_SPEC.md](./stages/S3_CONTROLLED_EXECUTION_SIMULATION_SPEC.md)
+
+Top-level field contract:
+
+| Field | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `schema_version` | string | yes | Must equal `s3.simulation_run_request.v1`. |
+| `tenant_id` | string | yes | Regex: `^[a-z0-9][a-z0-9_-]{2,63}$`. Must match authenticated tenant context. |
+| `artifact_ref` | string | yes | Relative canonical reference. Must not contain `..`, backslash, or absolute path prefix. |
+| `artifact_sha256` | string | yes | Regex: `^[a-f0-9]{64}$`. Lowercase hex SHA-256 of artifact bytes. |
+| `dataset_ref` | string | yes | Relative canonical reference. Must not contain `..`, backslash, or absolute path prefix. |
+| `dataset_sha256` | string | yes | Regex: `^[a-f0-9]{64}$`. Lowercase hex SHA-256 of dataset bytes. |
+| `config` | object | yes | Deterministic runtime policy object. |
+| `config_sha256` | string | yes | Regex: `^[a-f0-9]{64}$`. SHA-256 of canonicalized `config` bytes. |
+| `seed` | integer | yes | Range: `0..9223372036854775807`. |
+| `engine` | object | yes | Engine identity and pinned version. |
+
+`config` field contract:
+
+| Field | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `clock_source` | string | yes | Must equal `dataset_event_time`. |
+| `timestamp_format` | string | yes | Must equal `epoch_ms`. |
+| `event_order_key` | string | yes | Must equal `event_seq`. |
+| `numeric_encoding` | string | yes | Must equal `fixed_e8_int`. |
+| `rounding_mode` | string | yes | Must equal `half_even`. |
+| `price_scale` | integer | yes | Must equal `8`. |
+| `qty_scale` | integer | yes | Must equal `8`. |
+| `cash_scale` | integer | yes | Must equal `8`. |
+
+`engine` field contract:
+
+| Field | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `name` | string | yes | Regex: `^[a-z0-9][a-z0-9._-]{1,63}$`. |
+| `version` | string | yes | SemVer regex: `^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$`. `latest` is forbidden. |
+| `build_sha` | string | no | Regex: `^[a-f0-9]{7,64}$`. |
+
+Complete example payload:
+
+```json
+{
+  "artifact_ref": "runs/run_20260218_0001/manifest.json",
+  "artifact_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "config": {
+    "cash_scale": 8,
+    "clock_source": "dataset_event_time",
+    "event_order_key": "event_seq",
+    "numeric_encoding": "fixed_e8_int",
+    "price_scale": 8,
+    "qty_scale": 8,
+    "rounding_mode": "half_even",
+    "timestamp_format": "epoch_ms"
+  },
+  "config_sha256": "abababababababababababababababababababababababababababababababab",
+  "dataset_ref": "datasets/btcusdt_1m_2025_q4.parquet",
+  "dataset_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "engine": {
+    "build_sha": "93a0cd895db7f100fa7ae01a6d71470f1f30cd50",
+    "name": "buff-sim",
+    "version": "1.0.0"
+  },
+  "schema_version": "s3.simulation_run_request.v1",
+  "seed": 42,
+  "tenant_id": "alice"
+}
+```
+
+## SimulationRunResult Schema
+Schema version: `s3.simulation_run_result.v1`
+
+Top-level field contract:
+
+| Field | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `schema_version` | string | yes | Must equal `s3.simulation_run_result.v1`. |
+| `tenant_id` | string | yes | Must equal request `tenant_id`. |
+| `simulation_run_id` | string | yes | Regex: `^sim_[a-f0-9]{16,64}$`. Derived from `request_digest_sha256`. |
+| `request_digest_sha256` | string | yes | Regex: `^[a-f0-9]{64}$`. |
+| `status` | string | yes | Enum: `succeeded`, `failed`. |
+| `engine` | object | yes | Same contract as request `engine`. |
+| `fills` | object | yes | Fills artifact metadata and entries structure. |
+| `metrics` | object | yes | Metrics artifact metadata and namespaced values map. |
+| `traces` | object | yes | Event log artifact metadata. |
+| `report_refs` | array<object> | yes | At least one report object; each object includes digest. |
+| `digests` | object | yes | Required digest keys are listed below. |
+
+`fills` object contract:
+
+| Field | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `artifact_ref` | string | yes | Relative canonical path for fills JSONL artifact. |
+| `sha256` | string | yes | Regex: `^[a-f0-9]{64}$`. |
+| `row_count` | integer | yes | `>= 0`. Must equal `entries.length` when entries are embedded. |
+| `entries` | array<object> | yes | Ordered by `event_seq` ascending. |
+
+Fill entry contract (`fills.entries[]` and `fills.jsonl` row schema):
+
+| Field | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `event_seq` | integer | yes | Starts at `1`; strictly increasing by `+1` with no gaps. |
+| `ts_epoch_ms` | integer | yes | Unix epoch milliseconds (`>= 0`). |
+| `order_id` | string | yes | Regex: `^[A-Za-z0-9._:-]{1,128}$`. |
+| `symbol` | string | yes | Regex: `^[A-Z0-9._-]{1,32}$`. |
+| `side` | string | yes | Enum: `BUY`, `SELL`. |
+| `price_e8` | integer | yes | Fixed-point price in `1e-8` units; `> 0`. |
+| `qty_e8` | integer | yes | Fixed-point quantity in `1e-8` units; `> 0`. |
+| `fee_e8` | integer | yes | Fixed-point fee in `1e-8` units; `>= 0`. |
+
+`metrics` object contract:
+
+| Field | Type | Required | Constraints |
+| --- | --- | --- | --- |
+| `artifact_ref` | string | yes | Relative canonical path for metrics JSON artifact. |
+| `sha256` | string | yes | Regex: `^[a-f0-9]{64}$`. |
+| `values` | object | yes | Map of namespaced metric keys to JSON integer values only. |
+
+Metric key/value rules:
+- Keys MUST match `^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*(?:_e8|_i64)$`.
+- Values MUST be JSON integers.
+- Keys ending `_e8` are fixed-point values scaled by `1e8`.
+- Keys ending `_i64` are unscaled integer counters.
+- Decimal strings and floating-point JSON numbers are forbidden in `metrics.values`.
+
+`digests` object required keys:
+
+| Key | Meaning |
+| --- | --- |
+| `request_sha256` | Canonical `SimulationRunRequest` bytes digest. |
+| `result_sha256` | Canonical `SimulationRunResult` bytes digest. |
+| `manifest_sha256` | Canonical manifest artifact digest for this simulation run. |
+| `event_log_sha256` | Canonical event log JSONL digest; must equal `traces.sha256`. |
+| `fills_sha256` | Canonical fills JSONL digest; must equal `fills.sha256`. |
+| `metrics_sha256` | Canonical metrics JSON digest; must equal `metrics.sha256`. |
+| `report_sha256` | Canonical digest of the primary report referenced by `report_refs[0]`. |
+
+Complete example payload:
+
+```json
+{
+  "digests": {
+    "event_log_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+    "fills_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "manifest_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+    "metrics_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "report_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+    "request_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "result_sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+  },
+  "engine": {
+    "build_sha": "93a0cd895db7f100fa7ae01a6d71470f1f30cd50",
+    "name": "buff-sim",
+    "version": "1.0.0"
+  },
+  "fills": {
+    "artifact_ref": "fills.jsonl",
+    "entries": [
+      {
+        "event_seq": 1,
+        "fee_e8": 1250,
+        "order_id": "ord_000001",
+        "price_e8": 10125000000,
+        "qty_e8": 150000000,
+        "side": "BUY",
+        "symbol": "BTCUSDT",
+        "ts_epoch_ms": 1735689600000
+      }
+    ],
+    "row_count": 1,
+    "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "metrics": {
+    "artifact_ref": "metrics.json",
+    "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "values": {
+      "perf.net_pnl_e8": 123456789,
+      "risk.max_drawdown_e8": 10420000,
+      "trade.fill_count_i64": 1
+    }
+  },
+  "report_refs": [
+    {
+      "artifact_ref": "report_summary.json",
+      "kind": "summary",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  ],
+  "request_digest_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+  "schema_version": "s3.simulation_run_result.v1",
+  "simulation_run_id": "sim_6dfd4f6b63be4f84",
+  "status": "succeeded",
+  "tenant_id": "alice",
+  "traces": {
+    "artifact_ref": "traces.jsonl",
+    "event_count": 8921,
+    "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+  }
+}
+```
+
+## S3 Canonicalization And Digest Rules
+The following rules are mandatory for `SimulationRunRequest`, `SimulationRunResult`, and S3 artifacts:
+
+1. Encoding: UTF-8 only.
+2. Encoding BOM policy: UTF-8 BOM is forbidden.
+3. Newlines: line ending MUST be `\n` (LF); `\r\n` is forbidden in canonical bytes.
+4. JSON key ordering: recursively sort object keys lexicographically by UTF-8 codepoint.
+5. JSON spacing: compact serialization only with separators `,` and `:` and no surrounding spaces.
+6. JSON document framing: no trailing spaces and no trailing newline for single JSON files.
+7. Numeric policy:
+   - Monetary and quantity fields MUST use fixed-point integers (`*_e8`) only.
+   - JSON floating-point numbers are forbidden in request/result canonical fields.
+   - `metrics.values` values MUST be JSON integers only (`*_e8` scaled by `1e8`, `*_i64` unscaled).
+   - `NaN`, `Infinity`, and `-Infinity` are forbidden everywhere.
+8. Timestamp policy: epoch milliseconds as integer fields (`*_epoch_ms`) only.
+9. JSONL ordering:
+   - `fills.jsonl` and `traces.jsonl` rows MUST be ordered by `event_seq` ascending.
+   - First `event_seq` MUST be `1`.
+   - Sequence MUST increase by exactly `+1` with no gaps.
+
+Digest procedure:
+- `request_sha256`: SHA-256 over canonical request JSON bytes.
+- `result_sha256`: SHA-256 over canonical result JSON bytes.
+- `fills_sha256`: SHA-256 over canonical `fills.jsonl` bytes (`\n`-delimited canonical JSON lines).
+- `event_log_sha256`: SHA-256 over canonical `traces.jsonl` bytes.
+- `metrics_sha256`: SHA-256 over canonical `metrics.json` bytes.
+- `manifest_sha256`: SHA-256 over canonical simulation manifest JSON bytes.
+- `report_sha256`: SHA-256 over canonical bytes of the primary report file in `report_refs[0]`.
 
 ## Strategy And Plugin Contracts
 - Strategy contract authority: [STRATEGY_CONTRACT.md](./STRATEGY_CONTRACT.md)
