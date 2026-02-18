@@ -1,7 +1,7 @@
-﻿CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
+﻿CURRENT_STAGE=S1_OBSERVABILITY_AND_RUN_INTELLIGENCE_LAYER
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=209
-LAST_STAGE_RELEVANT_SHA=254707b1700def672c0d465223cb2b0a383328db
+LAST_STAGE_RELEVANT_PR=211
+LAST_STAGE_RELEVANT_SHA=39bb16670b8b4fa660e8f718bbc31965798a84be
 SNAPSHOT_SEMANTICS=Stage snapshot fields track stage/governance-relevant merges, not every merge on main.
 
 NEXT_3_ACTIONS=
@@ -32,16 +32,16 @@ No other document determines current stage.
 ## Machine-Readable Snapshot
 
 
-CURRENT_STAGE=S0_DETERMINISTIC_ANALYSIS_ONLY_ENGINE
+CURRENT_STAGE=S1_OBSERVABILITY_AND_RUN_INTELLIGENCE_LAYER
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=209
-LAST_STAGE_RELEVANT_SHA=254707b1700def672c0d465223cb2b0a383328db
+LAST_STAGE_RELEVANT_PR=211
+LAST_STAGE_RELEVANT_SHA=39bb16670b8b4fa660e8f718bbc31965798a84be
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
 
 ## Current Stage
-S0 - Deterministic Analysis-Only Engine
+S1 - Observability And Run Intelligence Layer
 
 ## Stage Description
 Fail-closed, artifact-driven, deterministic analysis system.
@@ -50,7 +50,7 @@ No broker integration.
 No live state mutation.
 
 ## Current Objective
-Close S0 -> S1 transition gaps with verifiable CI and observability documentation.
+Preserve S1 guarantees and prepare S2 isolation planning without weakening deterministic/runtime safeguards.
 
 ## Definition of Done
 - All normative constraints centralized
@@ -68,9 +68,9 @@ Close S0 -> S1 transition gaps with verifiable CI and observability documentatio
 - Canonical contract authority enforced
 
 ## Next Stage Candidate
-S1 - Observability And Run Intelligence Layer
+S2_MULTI_USER_ISOLATION_LAYER
 
-## Transition Gate Requirements (S0 -> S1)
+## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
 - Run indexing layer
 - Queryable artifact registry
 - Structured runtime metrics
@@ -91,5 +91,4 @@ S1 - Observability And Run Intelligence Layer
 
 ## Last Verified Commit
 
-UNVERIFIED_MAIN_TIP=847a3628287a7dbe0960fcc28438199a4ed1bef6
-UNVERIFIED_REASON=No workflow run/check-run attached to this SHA on main as of 2026-02-17.
+39bb16670b8b4fa660e8f718bbc31965798a84be
