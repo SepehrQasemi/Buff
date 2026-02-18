@@ -11,6 +11,13 @@ from s3.runner import run_simulation_request
 
 
 def _write_request(path: Path) -> None:
+    artifact_bytes = b"artifact-bytes-v1"
+    dataset_bytes = b"dataset-bytes-v1"
+    artifact_path = path.parent / "artifact.bin"
+    dataset_path = path.parent / "dataset.bin"
+    artifact_path.write_bytes(artifact_bytes)
+    dataset_path.write_bytes(dataset_bytes)
+
     config = {
         "cash_scale": 8,
         "clock_source": "dataset_event_time",
@@ -22,12 +29,12 @@ def _write_request(path: Path) -> None:
         "timestamp_format": "epoch_ms",
     }
     request = {
-        "artifact_ref": "runs/sample/manifest.json",
-        "artifact_sha256": "a" * 64,
+        "artifact_ref": "artifact.bin",
+        "artifact_sha256": sha256_hex_bytes(artifact_bytes),
         "config": config,
         "config_sha256": sha256_hex_bytes(canonical_json_bytes(config)),
-        "dataset_ref": "datasets/sample.parquet",
-        "dataset_sha256": "b" * 64,
+        "dataset_ref": "dataset.bin",
+        "dataset_sha256": sha256_hex_bytes(dataset_bytes),
         "engine": {
             "build_sha": "7f353b9655a41fc628c83aba3102d0092563026b",
             "name": "buff-sim",

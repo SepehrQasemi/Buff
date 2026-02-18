@@ -51,15 +51,40 @@ _REQUIRED_CONFIG_FIELDS = {
 }
 
 
+class S3RunnerError(Exception):
+    def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
+        self.code = code
+        self.message = message
+        self.details = details or {}
+        super().__init__(f"{code}: {message}")
+
+    def to_error_envelope(self) -> dict[str, Any]:
+        payload = {
+            "code": self.code,
+            "message": self.message,
+            "details": self.details,
+        }
+        payload["error"] = dict(payload)
+        return payload
+
+
 def _validate_no_floats(value: Any, path: str = "$") -> None:
     if isinstance(value, bool):
         return
     if isinstance(value, float):
-        raise ValueError(f"Float values are forbidden by S3 fixed-point policy: {path}")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"Float values are forbidden by S3 fixed-point policy: {path}",
+            details={"path": path},
+        )
     if isinstance(value, dict):
         for key, child in value.items():
             if not isinstance(key, str):
-                raise ValueError(f"Object keys must be strings at {path}")
+                raise S3RunnerError(
+                    code="RUN_CONFIG_INVALID",
+                    message=f"Object keys must be strings at {path}",
+                    details={"path": path},
+                )
             _validate_no_floats(child, f"{path}.{key}")
         return
     if isinstance(value, list):
@@ -70,15 +95,27 @@ def _validate_no_floats(value: Any, path: str = "$") -> None:
 
 def _require_sha256(value: Any, field: str) -> str:
     if not isinstance(value, str) or not _SHA256_RE.fullmatch(value):
-        raise ValueError(f"{field} must be a lowercase 64-char sha256 hex")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"{field} must be a lowercase 64-char sha256 hex",
+            details={"field": field},
+        )
     return value
 
 
 def _require_safe_ref(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value:
-        raise ValueError(f"{field} must be a non-empty string")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"{field} must be a non-empty string",
+            details={"field": field},
+        )
     if ".." in value or "\\" in value or Path(value).is_absolute():
-        raise ValueError(f"{field} must be a safe relative reference")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"{field} must be a safe relative reference",
+            details={"field": field},
+        )
     return value
 
 
@@ -86,14 +123,26 @@ def _validate_request(request: dict[str, Any]) -> dict[str, Any]:
     _validate_no_floats(request)
     missing = sorted(_REQUIRED_REQUEST_FIELDS - set(request.keys()))
     if missing:
-        raise ValueError(f"Missing request fields: {', '.join(missing)}")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"Missing request fields: {', '.join(missing)}",
+            details={"missing_fields": missing},
+        )
 
     if request["schema_version"] != REQUEST_SCHEMA_VERSION:
-        raise ValueError(f"schema_version must be {REQUEST_SCHEMA_VERSION}")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"schema_version must be {REQUEST_SCHEMA_VERSION}",
+            details={"field": "schema_version"},
+        )
 
     tenant_id = request["tenant_id"]
     if not isinstance(tenant_id, str) or not _TENANT_RE.fullmatch(tenant_id):
-        raise ValueError("tenant_id does not match required format")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="tenant_id does not match required format",
+            details={"field": "tenant_id"},
+        )
 
     artifact_ref = _require_safe_ref(request["artifact_ref"], "artifact_ref")
     artifact_sha256 = _require_sha256(request["artifact_sha256"], "artifact_sha256")
@@ -102,52 +151,116 @@ def _validate_request(request: dict[str, Any]) -> dict[str, Any]:
 
     config = request["config"]
     if not isinstance(config, dict):
-        raise ValueError("config must be an object")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="config must be an object",
+            details={"field": "config"},
+        )
     config_missing = sorted(_REQUIRED_CONFIG_FIELDS - set(config.keys()))
     if config_missing:
-        raise ValueError(f"Missing config fields: {', '.join(config_missing)}")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"Missing config fields: {', '.join(config_missing)}",
+            details={"missing_config_fields": config_missing},
+        )
     if config["clock_source"] != "dataset_event_time":
-        raise ValueError("config.clock_source must be dataset_event_time")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="config.clock_source must be dataset_event_time",
+            details={"field": "config.clock_source"},
+        )
     if config["timestamp_format"] != "epoch_ms":
-        raise ValueError("config.timestamp_format must be epoch_ms")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="config.timestamp_format must be epoch_ms",
+            details={"field": "config.timestamp_format"},
+        )
     if config["event_order_key"] != "event_seq":
-        raise ValueError("config.event_order_key must be event_seq")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="config.event_order_key must be event_seq",
+            details={"field": "config.event_order_key"},
+        )
     if config["numeric_encoding"] != "fixed_e8_int":
-        raise ValueError("config.numeric_encoding must be fixed_e8_int")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="config.numeric_encoding must be fixed_e8_int",
+            details={"field": "config.numeric_encoding"},
+        )
     if config["rounding_mode"] != "half_even":
-        raise ValueError("config.rounding_mode must be half_even")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="config.rounding_mode must be half_even",
+            details={"field": "config.rounding_mode"},
+        )
     for field in ("price_scale", "qty_scale", "cash_scale"):
         value = config[field]
         if not isinstance(value, int) or isinstance(value, bool) or value != 8:
-            raise ValueError(f"config.{field} must be integer 8")
+            raise S3RunnerError(
+                code="RUN_CONFIG_INVALID",
+                message=f"config.{field} must be integer 8",
+                details={"field": f"config.{field}"},
+            )
 
     config_sha256 = _require_sha256(request["config_sha256"], "config_sha256")
     computed_config_sha = sha256_hex_bytes(canonical_json_bytes(config))
     if config_sha256 != computed_config_sha:
-        raise ValueError("config_sha256 does not match canonical config digest")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="config_sha256 does not match canonical config digest",
+            details={"field": "config_sha256"},
+        )
 
     seed = request["seed"]
     if not isinstance(seed, int) or isinstance(seed, bool):
-        raise ValueError("seed must be an integer")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="seed must be an integer",
+            details={"field": "seed"},
+        )
     if seed < 0 or seed > 9223372036854775807:
-        raise ValueError("seed must be in range 0..9223372036854775807")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="seed must be in range 0..9223372036854775807",
+            details={"field": "seed"},
+        )
 
     engine = request["engine"]
     if not isinstance(engine, dict):
-        raise ValueError("engine must be an object")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="engine must be an object",
+            details={"field": "engine"},
+        )
     engine_name = engine.get("name")
     if not isinstance(engine_name, str) or not _ENGINE_NAME_RE.fullmatch(engine_name):
-        raise ValueError("engine.name does not match required format")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="engine.name does not match required format",
+            details={"field": "engine.name"},
+        )
     engine_version = engine.get("version")
     if not isinstance(engine_version, str) or engine_version == "latest":
-        raise ValueError("engine.version must be pinned and not 'latest'")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="engine.version must be pinned and not 'latest'",
+            details={"field": "engine.version"},
+        )
     if not _SEMVER_RE.fullmatch(engine_version):
-        raise ValueError("engine.version must be semver")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="engine.version must be semver",
+            details={"field": "engine.version"},
+        )
     build_sha = engine.get("build_sha")
     if build_sha is not None and (
         not isinstance(build_sha, str) or not _BUILD_SHA_RE.fullmatch(build_sha)
     ):
-        raise ValueError("engine.build_sha must be 7..64 lowercase hex when provided")
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="engine.build_sha must be 7..64 lowercase hex when provided",
+            details={"field": "engine.build_sha"},
+        )
 
     return {
         "schema_version": request["schema_version"],
@@ -168,10 +281,54 @@ def _validate_event_seq(rows: list[dict[str, Any]], label: str) -> None:
     for row in rows:
         seq = row.get("event_seq")
         if not isinstance(seq, int) or isinstance(seq, bool):
-            raise ValueError(f"{label} row event_seq must be integer")
+            raise S3RunnerError(
+                code="RUN_CONFIG_INVALID",
+                message=f"{label} row event_seq must be integer",
+                details={"label": label},
+            )
         if seq != expected:
-            raise ValueError(f"{label} event_seq corrupted; expected {expected}, got {seq}")
+            raise S3RunnerError(
+                code="RUN_CONFIG_INVALID",
+                message=f"{label} event_seq corrupted; expected {expected}, got {seq}",
+                details={"label": label, "expected": expected, "actual": seq},
+            )
         expected += 1
+
+
+def _resolve_input_file(request_file: Path, ref: str, field: str) -> Path:
+    base_dir = request_file.resolve().parent
+    candidate = (base_dir / ref).resolve()
+    try:
+        candidate.relative_to(base_dir)
+    except ValueError as exc:
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"{field} resolved outside request directory",
+            details={"field": field, "ref": ref},
+        ) from exc
+
+    if not candidate.exists() or not candidate.is_file():
+        raise S3RunnerError(
+            code="ARTIFACT_NOT_FOUND",
+            message=f"{field} target not found",
+            details={"field": field, "ref": ref},
+        )
+    return candidate
+
+
+def _verify_input_digest(path: Path, expected_sha256: str, field: str, ref: str) -> None:
+    actual_sha256 = sha256_hex_file(path)
+    if actual_sha256 != expected_sha256:
+        raise S3RunnerError(
+            code="INPUT_DIGEST_MISMATCH",
+            message=f"{field} sha256 does not match input bytes",
+            details={
+                "field": field,
+                "ref": ref,
+                "expected": expected_sha256,
+                "actual": actual_sha256,
+            },
+        )
 
 
 def _simulation_run_id(request: dict[str, Any]) -> str:
@@ -190,6 +347,15 @@ def _simulation_run_id(request: dict[str, Any]) -> str:
 def run_simulation_request(request_file: Path, output_root: Path) -> Path:
     request_data = json.loads(request_file.read_text(encoding="utf-8"))
     request = _validate_request(request_data)
+
+    artifact_path = _resolve_input_file(request_file, request["artifact_ref"], "artifact_ref")
+    dataset_path = _resolve_input_file(request_file, request["dataset_ref"], "dataset_ref")
+    _verify_input_digest(
+        artifact_path, request["artifact_sha256"], "artifact_sha256", request["artifact_ref"]
+    )
+    _verify_input_digest(
+        dataset_path, request["dataset_sha256"], "dataset_sha256", request["dataset_ref"]
+    )
 
     request_canonical_bytes = canonical_json_bytes(request)
     request_sha256 = sha256_hex_bytes(request_canonical_bytes)
@@ -323,7 +489,11 @@ def main(argv: list[str] | None = None) -> int:
 
     request_path = Path(args.request_json).resolve()
     output_root = Path(args.output_root).resolve()
-    run_dir = run_simulation_request(request_path, output_root)
+    try:
+        run_dir = run_simulation_request(request_path, output_root)
+    except S3RunnerError as exc:
+        print(json.dumps(exc.to_error_envelope(), sort_keys=True, separators=(",", ":")))
+        return 1
     print(run_dir)
     return 0
 
