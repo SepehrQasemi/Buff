@@ -272,6 +272,12 @@ def main(argv: list[str] | None = None) -> int:
             [sys.executable, "-m", "pytest", "-q", "tools/test_s3_input_digest_verification.py"],
         )
 
+        _log("release_gate: s3_cross_tenant_isolation")
+        run_step(
+            "s3_cross_tenant_isolation",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s3_cross_tenant_isolation.py"],
+        )
+
         if args.with_network_smoke:
             _log("release_gate: mvp_smoke (network)")
             proc = run_step("mvp_smoke", _mvp_smoke_command())

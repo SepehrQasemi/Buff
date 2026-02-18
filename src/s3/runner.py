@@ -19,6 +19,7 @@ RESULT_SCHEMA_VERSION = "s3.simulation_run_result.v1"
 
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 _TENANT_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{2,63}$")
+_RUN_ID_RE = re.compile(r"^sim_[a-f0-9]{16,64}$")
 _ENGINE_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{1,63}$")
 _SEMVER_RE = re.compile(
     r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
@@ -103,6 +104,26 @@ def _require_sha256(value: Any, field: str) -> str:
     return value
 
 
+def _require_tenant_id(value: Any, field: str = "tenant_id") -> str:
+    if not isinstance(value, str) or not _TENANT_RE.fullmatch(value):
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"{field} does not match required format",
+            details={"field": field},
+        )
+    return value
+
+
+def _require_simulation_run_id(value: Any, field: str = "simulation_run_id") -> str:
+    if not isinstance(value, str) or not _RUN_ID_RE.fullmatch(value):
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message=f"{field} does not match required format",
+            details={"field": field},
+        )
+    return value
+
+
 def _require_safe_ref(value: Any, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise S3RunnerError(
@@ -136,13 +157,7 @@ def _validate_request(request: dict[str, Any]) -> dict[str, Any]:
             details={"field": "schema_version"},
         )
 
-    tenant_id = request["tenant_id"]
-    if not isinstance(tenant_id, str) or not _TENANT_RE.fullmatch(tenant_id):
-        raise S3RunnerError(
-            code="RUN_CONFIG_INVALID",
-            message="tenant_id does not match required format",
-            details={"field": "tenant_id"},
-        )
+    tenant_id = _require_tenant_id(request["tenant_id"], "tenant_id")
 
     artifact_ref = _require_safe_ref(request["artifact_ref"], "artifact_ref")
     artifact_sha256 = _require_sha256(request["artifact_sha256"], "artifact_sha256")
@@ -344,6 +359,66 @@ def _simulation_run_id(request: dict[str, Any]) -> str:
     return f"sim_{sha256_hex_bytes(canonical_json_bytes(identity_tuple))[:16]}"
 
 
+def _resolve_simulation_run_dir(output_root: Path, tenant_id: str, simulation_run_id: str) -> Path:
+    root = output_root.resolve()
+    run_dir = (root / tenant_id / "simulations" / simulation_run_id).resolve()
+    try:
+        run_dir.relative_to(root)
+    except ValueError as exc:
+        raise S3RunnerError(
+            code="RUN_CONFIG_INVALID",
+            message="Resolved simulation path escapes output root",
+            details={"field": "simulation_run_id"},
+        ) from exc
+    return run_dir
+
+
+def load_simulation_result(
+    output_root: Path, tenant_id: str, simulation_run_id: str
+) -> dict[str, Any]:
+    canonical_tenant = _require_tenant_id(tenant_id, "tenant_id")
+    canonical_run_id = _require_simulation_run_id(simulation_run_id, "simulation_run_id")
+    run_dir = _resolve_simulation_run_dir(output_root, canonical_tenant, canonical_run_id)
+    result_path = run_dir / "result.json"
+
+    if not result_path.exists() or not result_path.is_file():
+        raise S3RunnerError(
+            code="RUN_NOT_FOUND",
+            message="Simulation run not found for tenant",
+            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
+        )
+
+    try:
+        payload = json.loads(result_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise S3RunnerError(
+            code="RUN_CORRUPTED",
+            message="result.json is invalid JSON",
+            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise S3RunnerError(
+            code="RUN_CORRUPTED",
+            message="result.json must contain a JSON object",
+            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
+        )
+
+    if payload.get("tenant_id") != canonical_tenant:
+        raise S3RunnerError(
+            code="RUN_NOT_FOUND",
+            message="Simulation run not found for tenant",
+            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
+        )
+    if payload.get("simulation_run_id") != canonical_run_id:
+        raise S3RunnerError(
+            code="RUN_CORRUPTED",
+            message="result.json simulation_run_id mismatch",
+            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
+        )
+    return payload
+
+
 def run_simulation_request(request_file: Path, output_root: Path) -> Path:
     request_data = json.loads(request_file.read_text(encoding="utf-8"))
     request = _validate_request(request_data)
@@ -361,7 +436,7 @@ def run_simulation_request(request_file: Path, output_root: Path) -> Path:
     request_sha256 = sha256_hex_bytes(request_canonical_bytes)
     simulation_run_id = _simulation_run_id(request)
 
-    run_dir = output_root / request["tenant_id"] / "simulations" / simulation_run_id
+    run_dir = _resolve_simulation_run_dir(output_root, request["tenant_id"], simulation_run_id)
     run_dir.mkdir(parents=True, exist_ok=True)
 
     event_rows: list[dict[str, Any]] = [
