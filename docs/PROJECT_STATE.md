@@ -1,7 +1,7 @@
-CURRENT_STAGE=S2_MULTI_USER_ISOLATION_LAYER
+CURRENT_STAGE=S4_RISK_ENGINE_MATURITY
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=215
-LAST_STAGE_RELEVANT_SHA=bd8db815c0e63546db5a3f339bbe2d226a229aff
+LAST_STAGE_RELEVANT_PR=225
+LAST_STAGE_RELEVANT_SHA=3e36db11a5706006bb464f046d2b1ef531f4182f
 S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
 SNAPSHOT_SEMANTICS=Stage snapshot fields track stage/governance-relevant merges, not every merge on main.
 
@@ -33,17 +33,17 @@ No other document determines current stage.
 ## Machine-Readable Snapshot
 
 
-CURRENT_STAGE=S2_MULTI_USER_ISOLATION_LAYER
+CURRENT_STAGE=S4_RISK_ENGINE_MATURITY
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=215
-LAST_STAGE_RELEVANT_SHA=bd8db815c0e63546db5a3f339bbe2d226a229aff
+LAST_STAGE_RELEVANT_PR=225
+LAST_STAGE_RELEVANT_SHA=3e36db11a5706006bb464f046d2b1ef531f4182f
 S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
 
 ## Current Stage
-S2 - Multi-User Isolation Layer
+S4 - Risk Engine Maturity
 
 ## Stage Description
 Fail-closed, artifact-driven, deterministic analysis system.
@@ -52,7 +52,7 @@ No broker integration.
 No live state mutation.
 
 ## Current Objective
-Preserve S2 isolation guarantees and prepare S3 controlled execution simulation planning without weakening deterministic/runtime safeguards.
+Build S4 risk semantics and controls on top of completed S3 controlled execution simulation without weakening deterministic/runtime safeguards.
 
 ## Definition of Done
 - All normative constraints centralized
@@ -70,13 +70,12 @@ Preserve S2 isolation guarantees and prepare S3 controlled execution simulation 
 - Canonical contract authority enforced
 
 ## Next Stage Candidate
-S3_CONTROLLED_EXECUTION_SIMULATION
+S5_EXECUTION_SAFETY_BOUNDARIES
 
-## S2 Acceptance Evidence
-- Runtime acceptance validated on `main` via `/api/v1/ready`, `/api/v1/runs`, `/api/v1/runs/{id}/metrics`, and `/api/v1/runs/{id}/diagnostics`.
-- Header-only mode evidence: alice sees run, bob sees none, and bob cross-user metrics/diagnostics return `404 RUN_NOT_FOUND`.
-- HMAC mode evidence: valid signed alice request succeeds, tampered user header is blocked, and replay timestamp outside skew is blocked.
-- Observed fail-closed error codes: `USER_MISSING`, `AUTH_INVALID`, `TIMESTAMP_INVALID`, `AUTH_MISSING`, `RUN_NOT_FOUND`.
+## S3 Acceptance Evidence
+- S3 runtime acceptance validated on `main` at `3e36db11a5706006bb464f046d2b1ef531f4182f` with deterministic run/replay behavior.
+- Strict release gate includes and passes: `s3_double_run_compare`, `s3_input_digest_verification`, `s3_cross_tenant_isolation`, `s3_no_network`, `s3_no_live_execution_path`, `s3_artifact_pack_completeness`, and `s3_smoke_demo`.
+- Stage-relevant completion recorded by PR #225 and SHA `3e36db11a5706006bb464f046d2b1ef531f4182f`.
 
 ## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
 - Run indexing layer
@@ -99,5 +98,4 @@ S3_CONTROLLED_EXECUTION_SIMULATION
 
 ## Last Verified Commit
 
-bd8db815c0e63546db5a3f339bbe2d226a229aff
-
+3e36db11a5706006bb464f046d2b1ef531f4182f
