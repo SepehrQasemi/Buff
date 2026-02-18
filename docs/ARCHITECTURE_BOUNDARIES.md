@@ -1,4 +1,4 @@
-﻿---
+---
 # Architecture Boundaries (Non-Negotiable)
 
 This document defines boundaries that must not be violated by future changes.

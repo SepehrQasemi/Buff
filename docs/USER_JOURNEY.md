@@ -1,4 +1,4 @@
-﻿---
+---
 # User Journey (Official)
 
 This document describes the smallest complete user journey that must always work.

@@ -1,4 +1,4 @@
-﻿# UI_SPEC — Buff TradingView-like UI (Read-only)
+# UI_SPEC — Buff TradingView-like UI (Read-only)
 
 ## Runtime Contract Alignment
 - UI MUST render the API error envelope exactly as returned.

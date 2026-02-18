@@ -1,4 +1,4 @@
-﻿---
+---
 # Delivery Checklist (Operational)
 
 This checklist defines the proof required to claim the product core is complete and stable.

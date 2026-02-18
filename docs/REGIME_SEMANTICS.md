@@ -1,4 +1,4 @@
-﻿# Regime Semantics
+# Regime Semantics
 
 Regime semantics provide a deterministic permission layer. A regime is not a buy/sell signal; it only gates which strategy families are allowed to run.
 

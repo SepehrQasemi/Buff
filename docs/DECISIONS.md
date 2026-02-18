@@ -1,4 +1,4 @@
-﻿---
+---
 # Decisions (Canonical)
 
 This file records locked product decisions and their implementation status.
@@ -18,5 +18,10 @@ Global roadmap/status reference: [Current Status](./04_ROADMAP_AND_DELIVERY_CHEC
 ## D-003 — Core boundaries are non-negotiable
 **Decision:** Read-only UI/assistant, artifact truth only, determinism, fail-closed safety.  
 **Rationale:** Prevent product drift.
+
+## D-004 — S3 is simulation-only with deterministic replay gate
+**Decision:** `S3_CONTROLLED_EXECUTION_SIMULATION` remains simulation-only, uses an event-driven execution core, and requires CI double-run digest comparison for determinism enforcement.  
+**Rationale:** This blocks accidental live execution paths and makes nondeterminism detectable before merge.  
+**Implementation note:** S3 contracts are defined in [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md) and stage-specific guardrails are defined in [stages/S3_CONTROLLED_EXECUTION_SIMULATION_SPEC.md](./stages/S3_CONTROLLED_EXECUTION_SIMULATION_SPEC.md). `phase6` paths are historical references only.
 
 ---

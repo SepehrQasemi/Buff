@@ -1,4 +1,4 @@
-﻿# Strategy Decision Contract
+# Strategy Decision Contract
 
 ## Decision schema (schema_version=1)
 Fields:
