@@ -8,6 +8,7 @@
 - [04 Roadmap And Delivery Checklist](./04_ROADMAP_AND_DELIVERY_CHECKLIST.md)
 - [05 Runbook Dev Workflow](./05_RUNBOOK_DEV_WORKFLOW.md)
 - [Observability](./OBSERVABILITY.md)
+- [Multi-User Isolation Layer (S2)](./MULTI_USER.md)
 
 ## Runbook Anchors
 

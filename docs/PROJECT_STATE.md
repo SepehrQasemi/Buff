@@ -2,6 +2,7 @@
 OPEN_PRS_TO_DECIDE=0
 LAST_STAGE_RELEVANT_PR=211
 LAST_STAGE_RELEVANT_SHA=39bb16670b8b4fa660e8f718bbc31965798a84be
+S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
 SNAPSHOT_SEMANTICS=Stage snapshot fields track stage/governance-relevant merges, not every merge on main.
 
 NEXT_3_ACTIONS=
@@ -36,6 +37,7 @@ CURRENT_STAGE=S1_OBSERVABILITY_AND_RUN_INTELLIGENCE_LAYER
 OPEN_PRS_TO_DECIDE=0
 LAST_STAGE_RELEVANT_PR=211
 LAST_STAGE_RELEVANT_SHA=39bb16670b8b4fa660e8f718bbc31965798a84be
+S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
@@ -69,6 +71,11 @@ Preserve S1 guarantees and prepare S2 isolation planning without weakening deter
 
 ## Next Stage Candidate
 S2_MULTI_USER_ISOLATION_LAYER
+
+## S2 Implementation Evidence On Main
+- S2 runtime behavior merged on `main` at commit `7056fb402ad1c13e61c7c2d1294271fc50b128ca`.
+- Canonical behavior reference: `docs/MULTI_USER.md`.
+- `CURRENT_STAGE` remains S1 until governance/stage promotion is explicitly recorded.
 
 ## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
 - Run indexing layer
