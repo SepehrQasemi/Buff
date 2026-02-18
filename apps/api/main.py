@@ -9,6 +9,7 @@ from email.policy import default as email_default
 from datetime import datetime
 from pathlib import Path
 from typing import Iterable
+
 from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,15 +43,32 @@ from .artifacts import (
 from .chat import router as chat_router
 from .errors import build_error_payload, raise_api_error
 from .plugins import get_validation_summary, list_active_plugins, list_failed_plugins
-from .timeutils import coerce_ts_param
 from .phase6.http import error_response
-from .phase6.paths import RUNS_ROOT_ENV, get_runs_root, is_within_root
-from .phase6.registry import build_registry_entry, lock_registry, reconcile_registry
+from .phase6.paths import (
+    RUNS_ROOT_ENV,
+    get_runs_root,
+    is_valid_component,
+    is_within_root,
+    user_root,
+    user_runs_root,
+    user_uploads_root,
+)
+from .phase6.registry import (
+    build_registry_entry,
+    has_legacy_runs,
+    list_legacy_run_dirs,
+    lock_registry,
+    migrate_legacy_runs,
+    reconcile_registry,
+)
 from .phase6.run_builder import RunBuilderError, create_run
+from .security.user_context import UserContext, UserContextError, resolve_user_context
+from .timeutils import coerce_ts_param
 
 router = APIRouter()
 KILL_SWITCH_ENV = "BUFF_KILL_SWITCH"
 DEMO_MODE_ENV = "DEMO_MODE"
+DEFAULT_USER_ENV = "BUFF_DEFAULT_USER"
 
 
 def _kill_switch_enabled() -> bool:
@@ -103,6 +121,29 @@ def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
             {"path": str(runs_root), "error": error or "permission denied"},
         )
     return runs_root, {"status": "ok", "path": str(runs_root), "writable": True}
+
+
+def _resolve_user_context(request: Request) -> UserContext | JSONResponse:
+    try:
+        return resolve_user_context(request.headers, request.method, request.url.path)
+    except UserContextError as exc:
+        return error_response(exc.status_code, exc.code, exc.message, exc.details)
+
+
+def _resolve_user_scope(
+    request: Request,
+) -> tuple[UserContext, Path, Path, Path, dict[str, object]] | JSONResponse:
+    user_ctx = _resolve_user_context(request)
+    if isinstance(user_ctx, JSONResponse):
+        return user_ctx
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        return readiness
+    base_runs_root, runs_check = readiness
+    owner_root = user_root(base_runs_root, user_ctx.user_id)
+    runs_root = user_runs_root(base_runs_root, user_ctx.user_id)
+    runs_root.mkdir(parents=True, exist_ok=True)
+    return user_ctx, base_runs_root, owner_root, runs_root, runs_check
 
 
 def _mark_demo_runs(runs: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -191,6 +232,7 @@ def _build_registry_run_list(runs_root: Path, runs: list[object]) -> list[dict[s
             {
                 "id": run_id,
                 "run_id": run_id,
+                "owner_user_id": entry.get("owner_user_id"),
                 "path": str(run_dir),
                 "created_at": created_at,
                 "status": status,
@@ -203,6 +245,7 @@ def _build_registry_run_list(runs_root: Path, runs: list[object]) -> list[dict[s
                 "missing_artifacts": missing_artifacts,
                 "invalid_artifacts": invalid_artifacts,
                 "last_verified_at": entry.get("last_verified_at"),
+                "meta": entry.get("meta") if isinstance(entry.get("meta"), dict) else {},
             }
         )
     return listings
@@ -252,15 +295,22 @@ def _invalid_run_id_response(run_id: str) -> JSONResponse:
 
 
 def _resolve_registry_run_dir(
-    runs_root: Path, run_id: str
+    user_root_path: Path,
+    runs_root: Path,
+    run_id: str,
+    *,
+    user_id: str,
 ) -> tuple[dict[str, object], Path] | JSONResponse:
     if _is_invalid_component(run_id):
         return _invalid_run_id_response(run_id)
-    registry_result = _load_registry_with_lock(runs_root)
+    registry_result = _load_registry_with_lock(user_root_path)
     if isinstance(registry_result, JSONResponse):
         return registry_result
     entry = _find_registry_entry(registry_result, run_id)
     if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    owner_user_id = str(entry.get("owner_user_id") or "").strip()
+    if owner_user_id and owner_user_id != user_id:
         return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
     run_dir = (runs_root / run_id).resolve()
     if not is_within_root(run_dir, runs_root) or not run_dir.exists():
@@ -268,19 +318,33 @@ def _resolve_registry_run_dir(
     return entry, run_dir
 
 
-def _resolve_run_dir_for_read(run_id: str) -> tuple[Path, str] | JSONResponse:
+def _resolve_run_dir_for_read(
+    request: Request, run_id: str
+) -> tuple[Path, str, str] | JSONResponse:
+    user_ctx = _resolve_user_context(request)
+    if isinstance(user_ctx, JSONResponse):
+        return user_ctx
+
     readiness = _runs_root_readiness()
     if isinstance(readiness, JSONResponse):
         if _demo_mode_enabled():
             run_path = resolve_run_dir(run_id, get_artifacts_root())
-            return run_path, "demo"
+            return run_path, "demo", user_ctx.user_id
         return readiness
-    runs_root, _ = readiness
-    resolved = _resolve_registry_run_dir(runs_root, run_id)
+    base_runs_root, _ = readiness
+    user_root_path = user_root(base_runs_root, user_ctx.user_id)
+    runs_root = user_runs_root(base_runs_root, user_ctx.user_id)
+    runs_root.mkdir(parents=True, exist_ok=True)
+    resolved = _resolve_registry_run_dir(
+        user_root_path,
+        runs_root,
+        run_id,
+        user_id=user_ctx.user_id,
+    )
     if isinstance(resolved, JSONResponse):
         return resolved
     _, run_dir = resolved
-    return run_dir, "runs_root"
+    return run_dir, "runs_root", user_ctx.user_id
 
 
 @router.get("/health")
@@ -293,20 +357,62 @@ def ready() -> object:
     readiness = _runs_root_readiness()
     if isinstance(readiness, JSONResponse):
         return readiness
-    runs_root, runs_check = readiness
-    registry_result = _load_registry_with_lock(runs_root)
-    if isinstance(registry_result, JSONResponse):
-        return registry_result
-    runs = registry_result.get("runs") if isinstance(registry_result, dict) else []
+    base_runs_root, runs_check = readiness
+
+    migration_check: dict[str, object] = {"status": "ok", "legacy_runs": 0}
+    if has_legacy_runs(base_runs_root):
+        default_user = (os.getenv(DEFAULT_USER_ENV) or "").strip()
+        if not default_user:
+            legacy_ids = [path.name for path in list_legacy_run_dirs(base_runs_root)]
+            migration_check = {
+                "status": "degraded",
+                "code": "LEGACY_MIGRATION_REQUIRED",
+                "legacy_runs": len(legacy_ids),
+                "legacy_run_ids": legacy_ids,
+                "message": f"Set {DEFAULT_USER_ENV} to migrate legacy runs",
+            }
+            return {
+                "status": "degraded",
+                "api_version": "1",
+                "checks": {"runs_root": runs_check, "legacy_migration": migration_check},
+            }
+        try:
+            migrated = migrate_legacy_runs(base_runs_root, default_user)
+        except Exception as exc:
+            migration_check = {
+                "status": "degraded",
+                "code": "LEGACY_MIGRATION_REQUIRED",
+                "message": str(exc),
+            }
+            return {
+                "status": "degraded",
+                "api_version": "1",
+                "checks": {"runs_root": runs_check, "legacy_migration": migration_check},
+            }
+        migration_check = {
+            "status": "ok",
+            "legacy_runs": 0,
+            "migrated_runs": migrated.get("count", 0),
+            "user_id": migrated.get("user_id"),
+        }
+
+    users_dir = base_runs_root / "users"
+    users_dir.mkdir(parents=True, exist_ok=True)
+    user_dirs = [path for path in users_dir.iterdir() if path.is_dir()]
     checks = {
         "runs_root": runs_check,
-        "registry": {"status": "ok", "runs": len(runs) if isinstance(runs, list) else 0},
+        "registry": {"status": "ok", "users": len(user_dirs)},
+        "legacy_migration": migration_check,
     }
     return {"status": "ready", "api_version": "1", "checks": checks}
 
 
 @router.get("/runs")
-def list_runs() -> object:
+def list_runs(request: Request) -> object:
+    user_ctx = _resolve_user_context(request)
+    if isinstance(user_ctx, JSONResponse):
+        return user_ctx
+
     readiness = _runs_root_readiness()
     if isinstance(readiness, JSONResponse):
         if not _demo_mode_enabled():
@@ -323,8 +429,12 @@ def list_runs() -> object:
         listings = _build_registry_run_list(artifacts_root, runs)
         return _mark_demo_runs(listings)
 
-    runs_root, _ = readiness
-    registry_result = _load_registry_with_lock(runs_root)
+    base_runs_root, _ = readiness
+    owner_root = user_root(base_runs_root, user_ctx.user_id)
+    runs_root = user_runs_root(base_runs_root, user_ctx.user_id)
+    runs_root.mkdir(parents=True, exist_ok=True)
+
+    registry_result = _load_registry_with_lock(owner_root)
     if isinstance(registry_result, JSONResponse):
         return registry_result
     runs = registry_result.get("runs", []) if isinstance(registry_result, dict) else []
@@ -351,17 +461,17 @@ def _parse_multipart_form(body: bytes, content_type: str) -> dict[str, dict[str,
     return parts
 
 
-def _store_uploaded_csv(upload_bytes: bytes, runs_root: Path) -> str:
+def _store_uploaded_csv(upload_bytes: bytes, uploads_parent: Path) -> str:
     repo_root = Path.cwd().resolve()
-    if not is_within_root(runs_root, repo_root):
+    if not is_within_root(uploads_parent, repo_root):
         raise RunBuilderError(
             "RUN_CONFIG_INVALID",
             "RUNS_ROOT must be within repo for uploads",
             400,
-            {"runs_root": str(runs_root)},
+            {"runs_root": str(uploads_parent)},
         )
 
-    uploads_dir = runs_root / "inputs"
+    uploads_dir = uploads_parent
     uploads_dir.mkdir(parents=True, exist_ok=True)
     if not upload_bytes:
         raise RunBuilderError("RUN_CONFIG_INVALID", "Uploaded file is empty", 400)
@@ -411,6 +521,10 @@ async def create_run_endpoint(request: Request) -> JSONResponse:
             "Run creation disabled",
             {"env": KILL_SWITCH_ENV},
         )
+    user_ctx = _resolve_user_context(request)
+    if isinstance(user_ctx, JSONResponse):
+        return user_ctx
+
     content_type = request.headers.get("content-type", "")
     if content_type.lower().startswith("multipart/form-data"):
         try:
@@ -428,12 +542,14 @@ async def create_run_endpoint(request: Request) -> JSONResponse:
             payload = json.loads(request_part["data"].decode("utf-8"))
         except Exception:
             return error_response(400, "RUN_CONFIG_INVALID", "Invalid request JSON")
+
         readiness = _runs_root_readiness()
         if isinstance(readiness, JSONResponse):
             return readiness
-        runs_root, _ = readiness
+        base_runs_root, _ = readiness
         try:
-            upload_path = _store_uploaded_csv(bytes(file_part["data"]), runs_root)
+            upload_root = user_uploads_root(base_runs_root, user_ctx.user_id)
+            upload_path = _store_uploaded_csv(bytes(file_part["data"]), upload_root)
         except RunBuilderError as exc:
             return error_response(exc.status_code, exc.code, exc.message, exc.details)
         if not isinstance(payload, dict):
@@ -451,7 +567,7 @@ async def create_run_endpoint(request: Request) -> JSONResponse:
             return error_response(400, "RUN_CONFIG_INVALID", "Invalid JSON payload")
 
     try:
-        status_code, response = create_run(payload)
+        status_code, response = create_run(payload, user_id=user_ctx.user_id)
         return JSONResponse(status_code=status_code, content=response)
     except RunBuilderError as exc:
         return error_response(exc.status_code, exc.code, exc.message, exc.details)
@@ -460,20 +576,23 @@ async def create_run_endpoint(request: Request) -> JSONResponse:
 
 
 @router.get("/runs/{run_id}/manifest")
-def run_manifest(run_id: str) -> JSONResponse:
-    readiness = _runs_root_readiness()
-    if isinstance(readiness, JSONResponse):
-        return readiness
-    runs_root, _ = readiness
+def run_manifest(run_id: str, request: Request) -> JSONResponse:
+    scope = _resolve_user_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, _, owner_root, runs_root, _ = scope
     invalid = _is_invalid_component(run_id)
     if invalid:
         return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
 
-    registry_result = _load_registry_with_lock(runs_root)
+    registry_result = _load_registry_with_lock(owner_root)
     if isinstance(registry_result, JSONResponse):
         return registry_result
     entry = _find_registry_entry(registry_result, run_id)
     if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    owner_user_id = str(entry.get("owner_user_id") or "").strip()
+    if owner_user_id and owner_user_id != user_ctx.user_id:
         return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
     if entry.get("status") == "CORRUPTED":
         return error_response(409, "RUN_CORRUPTED", "Run artifacts missing", {"run_id": run_id})
@@ -493,21 +612,24 @@ def run_manifest(run_id: str) -> JSONResponse:
 
 
 @router.get("/runs/{run_id}/artifacts/{name}", response_model=None)
-def run_artifact(run_id: str, name: str):
-    readiness = _runs_root_readiness()
-    if isinstance(readiness, JSONResponse):
-        return readiness
-    runs_root, _ = readiness
+def run_artifact(run_id: str, name: str, request: Request):
+    scope = _resolve_user_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, _, owner_root, runs_root, _ = scope
     if _is_invalid_component(run_id):
         return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
     if _is_invalid_component(name):
         return error_response(400, "RUN_CONFIG_INVALID", "Invalid artifact name", {"name": name})
 
-    registry_result = _load_registry_with_lock(runs_root)
+    registry_result = _load_registry_with_lock(owner_root)
     if isinstance(registry_result, JSONResponse):
         return registry_result
     entry = _find_registry_entry(registry_result, run_id)
     if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    owner_user_id = str(entry.get("owner_user_id") or "").strip()
+    if owner_user_id and owner_user_id != user_ctx.user_id:
         return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
     if entry.get("status") == "CORRUPTED":
         return error_response(409, "RUN_CORRUPTED", "Run artifacts missing", {"run_id": run_id})
@@ -539,26 +661,38 @@ def run_artifact(run_id: str, name: str):
 
 
 @router.get("/runs/{run_id}/diagnostics")
-def run_diagnostics(run_id: str) -> object:
+def run_diagnostics(run_id: str, request: Request) -> object:
+    user_ctx = _resolve_user_context(request)
+    if isinstance(user_ctx, JSONResponse):
+        return user_ctx
+
     readiness = _runs_root_readiness()
     if isinstance(readiness, JSONResponse):
         if not _demo_mode_enabled():
             return readiness
         run_path = resolve_run_dir(run_id, get_artifacts_root())
         manifest = _load_manifest(run_path)
-        payload = _diagnostics_payload(build_registry_entry(run_path, manifest))
+        payload = _diagnostics_payload(
+            build_registry_entry(run_path, manifest, user_id=user_ctx.user_id)
+        )
         payload["mode"] = "demo"
         return payload
 
-    runs_root, _ = readiness
+    base_runs_root, _ = readiness
+    owner_root = user_root(base_runs_root, user_ctx.user_id)
+    runs_root = user_runs_root(base_runs_root, user_ctx.user_id)
+    runs_root.mkdir(parents=True, exist_ok=True)
     if _is_invalid_component(run_id):
         return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
 
-    registry_result = _load_registry_with_lock(runs_root)
+    registry_result = _load_registry_with_lock(owner_root)
     if isinstance(registry_result, JSONResponse):
         return registry_result
     entry = _find_registry_entry(registry_result, run_id)
     if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+    owner_user_id = str(entry.get("owner_user_id") or "").strip()
+    if owner_user_id and owner_user_id != user_ctx.user_id:
         return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
     return _diagnostics_payload(entry)
 
@@ -579,11 +713,11 @@ def validation_summary() -> dict[str, object]:
 
 
 @router.get("/runs/{run_id}/summary")
-def run_summary(run_id: str) -> dict[str, object]:
-    resolved = _resolve_run_dir_for_read(run_id)
+def run_summary(run_id: str, request: Request) -> dict[str, object]:
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, mode = resolved
+    run_path, mode, _ = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -611,6 +745,7 @@ def run_summary(run_id: str) -> dict[str, object]:
 @router.get("/runs/{run_id}/decisions")
 def decisions(
     run_id: str,
+    request: Request,
     symbol: list[str] | None = Query(default=None),
     action: list[str] | None = Query(default=None),
     severity: list[str] | None = Query(default=None),
@@ -620,10 +755,10 @@ def decisions(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
 ) -> dict[str, object]:
-    resolved = _resolve_run_dir_for_read(run_id)
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, mode = resolved
+    run_path, mode, _ = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -667,15 +802,16 @@ def decisions(
 @router.get("/runs/{run_id}/trades")
 def trades(
     run_id: str,
+    request: Request,
     start_ts: str | None = None,
     end_ts: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=500),
 ) -> dict[str, object]:
-    resolved = _resolve_run_dir_for_read(run_id)
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, mode = resolved
+    run_path, mode, _ = resolved
     trade_parquet_path = run_path / "trades.parquet"
     trade_jsonl_path = run_path / "trades.jsonl"
     if trade_parquet_path.exists():
@@ -701,13 +837,14 @@ def trades(
 @router.get("/runs/{run_id}/trades/markers")
 def trade_markers(
     run_id: str,
+    request: Request,
     start_ts: str | None = None,
     end_ts: str | None = None,
 ) -> dict[str, object]:
-    resolved = _resolve_run_dir_for_read(run_id)
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, mode = resolved
+    run_path, mode, _ = resolved
     trade_parquet_path = run_path / "trades.parquet"
     trade_jsonl_path = run_path / "trades.jsonl"
     if trade_parquet_path.exists():
@@ -733,16 +870,17 @@ def trade_markers(
 @router.get("/runs/{run_id}/ohlcv")
 def ohlcv(
     run_id: str,
+    request: Request,
     symbol: str | None = None,
     timeframe: str | None = None,
     start_ts: str | None = None,
     end_ts: str | None = None,
     limit: int | None = Query(default=None, ge=1, le=10000),
 ) -> dict[str, object]:
-    resolved = _resolve_run_dir_for_read(run_id)
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, mode = resolved
+    run_path, mode, _ = resolved
     ohlcv_path = resolve_ohlcv_path(run_path, timeframe)
     if ohlcv_path is not None:
         ohlcv_loader = load_ohlcv
@@ -779,11 +917,11 @@ def ohlcv(
 
 
 @router.get("/runs/{run_id}/metrics")
-def metrics(run_id: str) -> dict[str, object]:
-    resolved = _resolve_run_dir_for_read(run_id)
+def metrics(run_id: str, request: Request) -> dict[str, object]:
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, mode = resolved
+    run_path, mode, _ = resolved
     metrics_path = run_path / "metrics.json"
     if not metrics_path.exists():
         raise_api_error(404, "metrics_missing", "metrics.json missing", {"run_id": run_id})
@@ -798,11 +936,11 @@ def metrics(run_id: str) -> dict[str, object]:
 
 
 @router.get("/runs/{run_id}/timeline")
-def timeline(run_id: str, source: str = "auto") -> dict[str, object]:
-    resolved = _resolve_run_dir_for_read(run_id)
+def timeline(run_id: str, request: Request, source: str = "auto") -> dict[str, object]:
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, mode = resolved
+    run_path, mode, _ = resolved
     source_key = (source or "auto").lower()
     timeline_path = None
 
@@ -847,11 +985,11 @@ def timeline(run_id: str, source: str = "auto") -> dict[str, object]:
 
 
 @router.get("/runs/{run_id}/errors")
-def errors(run_id: str) -> dict[str, object]:
-    resolved = _resolve_run_dir_for_read(run_id)
+def errors(run_id: str, request: Request) -> dict[str, object]:
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, mode = resolved
+    run_path, mode, _ = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -877,6 +1015,7 @@ def errors(run_id: str) -> dict[str, object]:
 @router.get("/runs/{run_id}/decisions/export")
 def export_decisions(
     run_id: str,
+    request: Request,
     format: str = "json",
     symbol: list[str] | None = Query(default=None),
     action: list[str] | None = Query(default=None),
@@ -885,10 +1024,10 @@ def export_decisions(
     start_ts: str | None = None,
     end_ts: str | None = None,
 ) -> StreamingResponse:
-    resolved = _resolve_run_dir_for_read(run_id)
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, _ = resolved
+    run_path, _, _ = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -929,11 +1068,11 @@ def export_decisions(
 
 
 @router.get("/runs/{run_id}/errors/export")
-def export_errors(run_id: str, format: str = "json") -> StreamingResponse:
-    resolved = _resolve_run_dir_for_read(run_id)
+def export_errors(run_id: str, request: Request, format: str = "json") -> StreamingResponse:
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, _ = resolved
+    run_path, _, _ = resolved
     decision_path = run_path / "decision_records.jsonl"
     if not decision_path.exists():
         raise_api_error(
@@ -961,14 +1100,15 @@ def export_errors(run_id: str, format: str = "json") -> StreamingResponse:
 @router.get("/runs/{run_id}/trades/export")
 def export_trades(
     run_id: str,
+    request: Request,
     format: str = "json",
     start_ts: str | None = None,
     end_ts: str | None = None,
 ) -> StreamingResponse:
-    resolved = _resolve_run_dir_for_read(run_id)
+    resolved = _resolve_run_dir_for_read(request, run_id)
     if isinstance(resolved, JSONResponse):
         return resolved
-    run_path, _ = resolved
+    run_path, _, _ = resolved
     trade_parquet_path = run_path / "trades.parquet"
     trade_jsonl_path = run_path / "trades.jsonl"
     if trade_parquet_path.exists():
@@ -1072,11 +1212,11 @@ def _export_response(stream: Iterable[bytes], media_type: str, filename: str) ->
     return StreamingResponse(stream, media_type=media_type, headers=headers)
 
 
-def _load_registry_with_lock(runs_root: Path) -> dict[str, object] | JSONResponse:
-    lock = lock_registry(runs_root)
+def _load_registry_with_lock(user_root_path: Path) -> dict[str, object] | JSONResponse:
+    lock = lock_registry(user_root_path)
     try:
         with lock:
-            return reconcile_registry(runs_root)
+            return reconcile_registry(user_root_path)
     except TimeoutError:
         return error_response(503, "REGISTRY_LOCK_TIMEOUT", "Registry lock timeout")
     except Exception:
@@ -1095,13 +1235,9 @@ def _find_registry_entry(registry: dict[str, object], run_id: str) -> dict[str, 
 
 def _is_invalid_component(value: str) -> bool:
     candidate = (value or "").strip()
-    if not candidate or candidate in {".", ".."}:
+    if not is_valid_component(candidate):
         return True
-    if "/" in candidate or "\\" in candidate:
-        return True
-    if candidate.startswith("."):
-        return True
-    return False
+    return candidate.startswith(".")
 
 
 def _artifact_media_type(name: str) -> str:

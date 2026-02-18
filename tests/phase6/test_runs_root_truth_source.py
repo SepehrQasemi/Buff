@@ -7,7 +7,10 @@ import pandas as pd
 from fastapi.testclient import TestClient
 
 from apps.api.main import app
+from apps.api.phase6.paths import user_root, user_runs_root
 from apps.api.phase6.registry import upsert_registry_entry
+
+TEST_USER_ID = "test-user"
 
 
 def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
@@ -18,7 +21,7 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
 
 
 def _make_runs_root_run(runs_root: Path, run_id: str) -> Path:
-    run_dir = runs_root / run_id
+    run_dir = user_runs_root(runs_root, TEST_USER_ID) / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
     records = [
@@ -86,9 +89,10 @@ def _make_runs_root_run(runs_root: Path, run_id: str) -> Path:
         "status": "COMPLETED",
         "data": {"symbol": "BTCUSDT", "timeframe": "1m"},
         "strategy": {"id": "hold"},
+        "meta": {"owner_user_id": TEST_USER_ID},
     }
     (run_dir / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    upsert_registry_entry(runs_root, run_dir, manifest)
+    upsert_registry_entry(user_root(runs_root, TEST_USER_ID), run_dir, manifest)
     return run_dir
 
 

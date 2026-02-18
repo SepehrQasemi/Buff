@@ -18,6 +18,7 @@ GOLDENS_ROOT = Path("tests/goldens/phase6")
 
 SAMPLE_PATH = (FIXTURES_ROOT / "sample.csv").as_posix()
 CROSS_PATH = (FIXTURES_ROOT / "cross.csv").as_posix()
+TEST_USER_ID = "test-user"
 
 REQUIRED_ARTIFACTS = [
     "manifest.json",
@@ -33,11 +34,29 @@ REQUIRED_ARTIFACTS = [
 DECIMAL_PATTERN = re.compile(r"-?\d+\.(\d+)")
 
 
+def _user_root_path(runs_root: Path) -> Path:
+    return runs_root / "users" / TEST_USER_ID
+
+
+def _runs_path(runs_root: Path) -> Path:
+    return _user_root_path(runs_root) / "runs"
+
+
+def _run_path(runs_root: Path, run_id: str) -> Path:
+    return _runs_path(runs_root) / run_id
+
+
+def _registry_path(runs_root: Path) -> Path:
+    return _user_root_path(runs_root) / "index.json"
+
+
 @pytest.fixture(scope="module")
 def phase6_runs(tmp_path_factory):
     runs_root = tmp_path_factory.mktemp("phase6_runs")
     previous = os.environ.get("RUNS_ROOT")
+    previous_default_user = os.environ.get("BUFF_DEFAULT_USER")
     os.environ["RUNS_ROOT"] = str(runs_root)
+    os.environ["BUFF_DEFAULT_USER"] = TEST_USER_ID
     client = TestClient(app)
 
     response_hold = client.post("/api/v1/runs", json=_payload())
@@ -67,6 +86,10 @@ def phase6_runs(tmp_path_factory):
             os.environ.pop("RUNS_ROOT", None)
         else:
             os.environ["RUNS_ROOT"] = previous
+        if previous_default_user is None:
+            os.environ.pop("BUFF_DEFAULT_USER", None)
+        else:
+            os.environ["BUFF_DEFAULT_USER"] = previous_default_user
 
 
 def _payload(
@@ -133,12 +156,12 @@ def _assert_error_response(response, status_code: int, code: str) -> dict:
 
 def test_run_create_success(phase6_runs):
     run_id = phase6_runs["hold"]
-    run_dir = phase6_runs["runs_root"] / run_id
+    run_dir = _run_path(phase6_runs["runs_root"], run_id)
     assert run_dir.exists()
     for name in REQUIRED_ARTIFACTS:
         assert (run_dir / name).exists()
 
-    registry_path = phase6_runs["runs_root"] / "index.json"
+    registry_path = _registry_path(phase6_runs["runs_root"])
     assert registry_path.exists()
     registry = json.loads(registry_path.read_text(encoding="utf-8"))
     assert any(entry.get("run_id") == run_id for entry in registry.get("runs", []))
@@ -167,11 +190,11 @@ def test_run_create_with_upload(monkeypatch):
             )
         assert response.status_code in {200, 201}
         run_id = response.json()["run_id"]
-        run_dir = runs_root / run_id
+        run_dir = _run_path(runs_root, run_id)
         assert (run_dir / "metrics.json").exists()
         manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
         source_path = manifest["data"]["source_path"]
-        assert source_path.startswith("runs/_upload_test/inputs/")
+        assert source_path.startswith("runs/_upload_test/users/test-user/inputs/")
     finally:
         client.close()
         shutil.rmtree(runs_root, ignore_errors=True)
@@ -186,7 +209,7 @@ def test_run_idempotent(monkeypatch, tmp_path):
     first = client.post("/api/v1/runs", json=_payload())
     assert first.status_code == 201
     run_id = first.json()["run_id"]
-    run_dir = runs_root / run_id
+    run_dir = _run_path(runs_root, run_id)
     before_hash = _artifact_hash(run_dir)
 
     second = client.post("/api/v1/runs", json=_payload())
@@ -223,14 +246,14 @@ def test_determinism_across_runs(monkeypatch, tmp_path):
     first = client.post("/api/v1/runs", json=_payload())
     assert first.status_code == 201
     run_id = first.json()["run_id"]
-    hash_a = _artifact_hash(runs_root_a / run_id)
+    hash_a = _artifact_hash(_run_path(runs_root_a, run_id))
 
     monkeypatch.setenv("RUNS_ROOT", str(runs_root_b))
     second = client.post("/api/v1/runs", json=_payload())
     assert second.status_code == 201
     run_id_b = second.json()["run_id"]
     assert run_id_b == run_id
-    hash_b = _artifact_hash(runs_root_b / run_id_b)
+    hash_b = _artifact_hash(_run_path(runs_root_b, run_id_b))
 
     assert hash_a == hash_b
 
@@ -245,7 +268,7 @@ def test_corrupted_run_detection(monkeypatch, tmp_path):
     assert response.status_code == 201
     run_id = response.json()["run_id"]
 
-    metrics_path = runs_root / run_id / "metrics.json"
+    metrics_path = _run_path(runs_root, run_id) / "metrics.json"
     metrics_path.unlink()
 
     listed = client.get("/api/v1/runs")
@@ -266,7 +289,7 @@ def test_parquet_only_trades_not_corrupted(monkeypatch, tmp_path):
     response = client.post("/api/v1/runs", json=_payload())
     assert response.status_code == 201
     run_id = response.json()["run_id"]
-    run_dir = runs_root / run_id
+    run_dir = _run_path(runs_root, run_id)
 
     trade_rows: list[dict[str, object]] = []
     trades_jsonl = run_dir / "trades.jsonl"
@@ -295,7 +318,7 @@ def test_metrics_invalid_sets_degraded_and_diagnostics(monkeypatch, tmp_path):
     assert response.status_code == 201
     run_id = response.json()["run_id"]
 
-    metrics_path = runs_root / run_id / "metrics.json"
+    metrics_path = _run_path(runs_root, run_id) / "metrics.json"
     metrics_path.write_text("{bad json", encoding="utf-8")
 
     listed = client.get("/api/v1/runs")
@@ -323,7 +346,7 @@ def test_reconcile_discovers_missing_run_dirs(monkeypatch, tmp_path):
     assert response.status_code == 201
     run_id = response.json()["run_id"]
 
-    index_path = runs_root / "index.json"
+    index_path = _registry_path(runs_root)
     index_path.write_text(
         json.dumps({"schema_version": "1.0.0", "generated_at": None, "runs": []}),
         encoding="utf-8",
@@ -347,10 +370,12 @@ def test_reconcile_ignores_non_run_directories(monkeypatch, tmp_path):
     assert response.status_code == 201
     run_id = response.json()["run_id"]
 
-    (runs_root / "inputs").mkdir(parents=True, exist_ok=True)
-    (runs_root / "tmp_cache").mkdir(parents=True, exist_ok=True)
-    (runs_root / "scratch_area").mkdir(parents=True, exist_ok=True)
-    (runs_root / "run_noise").mkdir(parents=True, exist_ok=True)
+    runs_path = _runs_path(runs_root)
+    runs_path.mkdir(parents=True, exist_ok=True)
+    (runs_path / "inputs").mkdir(parents=True, exist_ok=True)
+    (runs_path / "tmp_cache").mkdir(parents=True, exist_ok=True)
+    (runs_path / "scratch_area").mkdir(parents=True, exist_ok=True)
+    (runs_path / "run_noise").mkdir(parents=True, exist_ok=True)
 
     listed = client.get("/api/v1/runs")
     assert listed.status_code == 200
@@ -361,7 +386,7 @@ def test_reconcile_ignores_non_run_directories(monkeypatch, tmp_path):
     assert "scratch_area" not in run_ids
     assert "run_noise" not in run_ids
 
-    index_payload = json.loads((runs_root / "index.json").read_text(encoding="utf-8"))
+    index_payload = json.loads(_registry_path(runs_root).read_text(encoding="utf-8"))
     indexed_ids = {
         item.get("run_id") for item in index_payload.get("runs", []) if isinstance(item, dict)
     }
@@ -382,7 +407,7 @@ def test_metrics_missing_error_code(monkeypatch, tmp_path):
     assert response.status_code == 201
     run_id = response.json()["run_id"]
 
-    metrics_path = runs_root / run_id / "metrics.json"
+    metrics_path = _run_path(runs_root, run_id) / "metrics.json"
     metrics_path.unlink()
 
     metrics = client.get(f"/api/v1/runs/{run_id}/metrics")
@@ -398,7 +423,7 @@ def test_metrics_missing_error_code(monkeypatch, tmp_path):
 )
 def test_goldens_match(phase6_runs, scenario, run_key):
     run_id = phase6_runs[run_key]
-    run_dir = phase6_runs["runs_root"] / run_id
+    run_dir = _run_path(phase6_runs["runs_root"], run_id)
     golden_dir = GOLDENS_ROOT / scenario
     manifest = _load_golden_manifest(golden_dir)
     expected_artifacts = manifest.get("artifacts", {})
@@ -419,7 +444,7 @@ def test_goldens_match(phase6_runs, scenario, run_key):
 
 def test_metrics_are_meaningful(phase6_runs):
     run_id = phase6_runs["hold"]
-    metrics_path = phase6_runs["runs_root"] / run_id / "metrics.json"
+    metrics_path = _run_path(phase6_runs["runs_root"], run_id) / "metrics.json"
     metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
     assert metrics["num_records"] == 1
     assert metrics["num_trades"] == 1
@@ -428,7 +453,7 @@ def test_metrics_are_meaningful(phase6_runs):
 
 def test_ma_cross_produces_trade(phase6_runs):
     run_id = phase6_runs["cross"]
-    trades_path = phase6_runs["runs_root"] / run_id / "trades.jsonl"
+    trades_path = _run_path(phase6_runs["runs_root"], run_id) / "trades.jsonl"
     lines = [line for line in trades_path.read_text(encoding="utf-8").splitlines() if line]
     assert len(lines) >= 1
     record = json.loads(lines[0])
@@ -448,14 +473,14 @@ def test_numeric_policy_rounding_and_determinism(monkeypatch, tmp_path):
     first = client.post("/api/v1/runs", json=payload)
     assert first.status_code == 201
     run_id = first.json()["run_id"]
-    equity_a = (runs_root_a / run_id / "equity_curve.json").read_bytes()
+    equity_a = (_run_path(runs_root_a, run_id) / "equity_curve.json").read_bytes()
     _assert_decimal_precision(equity_a, 8)
 
     monkeypatch.setenv("RUNS_ROOT", str(runs_root_b))
     second = client.post("/api/v1/runs", json=payload)
     assert second.status_code == 201
     run_id_b = second.json()["run_id"]
-    equity_b = (runs_root_b / run_id_b / "equity_curve.json").read_bytes()
+    equity_b = (_run_path(runs_root_b, run_id_b) / "equity_curve.json").read_bytes()
     assert equity_a == equity_b
 
 

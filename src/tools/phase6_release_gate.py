@@ -17,11 +17,12 @@ if str(SRC_ROOT) not in sys.path:
 
 def _load_run_builder():
     from apps.api.phase6.run_builder import RunBuilderError, create_run
+    from apps.api.phase6.paths import user_root, user_runs_root
 
-    return RunBuilderError, create_run
+    return RunBuilderError, create_run, user_root, user_runs_root
 
 
-RunBuilderError, create_run = _load_run_builder()
+RunBuilderError, create_run, user_root, user_runs_root = _load_run_builder()
 
 GOLDENS_ROOT = REPO_ROOT / "tests" / "goldens" / "phase6"
 
@@ -73,23 +74,24 @@ def _load_golden_manifest(scenario: str) -> dict[str, str]:
     return payload.get("artifacts", {})
 
 
-def _create_run(runs_root: Path, payload: dict) -> tuple[str, Path]:
+def _create_run(runs_root: Path, payload: dict, *, user_id: str) -> tuple[str, Path]:
     os.environ["RUNS_ROOT"] = str(runs_root)
     try:
-        status_code, response = create_run(payload)
+        status_code, response = create_run(payload, user_id=user_id)
     except RunBuilderError as exc:
         raise SystemExit(f"Run creation failed: {exc.code} {exc.message}") from exc
     if status_code not in {200, 201}:
         raise SystemExit(f"Run creation failed: status {status_code}")
     run_id = response["run_id"]
-    run_dir = runs_root / run_id
+    run_dir = user_runs_root(runs_root, user_id) / run_id
     if not run_dir.exists():
         raise SystemExit(f"Run dir missing: {run_dir}")
     return run_id, run_dir
 
 
-def _verify_registry(runs_root: Path, run_id: str) -> None:
-    registry_path = runs_root / "index.json"
+def _verify_registry(runs_root: Path, run_id: str, *, user_id: str) -> None:
+    owner_root = user_root(runs_root, user_id)
+    registry_path = owner_root / "index.json"
     if not registry_path.exists():
         raise SystemExit("Registry missing")
     payload = json.loads(registry_path.read_text(encoding="utf-8"))
@@ -101,8 +103,10 @@ def _verify_registry(runs_root: Path, run_id: str) -> None:
         raise SystemExit(f"Registry entry missing for {run_id}")
     if entry.get("status") == "CORRUPTED":
         raise SystemExit(f"Registry entry corrupted for {run_id}")
+    if entry.get("owner_user_id") != user_id:
+        raise SystemExit(f"Registry owner mismatch for {run_id}")
     manifest_path = entry.get("manifest_path")
-    if manifest_path != f"{run_id}/manifest.json":
+    if manifest_path != f"runs/{run_id}/manifest.json":
         raise SystemExit(f"Registry manifest path invalid for {run_id}")
 
 
@@ -137,8 +141,8 @@ def main() -> int:
     root_b.mkdir(parents=True, exist_ok=True)
 
     try:
-        run_id_a, run_dir_a = _create_run(root_a, _payload_hold())
-        run_id_b, run_dir_b = _create_run(root_b, _payload_hold())
+        run_id_a, run_dir_a = _create_run(root_a, _payload_hold(), user_id="test-user")
+        run_id_b, run_dir_b = _create_run(root_b, _payload_hold(), user_id="test-user")
         if run_id_a != run_id_b:
             raise SystemExit("Determinism failed: run_id mismatch")
 
@@ -147,10 +151,10 @@ def main() -> int:
         if hashes_a != hashes_b:
             raise SystemExit("Determinism failed: artifact hashes differ")
 
-        _verify_registry(root_a, run_id_a)
-        _verify_registry(root_b, run_id_b)
+        _verify_registry(root_a, run_id_a, user_id="test-user")
+        _verify_registry(root_b, run_id_b, user_id="test-user")
 
-        _, run_dir_cross = _create_run(root_a, _payload_ma_cross())
+        _, run_dir_cross = _create_run(root_a, _payload_ma_cross(), user_id="test-user")
         _verify_goldens("hold_sample", run_dir_a)
         _verify_goldens("ma_cross", run_dir_cross)
     finally:

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .canonical import write_canonical_json
-from .paths import is_within_root
+from .paths import is_within_root, user_root, user_runs_root, validate_user_id
 
 REGISTRY_FILENAME = "index.json"
 REGISTRY_SCHEMA_VERSION = "1.0.0"
@@ -112,12 +112,16 @@ def _fsync_dir(path: Path) -> None:
         os.close(fd)
 
 
-def _registry_path(runs_root: Path) -> Path:
-    return runs_root / REGISTRY_FILENAME
+def _runs_path(user_root_path: Path) -> Path:
+    return user_root_path / "runs"
 
 
-def _load_registry_payload(runs_root: Path) -> dict[str, Any]:
-    path = _registry_path(runs_root)
+def _registry_path(user_root_path: Path) -> Path:
+    return user_root_path / REGISTRY_FILENAME
+
+
+def _load_registry_payload(user_root_path: Path) -> dict[str, Any]:
+    path = _registry_path(user_root_path)
     if not path.exists():
         return {"schema_version": REGISTRY_SCHEMA_VERSION, "generated_at": None, "runs": []}
     try:
@@ -141,7 +145,7 @@ def _utc_now_iso() -> str:
 
 
 def _manifest_path(run_id: str) -> str:
-    return f"{run_id}/manifest.json"
+    return f"runs/{run_id}/manifest.json"
 
 
 def _artifacts_present(run_dir: Path) -> list[str]:
@@ -277,8 +281,24 @@ def _derive_status_and_health(
     return status, "HEALTHY"
 
 
+def _extract_owner_user_id(manifest: dict[str, Any], fallback_user_id: str | None) -> str | None:
+    meta = manifest.get("meta")
+    if isinstance(meta, dict):
+        owner = meta.get("owner_user_id")
+        if isinstance(owner, str):
+            owner = owner.strip()
+            if owner:
+                return owner
+    return fallback_user_id
+
+
 def build_registry_entry(
-    run_dir: Path, manifest: dict[str, Any], *, fallback_status: str | None = None
+    run_dir: Path,
+    manifest: dict[str, Any],
+    *,
+    user_id: str | None = None,
+    fallback_status: str | None = None,
+    migrated_from_legacy: bool | None = None,
 ) -> dict[str, Any]:
     run_id = str(manifest.get("run_id") or run_dir.name)
     artifact_eval = _evaluate_artifacts(run_dir)
@@ -289,9 +309,15 @@ def build_registry_entry(
         fallback_status=fallback_status,
     )
 
+    created_at = manifest.get("created_at")
+    if not isinstance(created_at, str) or not created_at.strip():
+        created_at = _utc_now_iso()
+    owner_user_id = _extract_owner_user_id(manifest, user_id)
+
     entry = {
         "run_id": run_id,
-        "created_at": manifest.get("created_at"),
+        "created_at": created_at,
+        "owner_user_id": owner_user_id,
         "symbol": (manifest.get("data") or {}).get("symbol"),
         "timeframe": (manifest.get("data") or {}).get("timeframe"),
         "status": status,
@@ -305,6 +331,19 @@ def build_registry_entry(
         "checks": artifact_eval["checks"],
         "last_verified_at": _utc_now_iso(),
     }
+    entry_meta: dict[str, Any] = {}
+    if owner_user_id:
+        entry_meta["owner_user_id"] = owner_user_id
+    if migrated_from_legacy is not None:
+        entry_meta["migrated_from_legacy"] = bool(migrated_from_legacy)
+    else:
+        manifest_meta = manifest.get("meta")
+        if isinstance(manifest_meta, dict) and isinstance(
+            manifest_meta.get("migrated_from_legacy"), bool
+        ):
+            entry_meta["migrated_from_legacy"] = bool(manifest_meta["migrated_from_legacy"])
+    if entry_meta:
+        entry["meta"] = entry_meta
     return entry
 
 
@@ -326,7 +365,7 @@ def _is_candidate_run_dir(run_dir: Path) -> bool:
     if not name or name.startswith("."):
         return False
     lowered = name.lower()
-    if lowered in {"inputs", "__pycache__", "tmp", "temp"}:
+    if lowered in {"inputs", "__pycache__", "tmp", "temp", "users"}:
         return False
     if lowered.startswith("tmp_") or lowered.startswith("tmp-"):
         return False
@@ -340,10 +379,15 @@ def _is_candidate_run_dir(run_dir: Path) -> bool:
     return True
 
 
-def _missing_run_dir_entry(run_id: str, existing: dict[str, Any]) -> dict[str, Any]:
+def _missing_run_dir_entry(
+    run_id: str,
+    existing: dict[str, Any],
+    *,
+    owner_user_id: str | None,
+) -> dict[str, Any]:
     created_at = existing.get("created_at")
     if not isinstance(created_at, str):
-        created_at = None
+        created_at = _utc_now_iso()
     symbol = existing.get("symbol")
     if not isinstance(symbol, str):
         symbol = None
@@ -356,9 +400,10 @@ def _missing_run_dir_entry(run_id: str, existing: dict[str, Any]) -> dict[str, A
     strategy_id = existing.get("strategy_id")
     if not isinstance(strategy_id, str):
         strategy_id = None
-    return {
+    entry = {
         "run_id": run_id,
         "created_at": created_at,
+        "owner_user_id": owner_user_id,
         "symbol": symbol,
         "timeframe": timeframe,
         "status": "CORRUPTED",
@@ -372,16 +417,46 @@ def _missing_run_dir_entry(run_id: str, existing: dict[str, Any]) -> dict[str, A
         "checks": {"required": {"run_dir": {"status": "missing"}}, "json_parse": {}},
         "last_verified_at": _utc_now_iso(),
     }
+    entry_meta = existing.get("meta")
+    if isinstance(entry_meta, dict):
+        if isinstance(entry_meta.get("migrated_from_legacy"), bool):
+            entry["meta"] = {"migrated_from_legacy": entry_meta["migrated_from_legacy"]}
+            if owner_user_id:
+                entry["meta"]["owner_user_id"] = owner_user_id
+    return entry
+
+
+def _sorted_runs(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return sorted(
+        [entry for entry in runs if isinstance(entry, dict)],
+        key=lambda item: str(item.get("run_id") or ""),
+    )
+
+
+def _user_id_from_user_root(user_root_path: Path) -> str | None:
+    candidate = user_root_path.name
+    try:
+        return validate_user_id(candidate)
+    except ValueError:
+        return None
 
 
 def upsert_registry_entry(
-    runs_root: Path,
+    user_root_path: Path,
     run_dir: Path,
     manifest: dict[str, Any],
+    *,
+    migrated_from_legacy: bool | None = None,
 ) -> dict[str, Any]:
-    registry = _load_registry_payload(runs_root)
+    registry = _load_registry_payload(user_root_path)
     runs = registry.get("runs", [])
-    entry = build_registry_entry(run_dir, manifest)
+    owner_user_id = _user_id_from_user_root(user_root_path)
+    entry = build_registry_entry(
+        run_dir,
+        manifest,
+        user_id=owner_user_id,
+        migrated_from_legacy=migrated_from_legacy,
+    )
     replaced = False
     for idx, existing in enumerate(runs):
         if isinstance(existing, dict) and existing.get("run_id") == entry["run_id"]:
@@ -392,14 +467,18 @@ def upsert_registry_entry(
         runs.append(entry)
     registry["runs"] = _sorted_runs(runs)
     registry["generated_at"] = _utc_now_iso()
-    _write_registry_payload(runs_root, registry)
+    _write_registry_payload(user_root_path, registry)
     return entry
 
 
-def reconcile_registry(runs_root: Path) -> dict[str, Any]:
-    registry = _load_registry_payload(runs_root)
+def reconcile_registry(user_root_path: Path) -> dict[str, Any]:
+    registry = _load_registry_payload(user_root_path)
     runs = registry.get("runs")
     existing_entries = runs if isinstance(runs, list) else []
+
+    runs_path = _runs_path(user_root_path)
+    runs_path.mkdir(parents=True, exist_ok=True)
+    owner_user_id = _user_id_from_user_root(user_root_path)
 
     reconciled: list[dict[str, Any]] = []
     seen_run_ids: set[str] = set()
@@ -415,9 +494,9 @@ def reconcile_registry(runs_root: Path) -> dict[str, Any]:
             updated = True
             continue
         seen_run_ids.add(run_id)
-        run_dir = (runs_root / run_id).resolve()
-        if not is_within_root(run_dir, runs_root) or not run_dir.exists() or not run_dir.is_dir():
-            rebuilt = _missing_run_dir_entry(run_id, entry)
+        run_dir = (runs_path / run_id).resolve()
+        if not is_within_root(run_dir, runs_path) or not run_dir.exists() or not run_dir.is_dir():
+            rebuilt = _missing_run_dir_entry(run_id, entry, owner_user_id=owner_user_id)
         else:
             manifest = _load_manifest_from_run_dir(run_dir)
             status_hint = entry.get("status")
@@ -425,23 +504,24 @@ def reconcile_registry(runs_root: Path) -> dict[str, Any]:
             rebuilt = build_registry_entry(
                 run_dir,
                 manifest,
+                user_id=owner_user_id,
                 fallback_status=fallback_status,
             )
         if rebuilt != entry:
             updated = True
         reconciled.append(rebuilt)
 
-    for child in runs_root.iterdir():
+    for child in sorted(runs_path.iterdir(), key=lambda item: item.name):
         if not _is_candidate_run_dir(child):
             continue
         run_dir = child.resolve()
-        if not is_within_root(run_dir, runs_root):
+        if not is_within_root(run_dir, runs_path):
             continue
         run_id = child.name
         if run_id in seen_run_ids:
             continue
         manifest = _load_manifest_from_run_dir(run_dir)
-        reconciled.append(build_registry_entry(run_dir, manifest))
+        reconciled.append(build_registry_entry(run_dir, manifest, user_id=owner_user_id))
         seen_run_ids.add(run_id)
         updated = True
 
@@ -451,16 +531,16 @@ def reconcile_registry(runs_root: Path) -> dict[str, Any]:
     registry["runs"] = sorted_runs
     if updated or registry.get("generated_at") is None:
         registry["generated_at"] = _utc_now_iso()
-        _write_registry_payload(runs_root, registry)
+        _write_registry_payload(user_root_path, registry)
     return registry
 
 
-def load_registry(runs_root: Path) -> dict[str, Any]:
-    return _load_registry_payload(runs_root)
+def load_registry(user_root_path: Path) -> dict[str, Any]:
+    return _load_registry_payload(user_root_path)
 
 
-def get_registry_entry(runs_root: Path, run_id: str) -> dict[str, Any] | None:
-    registry = _load_registry_payload(runs_root)
+def get_registry_entry(user_root_path: Path, run_id: str) -> dict[str, Any] | None:
+    registry = _load_registry_payload(user_root_path)
     runs = registry.get("runs", [])
     for entry in runs:
         if isinstance(entry, dict) and entry.get("run_id") == run_id:
@@ -468,24 +548,82 @@ def get_registry_entry(runs_root: Path, run_id: str) -> dict[str, Any] | None:
     return None
 
 
-def _write_registry_payload(runs_root: Path, payload: dict[str, Any]) -> None:
-    path = _registry_path(runs_root)
+def _write_registry_payload(user_root_path: Path, payload: dict[str, Any]) -> None:
+    user_root_path.mkdir(parents=True, exist_ok=True)
+    path = _registry_path(user_root_path)
     tmp_path = path.with_suffix(".tmp")
     write_canonical_json(tmp_path, payload)
     os.replace(tmp_path, path)
-    _fsync_dir(runs_root)
-
-
-def _sorted_runs(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(
-        [entry for entry in runs if isinstance(entry, dict)],
-        key=lambda item: str(item.get("run_id") or ""),
-    )
+    _fsync_dir(user_root_path)
 
 
 def compute_inputs_hash(canonical_bytes: bytes) -> str:
     return sha256(canonical_bytes).hexdigest()
 
 
-def lock_registry(runs_root: Path) -> RegistryLock:
-    return RegistryLock(runs_root / REGISTRY_LOCK_FILENAME)
+def lock_registry(user_root_path: Path) -> RegistryLock:
+    return RegistryLock(user_root_path / REGISTRY_LOCK_FILENAME)
+
+
+def list_legacy_run_dirs(base_runs_root: Path) -> list[Path]:
+    if not base_runs_root.exists() or not base_runs_root.is_dir():
+        return []
+    legacy_dirs: list[Path] = []
+    for child in sorted(base_runs_root.iterdir(), key=lambda item: item.name):
+        if child.name == "users":
+            continue
+        if _is_candidate_run_dir(child):
+            legacy_dirs.append(child.resolve())
+    return legacy_dirs
+
+
+def has_legacy_runs(base_runs_root: Path) -> bool:
+    return bool(list_legacy_run_dirs(base_runs_root))
+
+
+def migrate_legacy_runs(base_runs_root: Path, default_user_id: str) -> dict[str, Any]:
+    normalized_user = validate_user_id(default_user_id)
+    target_user_root = user_root(base_runs_root, normalized_user)
+    target_runs_root = user_runs_root(base_runs_root, normalized_user)
+    target_runs_root.mkdir(parents=True, exist_ok=True)
+
+    migrated_ids: list[str] = []
+    lock = lock_registry(target_user_root)
+    with lock:
+        for source_dir in list_legacy_run_dirs(base_runs_root):
+            run_id = source_dir.name
+            destination_dir = (target_runs_root / run_id).resolve()
+            if not is_within_root(destination_dir, target_runs_root):
+                raise RuntimeError(f"MIGRATION_INVALID_RUN_ID:{run_id}")
+            if destination_dir.exists():
+                raise RuntimeError(f"MIGRATION_CONFLICT:{run_id}")
+
+            os.replace(source_dir, destination_dir)
+            manifest = _load_manifest_from_run_dir(destination_dir)
+            if not isinstance(manifest, dict):
+                manifest = {}
+            if not str(manifest.get("run_id") or "").strip():
+                manifest["run_id"] = run_id
+            if not str(manifest.get("created_at") or "").strip():
+                manifest["created_at"] = _utc_now_iso()
+            meta = manifest.get("meta")
+            if not isinstance(meta, dict):
+                meta = {}
+            meta["owner_user_id"] = normalized_user
+            meta["migrated_from_legacy"] = True
+            manifest["meta"] = meta
+            write_canonical_json(destination_dir / "manifest.json", manifest)
+
+            upsert_registry_entry(
+                target_user_root,
+                destination_dir,
+                manifest,
+                migrated_from_legacy=True,
+            )
+            migrated_ids.append(run_id)
+
+    return {
+        "user_id": normalized_user,
+        "migrated_run_ids": sorted(migrated_ids),
+        "count": len(migrated_ids),
+    }
