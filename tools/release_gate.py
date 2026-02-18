@@ -296,6 +296,12 @@ def main(argv: list[str] | None = None) -> int:
             [sys.executable, "-m", "pytest", "-q", "tools/test_s3_artifact_pack_completeness.py"],
         )
 
+        _log("release_gate: s3_smoke_demo")
+        run_step(
+            "s3_smoke_demo",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s3_smoke_demo.py"],
+        )
+
         if args.with_network_smoke:
             _log("release_gate: mvp_smoke (network)")
             proc = run_step("mvp_smoke", _mvp_smoke_command())
