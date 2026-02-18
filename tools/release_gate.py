@@ -302,6 +302,24 @@ def main(argv: list[str] | None = None) -> int:
             [sys.executable, "-m", "pytest", "-q", "tools/test_s3_smoke_demo.py"],
         )
 
+        _log("release_gate: s4_risk_fail_closed")
+        run_step(
+            "s4_risk_fail_closed",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s4_risk_fail_closed.py"],
+        )
+
+        _log("release_gate: s4_risk_contract_surface")
+        run_step(
+            "s4_risk_contract_surface",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s4_risk_contract_surface.py"],
+        )
+
+        _log("release_gate: s4_risk_artifact_presence")
+        run_step(
+            "s4_risk_artifact_presence",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s4_risk_artifact_presence.py"],
+        )
+
         if args.with_network_smoke:
             _log("release_gate: mvp_smoke (network)")
             proc = run_step("mvp_smoke", _mvp_smoke_command())
