@@ -260,6 +260,12 @@ def main(argv: list[str] | None = None) -> int:
         _log("release_gate: pytest -q")
         run_step("pytest", [sys.executable, "-m", "pytest", "-q"])
 
+        _log("release_gate: s3_double_run_compare")
+        run_step(
+            "s3_double_run_compare",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s3_double_run_compare.py"],
+        )
+
         if args.with_network_smoke:
             _log("release_gate: mvp_smoke (network)")
             proc = run_step("mvp_smoke", _mvp_smoke_command())
