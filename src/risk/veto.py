@@ -5,8 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from audit.schema import AuditEvent, make_audit_event
-from risk.contracts import RiskInputs, validate_risk_inputs
-from risk.state_machine import RiskConfig, RiskDecision, RiskState, evaluate_risk
+from risk.contracts import RiskConfig, RiskDecision, RiskInputs, RiskState, validate_risk_inputs
+from risk.state_machine import evaluate_risk
 
 
 def _invalid_decision(snapshot: dict[str, Any] | None = None) -> RiskDecision:

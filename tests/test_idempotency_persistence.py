@@ -12,8 +12,8 @@ from execution.idempotency_sqlite import SQLiteIdempotencyStore
 from execution.locks import RiskLocks
 from execution.types import IntentSide, OrderIntent
 from risk.contracts import RiskInputs
-from risk.state_machine import RiskConfig, RiskState
-from risk.types import Permission
+from risk.contracts import RiskConfig, RiskState
+from risk.contracts import Permission
 
 
 pytestmark = pytest.mark.unit

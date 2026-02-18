@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from risk.types import RiskState
+from risk.contracts import RiskState
 from strategies.base import StrategySpec, StrategySpecImpl
 
 

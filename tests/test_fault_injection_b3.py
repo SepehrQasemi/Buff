@@ -6,7 +6,7 @@ from pathlib import Path
 from audit.decision_records import DecisionRecordWriter, infer_next_seq_from_jsonl
 from audit.faults import truncate_file_mid_line, write_corrupted_jsonl
 from audit.replay import load_decision_records, replay_verify, last_load_errors
-from risk.types import RiskState
+from risk.contracts import RiskState
 from selector.records import selection_to_record
 from selector.selector import select_strategy
 

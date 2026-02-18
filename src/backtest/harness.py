@@ -23,7 +23,7 @@ from features.regime import (
     RSI_BULL,
     RSI_SLOPE_THRESHOLD,
 )
-from risk.types import RiskState
+from risk.contracts import RiskState
 from selector.records import selection_to_record
 from selector.selector import select_strategy
 from strategy_registry import get_strategy, list_strategies, run_strategy

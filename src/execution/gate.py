@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from audit.schema import AuditEvent
 from risk.contracts import RiskInputs
-from risk.state_machine import RiskConfig, RiskDecision, RiskState
+from risk.contracts import RiskConfig, RiskDecision, RiskState
 from risk.veto import risk_veto
 
 

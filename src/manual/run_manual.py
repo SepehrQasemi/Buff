@@ -12,7 +12,7 @@ from buff.data.store import load_parquet, ohlcv_parquet_path
 from buff.features.runner import run_features
 from risk.evaluator import evaluate_risk_report
 from risk.report import write_risk_report
-from risk.types import RiskContext
+from risk.contracts import RiskContext
 from utils.path_guard import guard_manual_write
 
 

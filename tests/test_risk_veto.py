@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 from risk.contracts import RiskInputs
-from risk.state_machine import RiskConfig, RiskState, evaluate_risk
+from risk.contracts import RiskConfig, RiskState
+from risk.state_machine import evaluate_risk
 from risk.veto import risk_veto
 
 

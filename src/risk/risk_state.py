@@ -90,7 +90,7 @@ class Event:
 
 
 @dataclass(frozen=True)
-class RiskState:
+class RiskTimelineState:
     ts_utc: datetime
     risk_state: RiskLevel
     size_multiplier: float
@@ -145,14 +145,14 @@ def compute_risk_timeline(
     start_ts: datetime,
     end_ts: datetime,
     freq: str = DEFAULT_FREQ,
-) -> list[RiskState]:
+) -> list[RiskTimelineState]:
     start = _ensure_utc(start_ts, "start_ts")
     end = _ensure_utc(end_ts, "end_ts")
     if end < start:
         raise ValueError("end_ts must be >= start_ts")
     step = _parse_freq(freq)
     sorted_events = _sorted_events(events)
-    timeline: list[RiskState] = []
+    timeline: list[RiskTimelineState] = []
     current = start
     while current <= end:
         timeline.append(_evaluate_timestamp(current, sorted_events))
@@ -160,7 +160,7 @@ def compute_risk_timeline(
     return timeline
 
 
-def write_risk_timeline_json(path: str | Path, timeline: Sequence[RiskState]) -> Path:
+def write_risk_timeline_json(path: str | Path, timeline: Sequence[RiskTimelineState]) -> Path:
     out_path = Path(path)
     payload = [state.to_dict() for state in timeline]
     content = json.dumps(payload, indent=2, sort_keys=True)
@@ -192,7 +192,7 @@ def _sorted_events(events: Iterable[Event]) -> list[Event]:
     return sorted(events, key=lambda event: (event.ts_utc, event.event_id))
 
 
-def _evaluate_timestamp(ts_utc: datetime, events: Sequence[Event]) -> RiskState:
+def _evaluate_timestamp(ts_utc: datetime, events: Sequence[Event]) -> RiskTimelineState:
     red_reasons: list[str] = []
     red_ids: list[str] = []
     yellow_reasons: list[str] = []
@@ -212,7 +212,7 @@ def _evaluate_timestamp(ts_utc: datetime, events: Sequence[Event]) -> RiskState:
                 yellow_ids.append(event.event_id)
 
     if red_reasons:
-        return RiskState(
+        return RiskTimelineState(
             ts_utc=ts_utc,
             risk_state=RiskLevel.RED,
             size_multiplier=SIZE_MULTIPLIER_RED,
@@ -220,20 +220,24 @@ def _evaluate_timestamp(ts_utc: datetime, events: Sequence[Event]) -> RiskState:
             event_ids=tuple(red_ids),
         )
     if yellow_reasons:
-        return RiskState(
+        return RiskTimelineState(
             ts_utc=ts_utc,
             risk_state=RiskLevel.YELLOW,
             size_multiplier=SIZE_MULTIPLIER_YELLOW,
             reasons=tuple(yellow_reasons),
             event_ids=tuple(yellow_ids),
         )
-    return RiskState(
+    return RiskTimelineState(
         ts_utc=ts_utc,
         risk_state=RiskLevel.GREEN,
         size_multiplier=SIZE_MULTIPLIER_GREEN,
         reasons=tuple(),
         event_ids=tuple(),
     )
+
+
+# DEPRECATED: timeline-local alias retained for compatibility.
+RiskState = RiskTimelineState
 
 
 def _within_window(ts_utc: datetime, event: Event) -> bool:

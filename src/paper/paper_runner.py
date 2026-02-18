@@ -6,7 +6,7 @@ from pathlib import Path
 
 from audit.decision_records import DecisionRecordWriter, ensure_run_dir, infer_next_seq_from_jsonl
 from audit.replay import replay_verify
-from risk.types import RiskState
+from risk.contracts import RiskState
 from selector.records import selection_to_record
 from selector.selector import select_strategy
 from selector.types import MarketSignals

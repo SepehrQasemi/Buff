@@ -15,8 +15,8 @@ from execution.locks import RiskLocks
 from execution.trade_log import TRADE_SCHEMA
 from execution.types import IntentSide, OrderIntent
 from risk.contracts import RiskInputs
-from risk.state_machine import RiskConfig as GateRiskConfig
-from risk.types import Permission, RiskState
+from risk.contracts import RiskConfig as GateRiskConfig
+from risk.contracts import Permission, RiskState
 
 
 def _intent(event_id: str) -> OrderIntent:

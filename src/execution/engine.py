@@ -7,9 +7,9 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from risk.types import Permission, RiskState
+from risk.contracts import Permission, RiskState
 from risk.contracts import RiskInputs
-from risk.state_machine import RiskConfig as GateRiskConfig
+from risk.contracts import RiskConfig as GateRiskConfig
 from execution.gate import gate_execution
 from risk_fundamental.integration import apply_fundamental_permission, get_default_rules_path
 

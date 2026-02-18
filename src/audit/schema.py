@@ -9,7 +9,7 @@ import json
 import uuid
 from typing import Any
 
-from risk.state_machine import RiskDecision
+from risk.contracts import RiskDecision
 
 
 @dataclass(frozen=True)

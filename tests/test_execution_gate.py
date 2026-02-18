@@ -14,8 +14,8 @@ from execution.idempotency import IdempotencyStore
 from execution.locks import RiskLocks
 from execution.types import ExecutionDecision, IntentSide, OrderIntent
 from risk.contracts import RiskInputs
-from risk.state_machine import RiskConfig, RiskDecision, RiskState
-from risk.types import Permission
+from risk.contracts import RiskConfig, RiskDecision, RiskState
+from risk.contracts import Permission
 from risk.veto import risk_veto
 
 
