@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from risk.contracts import RiskConfig, RiskContext, RiskInputs, threshold_snapshot
+from risk.contracts import reason_codes, reason_payloads
 from risk.policy import evaluate_policy
 
 
@@ -133,7 +134,10 @@ def evaluate_risk_report(
         "risk_state": decision.state.value,
         "permission": decision.permission.value,
         "recommended_scale": decision.recommended_scale,
-        "reasons": list(decision.reasons),
+        "reasons": reason_codes(decision.reasons),
+        "reason_details": reason_payloads(decision.reasons),
+        "config_version": decision.config_version,
+        "inputs_digest": decision.inputs_digest,
         "thresholds": thresholds,
         "metrics": {
             "atr_pct": latest_atr_pct,

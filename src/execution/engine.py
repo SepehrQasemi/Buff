@@ -5,11 +5,12 @@ from datetime import datetime, timezone
 import os
 import json
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
-from risk.contracts import Permission, RiskState
+from risk.contracts import Permission, RiskReason, RiskSeverity, RiskState
 from risk.contracts import RiskInputs
 from risk.contracts import RiskConfig as GateRiskConfig
+from risk.contracts import reason_payloads, risk_inputs_digest
 from execution.gate import gate_execution
 from risk_fundamental.integration import apply_fundamental_permission, get_default_rules_path
 
@@ -28,7 +29,7 @@ from .decision_contract import DecisionValidationError, build_decision_payload
 from .trade_log import write_trades_parquet
 
 from control_plane.state import ControlState, SystemState
-from decision_records import inputs_digest
+from decision_records import inputs_digest as decision_inputs_digest
 from decision_records.schema import (
     SCHEMA_VERSION,
     ControlStatus,
@@ -627,6 +628,84 @@ def _write_decision_record(path: Path, record: dict) -> None:
         handle.write("\n")
 
 
+def _normalize_risk_reasons(raw_reasons: object, *, risk_state: str) -> list[RiskReason]:
+    if isinstance(raw_reasons, str):
+        items: list[object] = [raw_reasons]
+    elif isinstance(raw_reasons, (list, tuple)):
+        items = list(raw_reasons)
+    elif raw_reasons is None:
+        items = []
+    else:
+        items = [str(raw_reasons)]
+
+    normalized: list[RiskReason] = []
+    for item in items:
+        try:
+            normalized.append(RiskReason.from_value(item))
+        except Exception:
+            normalized.append(
+                RiskReason(
+                    "invalid_reason_payload",
+                    severity=RiskSeverity.ERROR,
+                    message="risk reason payload is invalid",
+                    details={"raw": str(item)},
+                )
+            )
+
+    if risk_state == RiskStatus.RED.value and not normalized:
+        normalized.append(
+            RiskReason(
+                "risk_state_red",
+                severity=RiskSeverity.ERROR,
+                message="risk state is RED",
+                details={},
+            )
+        )
+    return normalized
+
+
+def _risk_artifact_block(
+    risk_decision: dict[str, Any], *, run_id: str, timeframe: str
+) -> dict[str, Any]:
+    risk_state = str(risk_decision.get("risk_state", ""))
+    reasons = _normalize_risk_reasons(risk_decision.get("reasons"), risk_state=risk_state)
+    config_version_raw = risk_decision.get("config_version")
+    config_version = (
+        str(config_version_raw).strip()
+        if isinstance(config_version_raw, str) and config_version_raw.strip()
+        else "v1"
+    )
+    digest_raw = risk_decision.get("inputs_digest")
+    if isinstance(digest_raw, str) and digest_raw.strip():
+        inputs_digest_value = digest_raw.strip()
+    else:
+        inputs_digest_value = risk_inputs_digest(
+            {
+                "run_id": run_id,
+                "timeframe": timeframe,
+                "risk_state": risk_state,
+                "config_version": config_version,
+                "reasons": reason_payloads(reasons),
+            }
+        )
+
+    permission_raw = risk_decision.get("permission")
+    if isinstance(permission_raw, str) and permission_raw.strip():
+        permission = permission_raw.strip().upper()
+    else:
+        permission = (
+            Permission.BLOCK.value if risk_state == RiskStatus.RED.value else Permission.ALLOW.value
+        )
+
+    return {
+        "decision": risk_state,
+        "permission": permission,
+        "reasons": reason_payloads(reasons),
+        "config_version": config_version,
+        "inputs_digest": inputs_digest_value,
+    }
+
+
 def execute_paper_run(
     input_data: dict,
     features: dict,
@@ -673,7 +752,12 @@ def execute_paper_run(
         "risk_status": risk_state,
         "control_status": control_status,
     }
-    digest = inputs_digest(summary_payload)
+    digest = decision_inputs_digest(summary_payload)
+    risk_block = _risk_artifact_block(
+        risk_decision,
+        run_id=run_id,
+        timeframe=str(input_data["timeframe"]),
+    )
 
     execution_status = ExecutionStatus.EXECUTED.value
     reason: str | None = None
@@ -729,6 +813,7 @@ def execute_paper_run(
         "execution_status": execution_status,
         "reason": reason,
         "inputs_digest": digest,
+        "risk": risk_block,
         "artifact_paths": {"decision_records": records_rel.as_posix()},
     }
 
