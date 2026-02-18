@@ -1,4 +1,4 @@
-# SYSTEM_EVOLUTION_ROADMAP
+﻿# SYSTEM_EVOLUTION_ROADMAP
 
 This document defines all possible future stages.
 It does NOT determine current stage.
@@ -44,7 +44,15 @@ Scope:
 
 ---
 
-## S4 — External Integration Layer (Future)
+## S4 — Risk Engine Maturity
+Scope:
+- Expanded risk semantics
+- Stronger risk controls
+- Explainable risk decisions
+
+---
+
+## Future Layer — External Integration Layer
 Scope:
 - Broker adapters (strictly gated)
 - Real execution boundaries
