@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
+from hashlib import sha256
+import json
 from math import isfinite
-from typing import Any, Mapping
+from typing import Any
 
 
 class RiskState(str, Enum):
@@ -19,6 +22,146 @@ class Permission(str, Enum):
     ALLOW = "ALLOW"
     RESTRICT = "RESTRICT"
     BLOCK = "BLOCK"
+
+
+class RiskSeverity(str, Enum):
+    INFO = "INFO"
+    WARN = "WARN"
+    ERROR = "ERROR"
+
+
+JsonPrimitive = str | int | float | bool | None
+JsonValue = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
+
+
+def _normalize_json_value(value: Any) -> JsonValue:
+    if isinstance(value, Enum):
+        return _normalize_json_value(value.value)
+    if value is None or isinstance(value, (str, bool)):
+        return value
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        if not isfinite(value):
+            if value != value:
+                return "NaN"
+            return "Infinity" if value > 0 else "-Infinity"
+        return value
+    if isinstance(value, Mapping):
+        normalized: dict[str, JsonValue] = {}
+        for key in sorted(value.keys(), key=lambda item: str(item)):
+            if not isinstance(key, str):
+                raise ValueError("json mapping keys must be strings")
+            normalized[key] = _normalize_json_value(value[key])
+        return normalized
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return [_normalize_json_value(item) for item in value]
+    raise ValueError(f"non-serializable json value: {type(value).__name__}")
+
+
+def stable_json_dumps(obj: object) -> str:
+    normalized = _normalize_json_value(obj)
+    return json.dumps(normalized, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _sha256_hex(text: str) -> str:
+    return sha256(text.encode("utf-8")).hexdigest()
+
+
+def _normalize_details(details: Mapping[str, Any] | None) -> dict[str, JsonValue]:
+    if details is None:
+        return {}
+    if not isinstance(details, Mapping):
+        raise ValueError("risk reason details must be a mapping")
+    normalized = _normalize_json_value(details)
+    if not isinstance(normalized, dict):
+        raise ValueError("risk reason details must normalize to an object")
+    return normalized
+
+
+class RiskReason(str):
+    """String-compatible structured reason for deterministic risk decisions."""
+
+    __slots__ = ("rule_id", "severity", "message", "details")
+
+    rule_id: str
+    severity: RiskSeverity
+    message: str
+    details: dict[str, JsonValue]
+
+    def __new__(
+        cls,
+        rule_id: str,
+        *,
+        severity: RiskSeverity | str = RiskSeverity.ERROR,
+        message: str = "",
+        details: Mapping[str, Any] | None = None,
+    ) -> "RiskReason":
+        if not isinstance(rule_id, str) or not rule_id.strip():
+            raise ValueError("risk reason rule_id must be a non-empty string")
+        normalized_rule = rule_id.strip()
+        if isinstance(severity, str):
+            normalized_severity = RiskSeverity(severity.strip().upper())
+        elif isinstance(severity, RiskSeverity):
+            normalized_severity = severity
+        else:
+            raise ValueError("risk reason severity must be INFO, WARN, or ERROR")
+        if not isinstance(message, str):
+            raise ValueError("risk reason message must be a string")
+        normalized_message = message.strip() or normalized_rule
+        normalized_details = _normalize_details(details)
+
+        obj = str.__new__(cls, normalized_rule)
+        object.__setattr__(obj, "rule_id", normalized_rule)
+        object.__setattr__(obj, "severity", normalized_severity)
+        object.__setattr__(obj, "message", normalized_message)
+        object.__setattr__(obj, "details", normalized_details)
+        return obj
+
+    @classmethod
+    def from_value(cls, value: "RiskReason | str | Mapping[str, Any]") -> "RiskReason":
+        if isinstance(value, RiskReason):
+            return value
+        if isinstance(value, str):
+            code = value.strip()
+            if not code:
+                raise ValueError("risk reason code must be non-empty")
+            return cls(code, severity=RiskSeverity.ERROR, message=code, details={})
+        if isinstance(value, Mapping):
+            return cls(
+                str(value.get("rule_id", "")).strip(),
+                severity=value.get("severity", RiskSeverity.ERROR),
+                message=str(value.get("message", "")).strip(),
+                details=value.get("details") if isinstance(value.get("details"), Mapping) else None,
+            )
+        raise ValueError("risk reason must be a string, mapping, or RiskReason")
+
+    def to_dict(self) -> dict[str, JsonValue]:
+        return {
+            "rule_id": self.rule_id,
+            "severity": self.severity.value,
+            "message": self.message,
+            "details": dict(self.details),
+        }
+
+
+def reason_codes(reasons: Sequence[RiskReason | str]) -> list[str]:
+    return [RiskReason.from_value(reason).rule_id for reason in reasons]
+
+
+def reason_payloads(reasons: Sequence[RiskReason | str]) -> list[dict[str, JsonValue]]:
+    return [RiskReason.from_value(reason).to_dict() for reason in reasons]
+
+
+def risk_inputs_digest(inputs: RiskInputs | Mapping[str, Any] | dict[str, Any]) -> str:
+    payload: Mapping[str, Any]
+    if isinstance(inputs, RiskInputs):
+        payload = inputs.to_dict()
+    elif isinstance(inputs, Mapping):
+        payload = inputs
+    else:
+        raise ValueError("risk inputs for digest must be RiskInputs or mapping")
+    return _sha256_hex(stable_json_dumps(payload))
 
 
 @dataclass(frozen=True)
@@ -43,6 +186,7 @@ class RiskConfig:
     yellow_vol: float = 0.01
     red_vol: float = 0.02
     recommended_scale_yellow: float = 0.25
+    config_version: str = "v1"
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.missing_red <= 1.0:
@@ -73,6 +217,8 @@ class RiskConfig:
             raise ValueError("vol thresholds must satisfy 0 < yellow < red")
         if not (0.0 <= self.recommended_scale_yellow <= 1.0):
             raise ValueError("recommended_scale_yellow must be in [0, 1]")
+        if not isinstance(self.config_version, str) or not self.config_version.strip():
+            raise ValueError("config_version must be a non-empty string")
 
 
 @dataclass(frozen=True)
@@ -101,10 +247,38 @@ class RiskInputs:
 @dataclass(frozen=True)
 class RiskDecision:
     state: RiskState
-    reasons: list[str] | tuple[str, ...] = field(default_factory=tuple)
+    reasons: list[RiskReason] | tuple[RiskReason, ...] = field(default_factory=tuple)
     snapshot: dict[str, Any] = field(default_factory=dict)
     permission: Permission | None = None
     recommended_scale: float | None = None
+    config_version: str = "v1"
+    inputs_digest: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.state, RiskState):
+            raise ValueError("state must be a RiskState")
+        if not isinstance(self.reasons, (list, tuple)):
+            raise ValueError("reasons must be a list or tuple")
+        normalized_reasons = [RiskReason.from_value(reason) for reason in self.reasons]
+        if isinstance(self.reasons, tuple):
+            object.__setattr__(self, "reasons", tuple(normalized_reasons))
+        else:
+            object.__setattr__(self, "reasons", normalized_reasons)
+        if not isinstance(self.snapshot, dict):
+            raise ValueError("snapshot must be a dict")
+        if self.permission is not None and not isinstance(self.permission, Permission):
+            raise ValueError("permission must be a Permission enum value")
+        if self.recommended_scale is not None and not isinstance(
+            self.recommended_scale, (int, float)
+        ):
+            raise ValueError("recommended_scale must be numeric")
+        if not isinstance(self.config_version, str) or not self.config_version.strip():
+            raise ValueError("config_version must be a non-empty string")
+        if self.inputs_digest:
+            if not isinstance(self.inputs_digest, str):
+                raise ValueError("inputs_digest must be a string")
+        else:
+            object.__setattr__(self, "inputs_digest", risk_inputs_digest(self.snapshot))
 
 
 @dataclass(frozen=True)

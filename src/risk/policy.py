@@ -4,7 +4,16 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from risk.contracts import Permission, RiskConfig, RiskDecision, RiskInputs, RiskState
+from risk.contracts import (
+    Permission,
+    RiskConfig,
+    RiskDecision,
+    RiskInputs,
+    RiskReason,
+    RiskSeverity,
+    RiskState,
+    risk_inputs_digest,
+)
 
 
 def _permission_for_state(state: RiskState) -> Permission:
@@ -23,26 +32,58 @@ def _scale_for_state(state: RiskState, config: RiskConfig) -> float:
     return 0.0
 
 
-def _append_reason(reasons: list[str], reason: str) -> None:
-    if reason not in reasons:
-        reasons.append(reason)
+def _append_reason(
+    reasons: list[RiskReason],
+    *,
+    rule_id: str,
+    severity: RiskSeverity,
+    message: str,
+) -> None:
+    if any(reason.rule_id == rule_id for reason in reasons):
+        return
+    reasons.append(RiskReason(rule_id, severity=severity, message=message))
 
 
 def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
     """Evaluate risk policy for the latest metrics."""
 
-    reasons: list[str] = []
+    reasons: list[RiskReason] = []
 
     if inputs.invalid_index:
-        _append_reason(reasons, "invalid_index")
+        _append_reason(
+            reasons,
+            rule_id="invalid_index",
+            severity=RiskSeverity.ERROR,
+            message="input index is invalid",
+        )
     if not inputs.timestamps_valid:
-        _append_reason(reasons, "invalid_timestamps")
+        _append_reason(
+            reasons,
+            rule_id="invalid_timestamps",
+            severity=RiskSeverity.ERROR,
+            message="timestamps are invalid or non-monotonic",
+        )
     if inputs.invalid_close:
-        _append_reason(reasons, "invalid_close")
+        _append_reason(
+            reasons,
+            rule_id="invalid_close",
+            severity=RiskSeverity.ERROR,
+            message="close prices are invalid",
+        )
     if inputs.missing_fraction > config.max_missing_fraction:
-        _append_reason(reasons, "missing_fraction_exceeded")
+        _append_reason(
+            reasons,
+            rule_id="missing_fraction_exceeded",
+            severity=RiskSeverity.ERROR,
+            message="missing fraction exceeded configured threshold",
+        )
     if not inputs.latest_metrics_valid:
-        _append_reason(reasons, "missing_metrics")
+        _append_reason(
+            reasons,
+            rule_id="missing_metrics",
+            severity=RiskSeverity.ERROR,
+            message="latest metrics are missing",
+        )
 
     if reasons:
         state = RiskState.RED
@@ -51,15 +92,27 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
             permission=_permission_for_state(state),
             recommended_scale=_scale_for_state(state, config),
             reasons=tuple(reasons),
+            config_version=config.config_version,
+            inputs_digest=risk_inputs_digest(inputs),
         )
 
     atr_pct = inputs.atr_pct
     realized_vol = inputs.realized_vol
 
     if atr_pct is not None and atr_pct > config.red_atr_pct:
-        _append_reason(reasons, "atr_pct_above_red")
+        _append_reason(
+            reasons,
+            rule_id="atr_pct_above_red",
+            severity=RiskSeverity.ERROR,
+            message="ATR percent exceeded RED threshold",
+        )
     if realized_vol is not None and realized_vol > config.red_vol:
-        _append_reason(reasons, "realized_vol_above_red")
+        _append_reason(
+            reasons,
+            rule_id="realized_vol_above_red",
+            severity=RiskSeverity.ERROR,
+            message="realized volatility exceeded RED threshold",
+        )
 
     if reasons:
         state = RiskState.RED
@@ -68,6 +121,8 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
             permission=_permission_for_state(state),
             recommended_scale=_scale_for_state(state, config),
             reasons=tuple(reasons),
+            config_version=config.config_version,
+            inputs_digest=risk_inputs_digest(inputs),
         )
 
     yellow_flags: Iterable[tuple[float | None, float, float, str]] = (
@@ -82,7 +137,12 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
 
     for value, yellow, red, label in yellow_flags:
         if value is not None and yellow <= value <= red:
-            _append_reason(reasons, label)
+            _append_reason(
+                reasons,
+                rule_id=label,
+                severity=RiskSeverity.WARN,
+                message=f"{label} threshold warning",
+            )
 
     state = RiskState.YELLOW if reasons else RiskState.GREEN
     return RiskDecision(
@@ -90,4 +150,6 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
         permission=_permission_for_state(state),
         recommended_scale=_scale_for_state(state, config),
         reasons=tuple(reasons),
+        config_version=config.config_version,
+        inputs_digest=risk_inputs_digest(inputs),
     )

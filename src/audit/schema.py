@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import hashlib
 import json
 import uuid
 from typing import Any
 
-from risk.contracts import RiskDecision
+from risk.contracts import RiskDecision, reason_codes, reason_payloads
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,9 @@ class AuditEvent:
     decision: str
     reasons: list[str]
     snapshot: dict[str, Any]
+    reason_details: list[dict[str, Any]] = field(default_factory=list)
+    config_version: str = "v1"
+    inputs_digest: str = ""
 
 
 def canonical_json(obj: object) -> str:
@@ -46,6 +49,9 @@ def make_audit_event(component: str, action: str, decision: RiskDecision) -> Aud
         action=action,
         inputs_hash=sha256_hex(payload),
         decision=decision.state.value,
-        reasons=list(decision.reasons),
+        reasons=reason_codes(decision.reasons),
+        reason_details=reason_payloads(decision.reasons),
         snapshot=decision.snapshot,
+        config_version=decision.config_version,
+        inputs_digest=decision.inputs_digest,
     )
