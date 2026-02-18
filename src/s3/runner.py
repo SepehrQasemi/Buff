@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 from contextlib import contextmanager
 import json
 import re
@@ -77,6 +78,8 @@ _REQUIRED_RESULT_DIGEST_KEYS = {
     "metrics_sha256",
     "report_sha256",
 }
+
+_FORBIDDEN_EXECUTION_IMPORT_PREFIXES = ("execution",)
 
 
 class S3RunnerError(Exception):
@@ -400,6 +403,50 @@ def _resolve_simulation_run_dir(output_root: Path, tenant_id: str, simulation_ru
     return run_dir
 
 
+def _is_forbidden_execution_module(module_name: str) -> bool:
+    return any(
+        module_name == prefix or module_name.startswith(f"{prefix}.")
+        for prefix in _FORBIDDEN_EXECUTION_IMPORT_PREFIXES
+    )
+
+
+def _assert_no_live_execution_path(source_root: Path | None = None) -> None:
+    root = source_root or Path(__file__).resolve().parent
+    violations: list[dict[str, Any]] = []
+
+    for source_file in sorted(root.rglob("*.py")):
+        source_text = source_file.read_text(encoding="utf-8")
+        tree = ast.parse(source_text, filename=str(source_file))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    if _is_forbidden_execution_module(alias.name):
+                        violations.append(
+                            {
+                                "file": str(source_file),
+                                "line": node.lineno,
+                                "module": alias.name,
+                            }
+                        )
+            elif isinstance(node, ast.ImportFrom):
+                module_name = node.module or ""
+                if _is_forbidden_execution_module(module_name):
+                    violations.append(
+                        {
+                            "file": str(source_file),
+                            "line": node.lineno,
+                            "module": module_name,
+                        }
+                    )
+
+    if violations:
+        raise S3RunnerError(
+            code="LIVE_EXECUTION_PATH_FORBIDDEN",
+            message="S3 runtime must not import execution adapters",
+            details={"violations": violations},
+        )
+
+
 def _run_corrupted_error(
     tenant_id: str,
     simulation_run_id: str,
@@ -514,6 +561,7 @@ def _validate_loaded_result_payload(
 def replay_simulation_result(
     output_root: Path, tenant_id: str, simulation_run_id: str
 ) -> dict[str, Any]:
+    _assert_no_live_execution_path()
     canonical_tenant = _require_tenant_id(tenant_id, "tenant_id")
     canonical_run_id = _require_simulation_run_id(simulation_run_id, "simulation_run_id")
     run_dir = _resolve_simulation_run_dir(output_root, canonical_tenant, canonical_run_id)
@@ -555,6 +603,7 @@ def run_simulation_request(
     output_root: Path,
     simulation_hook: Callable[[], None] | None = None,
 ) -> Path:
+    _assert_no_live_execution_path()
     request_data = json.loads(request_file.read_text(encoding="utf-8"))
     request = _validate_request(request_data)
 
