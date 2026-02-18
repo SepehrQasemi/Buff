@@ -1,4 +1,4 @@
-﻿# PRODUCT_SPEC — Buff (TradingView-like Strategy Lab)
+# PRODUCT_SPEC — Buff (TradingView-like Strategy Lab)
 
 ## Normative Authority
 Current stage is defined exclusively by:

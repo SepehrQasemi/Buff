@@ -1,4 +1,4 @@
-﻿---
+---
 # Decisions (Canonical)
 
 This file records locked product decisions and their implementation status.

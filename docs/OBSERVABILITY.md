@@ -1,4 +1,4 @@
-﻿# OBSERVABILITY
+# OBSERVABILITY
 
 ## Purpose
 This document is the canonical location for S0 -> S1 gate evidence on observability and run intelligence surfaces.

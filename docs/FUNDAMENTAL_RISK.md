@@ -1,4 +1,4 @@
-﻿# Fundamental Risk Permission Layer
+# Fundamental Risk Permission Layer
 
 ## Overview
 This module evaluates macro, onchain, and news snapshots against declarative YAML rules and
