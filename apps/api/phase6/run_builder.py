@@ -17,7 +17,15 @@ from buff.data.resample import resample_ohlcv
 from .canonical import to_canonical_bytes, write_canonical_json, write_canonical_jsonl
 from .engine import EngineConfig, run_engine
 from .numeric import NonFiniteNumberError
-from .paths import RUNS_ROOT_ENV, get_runs_root, is_within_root
+from .paths import (
+    RUNS_ROOT_ENV,
+    get_runs_root,
+    is_within_root,
+    run_dir as resolve_user_run_dir,
+    user_root,
+    user_runs_root,
+    validate_user_id,
+)
 from .registry import compute_inputs_hash, lock_registry, upsert_registry_entry
 
 ENGINE_VERSION = "phase6-1.0.0"
@@ -42,10 +50,13 @@ class RunBuilderError(Exception):
         }
 
 
-def create_run(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+def create_run(
+    payload: dict[str, Any], *, user_id: str | None = None
+) -> tuple[int, dict[str, Any]]:
     if not isinstance(payload, dict):
         raise RunBuilderError("RUN_CONFIG_INVALID", "Request body must be an object", 400)
 
+    owner_user_id = _resolve_owner_user_id(user_id)
     normalized, meta = _normalize_request(payload)
     inputs_hash = compute_inputs_hash(to_canonical_bytes(normalized))
 
@@ -57,8 +68,12 @@ def create_run(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     else:
         run_id = f"run_{inputs_hash[:12]}"
 
-    runs_root = _resolve_runs_root()
-    run_dir = (runs_root / run_id).resolve()
+    base_runs_root = _resolve_runs_root()
+    owner_root = user_root(base_runs_root, owner_user_id)
+    runs_root = user_runs_root(base_runs_root, owner_user_id)
+    runs_root.mkdir(parents=True, exist_ok=True)
+
+    run_dir = resolve_user_run_dir(base_runs_root, owner_user_id, run_id).resolve()
     if not is_within_root(run_dir, runs_root):
         raise RunBuilderError("RUN_ID_INVALID", "run_id resolved outside runs root", 400)
 
@@ -73,7 +88,7 @@ def create_run(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
             manifest = None
 
         if manifest and manifest.get("inputs_hash") == inputs_hash:
-            _ensure_registry_entry(runs_root, run_dir, manifest)
+            _ensure_registry_entry(owner_root, run_dir, manifest)
             return 200, _success_response(
                 run_id,
                 manifest.get("status") or "COMPLETED",
@@ -112,6 +127,7 @@ def create_run(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
 
     manifest = _build_manifest(
         run_id=run_id,
+        owner_user_id=owner_user_id,
         created_at=created_at,
         inputs=normalized,
         inputs_hash=inputs_hash,
@@ -133,7 +149,7 @@ def create_run(payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
             df_tf,
         )
         _atomic_rename(temp_dir, run_dir)
-        _register_run(runs_root, run_dir, manifest)
+        _register_run(owner_root, run_dir, manifest)
     except NonFiniteNumberError as exc:
         _cleanup_temp_dir(temp_dir)
         raise RunBuilderError("DATA_INVALID", "Non-finite numeric value", 400) from exc
@@ -179,6 +195,20 @@ def _resolve_runs_root() -> Path:
             {"path": str(runs_root), "error": error or "permission denied"},
         )
     return runs_root
+
+
+def _resolve_owner_user_id(user_id: str | None) -> str:
+    candidate = (user_id or "").strip()
+    if not candidate:
+        candidate = (os.getenv("BUFF_DEFAULT_USER") or "").strip()
+    if not candidate:
+        raise RunBuilderError("USER_MISSING", "X-Buff-User header is required", 400)
+    try:
+        return validate_user_id(candidate)
+    except ValueError as exc:
+        raise RunBuilderError(
+            "USER_INVALID", "Invalid user id", 400, {"user_id": candidate}
+        ) from exc
 
 
 def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
@@ -596,6 +626,7 @@ def _build_metrics_payload(result, engine_config: EngineConfig) -> dict[str, Any
 def _build_manifest(
     *,
     run_id: str,
+    owner_user_id: str,
     created_at: str,
     inputs: dict[str, Any],
     inputs_hash: str,
@@ -645,8 +676,11 @@ def _build_manifest(
             ],
         },
     }
+    meta_payload: dict[str, Any] = {}
     if meta:
-        manifest["meta"] = meta
+        meta_payload.update(meta)
+    meta_payload["owner_user_id"] = owner_user_id
+    manifest["meta"] = meta_payload
     return manifest
 
 
@@ -710,11 +744,11 @@ def _atomic_rename(src: Path, dst: Path) -> None:
         raise RunBuilderError("RUN_WRITE_FAILED", str(exc), 500) from exc
 
 
-def _register_run(runs_root: Path, run_dir: Path, manifest: dict[str, Any]) -> None:
-    lock = lock_registry(runs_root)
+def _register_run(user_root_path: Path, run_dir: Path, manifest: dict[str, Any]) -> None:
+    lock = lock_registry(user_root_path)
     try:
         with lock:
-            upsert_registry_entry(runs_root, run_dir, manifest)
+            upsert_registry_entry(user_root_path, run_dir, manifest)
     except TimeoutError as exc:
         _safe_remove_run(run_dir)
         raise RunBuilderError("REGISTRY_LOCK_TIMEOUT", "Registry lock timeout", 503) from exc
@@ -723,11 +757,11 @@ def _register_run(runs_root: Path, run_dir: Path, manifest: dict[str, Any]) -> N
         raise RunBuilderError("REGISTRY_WRITE_FAILED", "Registry write failed", 500) from exc
 
 
-def _ensure_registry_entry(runs_root: Path, run_dir: Path, manifest: dict[str, Any]) -> None:
+def _ensure_registry_entry(user_root_path: Path, run_dir: Path, manifest: dict[str, Any]) -> None:
     try:
-        lock = lock_registry(runs_root)
+        lock = lock_registry(user_root_path)
         with lock:
-            upsert_registry_entry(runs_root, run_dir, manifest)
+            upsert_registry_entry(user_root_path, run_dir, manifest)
     except TimeoutError as exc:
         raise RunBuilderError("REGISTRY_LOCK_TIMEOUT", "Registry lock timeout", 503) from exc
     except Exception as exc:

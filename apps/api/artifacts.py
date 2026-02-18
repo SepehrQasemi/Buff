@@ -70,7 +70,7 @@ def resolve_run_dir(run_id: str, artifacts_root: Path) -> Path:
     ):
         raise_api_error(
             400,
-            "invalid_run_id",
+            "RUN_ID_INVALID",
             "Invalid run id",
             {"run_id": run_id},
         )
@@ -80,7 +80,7 @@ def resolve_run_dir(run_id: str, artifacts_root: Path) -> Path:
     if not _is_within_root(candidate, root):
         raise_api_error(
             400,
-            "invalid_run_id",
+            "RUN_ID_INVALID",
             "Invalid run id",
             {"run_id": run_id},
         )
