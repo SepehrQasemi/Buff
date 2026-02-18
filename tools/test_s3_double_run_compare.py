@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from s3.canonical import canonical_json_bytes, sha256_hex_bytes
 from s3.runner import run_simulation_request
