@@ -1,7 +1,7 @@
 ﻿CURRENT_STAGE=S1_OBSERVABILITY_AND_RUN_INTELLIGENCE_LAYER
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=209
-LAST_STAGE_RELEVANT_SHA=254707b1700def672c0d465223cb2b0a383328db
+LAST_STAGE_RELEVANT_PR=211
+LAST_STAGE_RELEVANT_SHA=39bb16670b8b4fa660e8f718bbc31965798a84be
 SNAPSHOT_SEMANTICS=Stage snapshot fields track stage/governance-relevant merges, not every merge on main.
 
 NEXT_3_ACTIONS=
@@ -34,14 +34,14 @@ No other document determines current stage.
 
 CURRENT_STAGE=S1_OBSERVABILITY_AND_RUN_INTELLIGENCE_LAYER
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=209
-LAST_STAGE_RELEVANT_SHA=254707b1700def672c0d465223cb2b0a383328db
+LAST_STAGE_RELEVANT_PR=211
+LAST_STAGE_RELEVANT_SHA=39bb16670b8b4fa660e8f718bbc31965798a84be
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
 
 ## Current Stage
-S0 - Deterministic Analysis-Only Engine
+S1 - Observability And Run Intelligence Layer
 
 ## Stage Description
 Fail-closed, artifact-driven, deterministic analysis system.
@@ -50,14 +50,14 @@ No broker integration.
 No live state mutation.
 
 ## Current Objective
-Harden documentation boundaries and enforce contract authority.
+Preserve S1 guarantees and prepare S2 isolation planning without weakening deterministic/runtime safeguards.
 
 ## Definition of Done
 - All normative constraints centralized
 - No broken links
 - Single-source operational command strings: runnable command blocks and inline runnable commands appear only in `docs/05_RUNBOOK_DEV_WORKFLOW.md`.
   Other docs may mention gate names but must link to the runbook.
-- CI green (latest runs for active workflows on `main` pass; historical runs from decommissioned workflows may remain in history)
+- CI green on current `main` tip SHA for active workflows (historical runs from decommissioned workflows may remain in history)
 - release_gate PASS
 
 ## Active Constraints
@@ -68,13 +68,13 @@ Harden documentation boundaries and enforce contract authority.
 - Canonical contract authority enforced
 
 ## Next Stage Candidate
-S1 - Observability And Run Intelligence Layer
+S2_MULTI_USER_ISOLATION_LAYER
 
-## Transition Gate Requirements (S0 -> S1)
+## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
 - Run indexing layer
 - Queryable artifact registry
 - Structured runtime metrics
-- Observability documentation
+- Observability documentation: `docs/OBSERVABILITY.md`
 - Updated PROJECT_STATE.md
 
 ## Workflow Lanes
@@ -91,4 +91,4 @@ S1 - Observability And Run Intelligence Layer
 
 ## Last Verified Commit
 
-6337a0be9274bbd39ec6433133878914b7deed9c
+39bb16670b8b4fa660e8f718bbc31965798a84be
