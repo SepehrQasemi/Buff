@@ -41,8 +41,26 @@ def is_valid_user_id(candidate: str) -> bool:
     return bool(USER_ID_PATTERN.match(value))
 
 
+def normalize_auth_path(path: str) -> str:
+    """
+    Canonicalize the request path used by HMAC:
+    - ignore query/fragment
+    - normalize trailing slash (except root '/')
+    """
+    text = str(path or "").strip()
+    if not text:
+        return "/"
+    text = text.split("?", 1)[0].split("#", 1)[0]
+    if not text.startswith("/"):
+        text = f"/{text}"
+    if len(text) > 1:
+        text = text.rstrip("/")
+    return text or "/"
+
+
 def canonical_auth_string(user_id: str, method: str, path: str, timestamp: int) -> str:
-    return f"{user_id}\n{method.upper()}\n{path}\n{timestamp}"
+    normalized_path = normalize_auth_path(path)
+    return f"{user_id}\n{method.upper()}\n{normalized_path}\n{timestamp}"
 
 
 def _error(

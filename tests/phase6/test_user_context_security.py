@@ -105,3 +105,26 @@ def test_valid_signature_passes(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert context.user_id == "alice"
     assert context.auth_mode == "hmac_sha256"
+
+
+def test_signature_path_normalization_ignores_query_and_trailing_slash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(HMAC_SECRET_ENV, "secret")
+    timestamp = 1700000000
+    signature = _sign(
+        "secret",
+        user_id="alice",
+        method="GET",
+        path="/api/v1/runs",
+        timestamp=timestamp,
+    )
+    headers = {
+        USER_HEADER: "alice",
+        AUTH_HEADER: signature,
+        TIMESTAMP_HEADER: str(timestamp),
+    }
+
+    for variant in ["/api/v1/runs", "/api/v1/runs/", "/api/v1/runs?limit=5"]:
+        context = resolve_user_context(headers, "GET", variant, now_unix=timestamp)
+        assert context.user_id == "alice"

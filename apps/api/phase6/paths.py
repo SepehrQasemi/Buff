@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Iterable
 
+from ..security.user_context import is_valid_user_id
+
 RUNS_ROOT_ENV = "RUNS_ROOT"
 _COMPONENT_PATTERN = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
@@ -37,7 +39,7 @@ def is_valid_component(value: str) -> bool:
 
 def validate_user_id(user_id: str) -> str:
     normalized = _normalize_component(user_id)
-    if not is_valid_component(normalized):
+    if not is_valid_user_id(normalized):
         raise ValueError("USER_INVALID")
     return normalized
 

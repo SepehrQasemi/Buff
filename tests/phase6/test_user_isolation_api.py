@@ -106,7 +106,7 @@ def test_run_id_traversal_rejected(monkeypatch: pytest.MonkeyPatch, tmp_path) ->
     client = TestClient(app)
     response = client.get("/api/v1/runs/%2e%2e/metrics", headers=_headers("user-a"))
     assert response.status_code == 400
-    assert response.json()["code"] in {"invalid_run_id", "RUN_CONFIG_INVALID"}
+    assert response.json()["code"] == "RUN_ID_INVALID"
 
 
 def test_hmac_auth_enforced(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

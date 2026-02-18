@@ -124,6 +124,8 @@ def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
 
 
 def _resolve_user_context(request: Request) -> UserContext | JSONResponse:
+    # Use `request.url.path` as the single canonical source for HMAC path input.
+    # Query params are excluded by Starlette here; auth-layer normalization handles trailing slash policy.
     try:
         return resolve_user_context(request.headers, request.method, request.url.path)
     except UserContextError as exc:
@@ -291,7 +293,7 @@ def _diagnostics_payload(entry: dict[str, object]) -> dict[str, object]:
 
 
 def _invalid_run_id_response(run_id: str) -> JSONResponse:
-    return error_response(400, "invalid_run_id", "Invalid run id", {"run_id": run_id})
+    return error_response(400, "RUN_ID_INVALID", "Invalid run id", {"run_id": run_id})
 
 
 def _resolve_registry_run_dir(
@@ -583,7 +585,7 @@ def run_manifest(run_id: str, request: Request) -> JSONResponse:
     user_ctx, _, owner_root, runs_root, _ = scope
     invalid = _is_invalid_component(run_id)
     if invalid:
-        return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
+        return _invalid_run_id_response(run_id)
 
     registry_result = _load_registry_with_lock(owner_root)
     if isinstance(registry_result, JSONResponse):
@@ -618,7 +620,7 @@ def run_artifact(run_id: str, name: str, request: Request):
         return scope
     user_ctx, _, owner_root, runs_root, _ = scope
     if _is_invalid_component(run_id):
-        return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
+        return _invalid_run_id_response(run_id)
     if _is_invalid_component(name):
         return error_response(400, "RUN_CONFIG_INVALID", "Invalid artifact name", {"name": name})
 
@@ -683,7 +685,7 @@ def run_diagnostics(run_id: str, request: Request) -> object:
     runs_root = user_runs_root(base_runs_root, user_ctx.user_id)
     runs_root.mkdir(parents=True, exist_ok=True)
     if _is_invalid_component(run_id):
-        return error_response(400, "RUN_CONFIG_INVALID", "Invalid run_id", {"run_id": run_id})
+        return _invalid_run_id_response(run_id)
 
     registry_result = _load_registry_with_lock(owner_root)
     if isinstance(registry_result, JSONResponse):
