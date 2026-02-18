@@ -51,6 +51,30 @@ _REQUIRED_CONFIG_FIELDS = {
     "cash_scale",
 }
 
+_REQUIRED_RESULT_FIELDS = {
+    "schema_version",
+    "tenant_id",
+    "simulation_run_id",
+    "request_digest_sha256",
+    "status",
+    "engine",
+    "fills",
+    "metrics",
+    "traces",
+    "report_refs",
+    "digests",
+}
+
+_REQUIRED_RESULT_DIGEST_KEYS = {
+    "request_sha256",
+    "result_sha256",
+    "manifest_sha256",
+    "event_log_sha256",
+    "fills_sha256",
+    "metrics_sha256",
+    "report_sha256",
+}
+
 
 class S3RunnerError(Exception):
     def __init__(self, code: str, message: str, details: dict[str, Any] | None = None):
@@ -373,7 +397,91 @@ def _resolve_simulation_run_dir(output_root: Path, tenant_id: str, simulation_ru
     return run_dir
 
 
-def load_simulation_result(
+def _run_corrupted_error(
+    tenant_id: str,
+    simulation_run_id: str,
+    message: str,
+    field: str | None = None,
+) -> S3RunnerError:
+    details: dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "simulation_run_id": simulation_run_id,
+    }
+    if field is not None:
+        details["field"] = field
+    return S3RunnerError(code="RUN_CORRUPTED", message=message, details=details)
+
+
+def _validate_loaded_result_payload(
+    payload: dict[str, Any], tenant_id: str, simulation_run_id: str
+) -> dict[str, Any]:
+    missing_fields = sorted(_REQUIRED_RESULT_FIELDS - set(payload.keys()))
+    if missing_fields:
+        raise _run_corrupted_error(
+            tenant_id,
+            simulation_run_id,
+            f"result.json missing fields: {', '.join(missing_fields)}",
+            field="result.json",
+        )
+
+    if payload["schema_version"] != RESULT_SCHEMA_VERSION:
+        raise _run_corrupted_error(
+            tenant_id,
+            simulation_run_id,
+            f"result.json schema_version must be {RESULT_SCHEMA_VERSION}",
+            field="schema_version",
+        )
+
+    if payload["tenant_id"] != tenant_id:
+        raise S3RunnerError(
+            code="RUN_NOT_FOUND",
+            message="Simulation run not found for tenant",
+            details={"tenant_id": tenant_id, "simulation_run_id": simulation_run_id},
+        )
+
+    if payload["simulation_run_id"] != simulation_run_id:
+        raise _run_corrupted_error(
+            tenant_id,
+            simulation_run_id,
+            "result.json simulation_run_id mismatch",
+            field="simulation_run_id",
+        )
+
+    digests = payload["digests"]
+    if not isinstance(digests, dict):
+        raise _run_corrupted_error(
+            tenant_id,
+            simulation_run_id,
+            "result.json digests must be an object",
+            field="digests",
+        )
+    missing_digests = sorted(_REQUIRED_RESULT_DIGEST_KEYS - set(digests.keys()))
+    if missing_digests:
+        raise _run_corrupted_error(
+            tenant_id,
+            simulation_run_id,
+            f"result.json digests missing keys: {', '.join(missing_digests)}",
+            field="digests",
+        )
+    for key in _REQUIRED_RESULT_DIGEST_KEYS:
+        _require_sha256(digests[key], f"digests.{key}")
+
+    expected_result_sha256 = digests["result_sha256"]
+    payload_for_hash = json.loads(json.dumps(payload))
+    payload_for_hash["digests"]["result_sha256"] = ""
+    computed_result_sha256 = sha256_hex_bytes(canonical_json_bytes(payload_for_hash))
+    if expected_result_sha256 != computed_result_sha256:
+        raise _run_corrupted_error(
+            tenant_id,
+            simulation_run_id,
+            "result.json digest mismatch",
+            field="digests.result_sha256",
+        )
+
+    return payload
+
+
+def replay_simulation_result(
     output_root: Path, tenant_id: str, simulation_run_id: str
 ) -> dict[str, Any]:
     canonical_tenant = _require_tenant_id(tenant_id, "tenant_id")
@@ -391,32 +499,25 @@ def load_simulation_result(
     try:
         payload = json.loads(result_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise S3RunnerError(
-            code="RUN_CORRUPTED",
-            message="result.json is invalid JSON",
-            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
+        raise _run_corrupted_error(
+            canonical_tenant, canonical_run_id, "result.json is invalid JSON", "result.json"
         ) from exc
 
     if not isinstance(payload, dict):
-        raise S3RunnerError(
-            code="RUN_CORRUPTED",
-            message="result.json must contain a JSON object",
-            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
+        raise _run_corrupted_error(
+            canonical_tenant,
+            canonical_run_id,
+            "result.json must contain a JSON object",
+            "result.json",
         )
 
-    if payload.get("tenant_id") != canonical_tenant:
-        raise S3RunnerError(
-            code="RUN_NOT_FOUND",
-            message="Simulation run not found for tenant",
-            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
-        )
-    if payload.get("simulation_run_id") != canonical_run_id:
-        raise S3RunnerError(
-            code="RUN_CORRUPTED",
-            message="result.json simulation_run_id mismatch",
-            details={"tenant_id": canonical_tenant, "simulation_run_id": canonical_run_id},
-        )
-    return payload
+    return _validate_loaded_result_payload(payload, canonical_tenant, canonical_run_id)
+
+
+def load_simulation_result(
+    output_root: Path, tenant_id: str, simulation_run_id: str
+) -> dict[str, Any]:
+    return replay_simulation_result(output_root, tenant_id, simulation_run_id)
 
 
 def run_simulation_request(request_file: Path, output_root: Path) -> Path:
@@ -552,19 +653,56 @@ def run_simulation_request(request_file: Path, output_root: Path) -> Path:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run deterministic S3 simulation skeleton.")
-    parser.add_argument(
-        "--request-json", required=True, help="Path to SimulationRunRequest JSON file."
-    )
+    parser.add_argument("--request-json", help="Path to SimulationRunRequest JSON file.")
     parser.add_argument(
         "--output-root",
         default="runs",
-        help="Base output root. Runner writes to <output-root>/<tenant>/simulations/<run_id>/",
+        help="Base output root.",
     )
+    parser.add_argument(
+        "--replay",
+        action="store_true",
+        help="Replay mode: load SimulationRunResult for --tenant-id and --simulation-run-id.",
+    )
+    parser.add_argument("--tenant-id", help="Tenant identifier for replay mode.")
+    parser.add_argument("--simulation-run-id", help="Simulation run identifier for replay mode.")
     args = parser.parse_args(argv)
 
-    request_path = Path(args.request_json).resolve()
     output_root = Path(args.output_root).resolve()
     try:
+        if args.replay:
+            if args.request_json:
+                raise S3RunnerError(
+                    code="RUN_CONFIG_INVALID",
+                    message="--request-json is not allowed with --replay",
+                    details={"field": "request_json"},
+                )
+            if not args.tenant_id:
+                raise S3RunnerError(
+                    code="RUN_CONFIG_INVALID",
+                    message="--tenant-id is required with --replay",
+                    details={"field": "tenant_id"},
+                )
+            if not args.simulation_run_id:
+                raise S3RunnerError(
+                    code="RUN_CONFIG_INVALID",
+                    message="--simulation-run-id is required with --replay",
+                    details={"field": "simulation_run_id"},
+                )
+            result = replay_simulation_result(
+                output_root, tenant_id=args.tenant_id, simulation_run_id=args.simulation_run_id
+            )
+            print(json.dumps(result, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
+            return 0
+
+        if not args.request_json:
+            raise S3RunnerError(
+                code="RUN_CONFIG_INVALID",
+                message="--request-json is required unless --replay is set",
+                details={"field": "request_json"},
+            )
+
+        request_path = Path(args.request_json).resolve()
         run_dir = run_simulation_request(request_path, output_root)
     except S3RunnerError as exc:
         print(json.dumps(exc.to_error_envelope(), sort_keys=True, separators=(",", ":")))
