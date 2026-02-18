@@ -2,15 +2,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-import os
 import json
+import os
 from pathlib import Path
 from typing import Any, Callable
 
-from risk.contracts import Permission, RiskReason, RiskSeverity, RiskState
-from risk.contracts import RiskInputs
-from risk.contracts import RiskConfig as GateRiskConfig
-from risk.contracts import reason_payloads, risk_inputs_digest
+from risk.contracts import (
+    Permission,
+    RiskConfig as GateRiskConfig,
+    RiskInputs,
+    RiskReason,
+    RiskSeverity,
+    RiskState,
+    reason_payloads,
+    risk_inputs_digest,
+)
 from execution.gate import gate_execution
 from risk_fundamental.integration import apply_fundamental_permission, get_default_rules_path
 
