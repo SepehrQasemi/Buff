@@ -6,7 +6,7 @@ from typing import Mapping
 
 from audit.schema import canonical_json, sha256_hex
 
-from risk.types import RiskState, Permission
+from risk.contracts import RiskState, Permission
 
 
 class PositionState(str, Enum):

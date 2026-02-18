@@ -2,46 +2,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
-from risk.contracts import RiskInputs
-
-
-class RiskState(str, Enum):
-    GREEN = "GREEN"
-    YELLOW = "YELLOW"
-    RED = "RED"
-
-
-@dataclass(frozen=True)
-class RiskDecision:
-    state: RiskState
-    reasons: list[str]
-    snapshot: dict[str, Any]
-
-
-@dataclass(frozen=True)
-class RiskConfig:
-    missing_red: float
-    atr_yellow: float | None = None
-    atr_red: float | None = None
-    rvol_yellow: float | None = None
-    rvol_red: float | None = None
-    no_metrics_state: RiskState = RiskState.YELLOW
-
-    def __post_init__(self) -> None:
-        if not 0.0 <= self.missing_red <= 1.0:
-            raise ValueError("missing_red must be in [0, 1]")
-        if self.atr_yellow is not None and self.atr_red is not None:
-            if self.atr_yellow > self.atr_red:
-                raise ValueError("atr_yellow must be <= atr_red")
-        if self.rvol_yellow is not None and self.rvol_red is not None:
-            if self.rvol_yellow > self.rvol_red:
-                raise ValueError("rvol_yellow must be <= rvol_red")
-        if not isinstance(self.no_metrics_state, RiskState):
-            raise ValueError("no_metrics_state must be a RiskState")
+from risk.contracts import RiskConfig, RiskDecision, RiskInputs, RiskState
 
 
 def _snapshot(inputs: RiskInputs) -> dict[str, Any]:

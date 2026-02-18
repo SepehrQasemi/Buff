@@ -13,7 +13,7 @@ from audit.decision_record import (
 )
 from audit.replay import ReplayConfigMismatchError, ReplayMissingConfigError, ReplayRunner
 from audit.snapshot import Snapshot
-from risk.types import RiskState
+from risk.contracts import RiskState
 from selector.records import selection_to_record
 from selector.selector import select_strategy
 

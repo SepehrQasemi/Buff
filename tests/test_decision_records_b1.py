@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from audit.decision_records import DecisionRecordWriter, canonical_json, ensure_run_dir, sha256_hex
-from risk.types import RiskState
+from risk.contracts import RiskState
 from selector.records import selection_to_record
 from selector.selector import select_strategy
 

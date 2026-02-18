@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from risk.types import RiskState
+from risk.contracts import RiskState
 
 
 class StrategyEngine(Protocol):

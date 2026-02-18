@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from risk.policy import evaluate_policy
-from risk.types import Permission, RiskConfig, RiskInputs, RiskState
+from risk.contracts import Permission, RiskConfig, RiskInputs, RiskState
 
 
 def test_policy_green() -> None:

@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from risk.evaluator import evaluate_risk_report
-from risk.types import RiskConfig, RiskContext
+from risk.contracts import RiskConfig, RiskContext
 
 
 def _make_ohlcv(rows: int) -> pd.DataFrame:

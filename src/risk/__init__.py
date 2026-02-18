@@ -3,7 +3,7 @@
 from risk.evaluator import evaluate_risk_report
 from risk.policy import evaluate_policy
 from risk.report import report_path, write_risk_report
-from risk.types import Permission, RiskConfig, RiskContext, RiskDecision, RiskInputs, RiskState
+from risk.contracts import Permission, RiskConfig, RiskContext, RiskDecision, RiskInputs, RiskState
 
 __all__ = [
     "Permission",

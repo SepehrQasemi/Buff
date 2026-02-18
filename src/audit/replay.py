@@ -18,8 +18,9 @@ from audit.decision_records import compute_market_state_hash, parse_json_line
 from audit.snapshot import Snapshot
 from risk.contracts import RiskInputs as RiskInputsContract
 from risk.contracts import validate_risk_inputs
-from risk.state_machine import RiskConfig, RiskState as RiskStateMachine, evaluate_risk
-from risk.types import RiskState
+from risk.contracts import RiskConfig, RiskState as RiskStateMachine
+from risk.state_machine import evaluate_risk
+from risk.contracts import RiskState
 from selector.records import selection_to_record
 from selector.selector import select_strategy
 

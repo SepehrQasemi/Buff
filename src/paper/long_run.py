@@ -14,7 +14,7 @@ from audit.decision_records import (
 from audit.replay import replay_verify
 from paper.market_state_feed import cycling_feed, load_market_state_feed
 from paper.paper_runner import generate_mock_market_state
-from risk.types import RiskState
+from risk.contracts import RiskState
 from selector.records import selection_to_record
 from selector.selector import select_strategy
 

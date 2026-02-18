@@ -40,7 +40,7 @@ from execution.idempotency_inspect import (
 from execution.idempotency_sqlite import default_idempotency_db_path
 from risk.evaluator import evaluate_risk_report
 from risk.report import write_risk_report
-from risk.types import RiskContext
+from risk.contracts import RiskContext
 
 
 def _build_feature_manifest(run_id: str, features: dict[str, Any]) -> dict[str, Any]:

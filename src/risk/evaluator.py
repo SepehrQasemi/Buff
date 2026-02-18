@@ -8,8 +8,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from risk.contracts import RiskConfig, RiskContext, RiskInputs, threshold_snapshot
 from risk.policy import evaluate_policy
-from risk.types import RiskConfig, RiskContext, RiskInputs, threshold_snapshot
 
 
 def _to_datetime_index(df: pd.DataFrame) -> pd.DatetimeIndex | None:

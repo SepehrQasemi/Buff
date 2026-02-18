@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from risk.types import Permission, RiskConfig, RiskDecision, RiskInputs, RiskState
+from risk.contracts import Permission, RiskConfig, RiskDecision, RiskInputs, RiskState
 
 
 def _permission_for_state(state: RiskState) -> Permission:

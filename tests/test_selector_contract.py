@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from risk.types import RiskState
+from risk.contracts import RiskState
 from selector.contract import (
     DisallowedStrategyError,
     SelectorInput,
