@@ -7,7 +7,7 @@ docs/PROJECT_STATE.md
 
 ---
 
-## S0 — Deterministic Analysis Engine
+## S0 - Deterministic Analysis Engine
 Scope:
 - File-based runs
 - Deterministic evaluation
@@ -19,7 +19,7 @@ No broker access.
 
 ---
 
-## S1 — Observability & Run Intelligence
+## S1 - Observability & Run Intelligence
 Scope:
 - Run index
 - Artifact registry
@@ -28,7 +28,7 @@ Scope:
 
 ---
 
-## S2 — Multi-User Isolation Layer
+## S2 - Multi-User Isolation Layer
 Scope:
 - User-scoped storage
 - Run ownership boundaries
@@ -36,7 +36,7 @@ Scope:
 
 ---
 
-## S3 — Controlled Execution Simulation
+## S3 - Controlled Execution Simulation
 Scope:
 - Execution simulation sandbox
 - Strict runtime boundaries
@@ -44,7 +44,7 @@ Scope:
 
 ---
 
-## S4 — Risk Engine Maturity
+## S4 - Risk Engine Maturity
 Scope:
 - Expanded risk semantics
 - Stronger risk controls
@@ -52,7 +52,20 @@ Scope:
 
 ---
 
-## Future Layer — External Integration Layer
+## Platform Observability & Productization
+Stage token: `S6_PLATFORM_OBSERVABILITY_LAYER`
+
+Scope:
+- Platform-level observability and diagnostics expectations
+- Product reliability and readiness signal hardening
+- Clear evidence model for CI + runtime acceptance
+
+Spec:
+- [PLATFORM_OBSERVABILITY_AND_PRODUCTIZATION_SPEC.md](./stages/PLATFORM_OBSERVABILITY_AND_PRODUCTIZATION_SPEC.md)
+
+---
+
+## Future Layer - External Integration Layer
 Scope:
 - Broker adapters (strictly gated)
 - Real execution boundaries
