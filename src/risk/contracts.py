@@ -186,6 +186,8 @@ class RiskConfig:
     yellow_vol: float = 0.01
     red_vol: float = 0.02
     recommended_scale_yellow: float = 0.25
+    pack_id: str = "L3_BALANCED"
+    pack_version: str = "v1"
     config_version: str = "v1"
 
     def __post_init__(self) -> None:
@@ -217,6 +219,10 @@ class RiskConfig:
             raise ValueError("vol thresholds must satisfy 0 < yellow < red")
         if not (0.0 <= self.recommended_scale_yellow <= 1.0):
             raise ValueError("recommended_scale_yellow must be in [0, 1]")
+        if not isinstance(self.pack_id, str) or not self.pack_id.strip():
+            raise ValueError("pack_id must be a non-empty string")
+        if not isinstance(self.pack_version, str) or not self.pack_version.strip():
+            raise ValueError("pack_version must be a non-empty string")
         if not isinstance(self.config_version, str) or not self.config_version.strip():
             raise ValueError("config_version must be a non-empty string")
 
@@ -251,6 +257,8 @@ class RiskDecision:
     snapshot: dict[str, Any] = field(default_factory=dict)
     permission: Permission | None = None
     recommended_scale: float | None = None
+    pack_id: str = "L3_BALANCED"
+    pack_version: str = "v1"
     config_version: str = "v1"
     inputs_digest: str = ""
 
@@ -272,6 +280,10 @@ class RiskDecision:
             self.recommended_scale, (int, float)
         ):
             raise ValueError("recommended_scale must be numeric")
+        if not isinstance(self.pack_id, str) or not self.pack_id.strip():
+            raise ValueError("pack_id must be a non-empty string")
+        if not isinstance(self.pack_version, str) or not self.pack_version.strip():
+            raise ValueError("pack_version must be a non-empty string")
         if not isinstance(self.config_version, str) or not self.config_version.strip():
             raise ValueError("config_version must be a non-empty string")
         if self.inputs_digest:

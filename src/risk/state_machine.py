@@ -14,6 +14,7 @@ from risk.contracts import (
     RiskState as _RiskState,
     risk_inputs_digest,
 )
+from risk.rule_catalog import RiskRuleId, ensure_catalog_rule_id
 
 # Keep canonical class definitions in risk.contracts while marking state-machine
 # authority metadata expected by existing S4 tooling checks.
@@ -41,21 +42,26 @@ def _build_decision(
     cfg: RiskConfig | None,
 ) -> RiskDecision:
     config_version = cfg.config_version if isinstance(cfg, RiskConfig) else "v1"
+    pack_id = cfg.pack_id if isinstance(cfg, RiskConfig) else "L3_BALANCED"
+    pack_version = cfg.pack_version if isinstance(cfg, RiskConfig) else "v1"
     return RiskDecision(
         state=state,
         reasons=reasons,
         snapshot=_snapshot(inputs),
         permission=_permission_for_state(state),
+        pack_id=pack_id,
+        pack_version=pack_version,
         config_version=config_version,
         inputs_digest=risk_inputs_digest(inputs),
     )
 
 
 def _error_reason(
-    rule_id: str, message: str, *, details: dict[str, Any] | None = None
+    rule_id: str | RiskRuleId, message: str, *, details: dict[str, Any] | None = None
 ) -> RiskReason:
+    canonical_rule_id = ensure_catalog_rule_id(rule_id)
     return RiskReason(
-        rule_id,
+        canonical_rule_id,
         severity=RiskSeverity.ERROR,
         message=message,
         details=details or {},
@@ -63,10 +69,11 @@ def _error_reason(
 
 
 def _warn_reason(
-    rule_id: str, message: str, *, details: dict[str, Any] | None = None
+    rule_id: str | RiskRuleId, message: str, *, details: dict[str, Any] | None = None
 ) -> RiskReason:
+    canonical_rule_id = ensure_catalog_rule_id(rule_id)
     return RiskReason(
-        rule_id,
+        canonical_rule_id,
         severity=RiskSeverity.WARN,
         message=message,
         details=details or {},
@@ -88,13 +95,26 @@ def _snapshot(inputs: RiskInputs) -> dict[str, Any]:
 def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
     """Evaluate risk state using deterministic rules."""
 
-    if cfg is None or not isinstance(cfg, RiskConfig):
+    if cfg is None:
         return _build_decision(
             state=RiskState.RED,
             reasons=[
                 _error_reason(
-                    "RISK_POLICY_MISSING",
+                    RiskRuleId.RISK_POLICY_MISSING,
                     "risk policy configuration is missing",
+                )
+            ],
+            inputs=inputs,
+            cfg=None,
+        )
+    if not isinstance(cfg, RiskConfig):
+        return _build_decision(
+            state=RiskState.RED,
+            reasons=[
+                _error_reason(
+                    RiskRuleId.RISK_INVALID_CONFIG,
+                    "risk policy configuration is invalid",
+                    details={"config_type": type(cfg).__name__},
                 )
             ],
             inputs=inputs,
@@ -105,14 +125,17 @@ def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
 
     if not inputs.timestamps_valid:
         reasons.append(
-            _error_reason("invalid_timestamps", "timestamps are invalid or non-monotonic")
+            _error_reason(
+                RiskRuleId.INVALID_TIMESTAMPS,
+                "timestamps are invalid or non-monotonic",
+            )
         )
     if not inputs.latest_metrics_valid:
-        reasons.append(_error_reason("missing_metrics", "latest metrics are missing"))
+        reasons.append(_error_reason(RiskRuleId.MISSING_METRICS, "latest metrics are missing"))
     if inputs.invalid_index:
-        reasons.append(_error_reason("invalid_index", "input index is invalid"))
+        reasons.append(_error_reason(RiskRuleId.INVALID_INDEX, "input index is invalid"))
     if inputs.invalid_close:
-        reasons.append(_error_reason("invalid_close", "close prices are invalid"))
+        reasons.append(_error_reason(RiskRuleId.INVALID_CLOSE, "close prices are invalid"))
 
     if reasons:
         return _build_decision(state=RiskState.RED, reasons=reasons, inputs=inputs, cfg=cfg)
@@ -122,7 +145,7 @@ def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
             state=RiskState.RED,
             reasons=[
                 _error_reason(
-                    "missing_fraction_exceeded",
+                    RiskRuleId.MISSING_FRACTION_EXCEEDED,
                     "missing fraction exceeded configured threshold",
                     details={
                         "missing_fraction": inputs.missing_fraction,
@@ -140,7 +163,7 @@ def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
     if atr_pct is None and realized_vol is None:
         no_metrics_state = cfg.no_metrics_state
         no_metrics_reason = RiskReason(
-            "no_metrics",
+            RiskRuleId.NO_METRICS.value,
             severity=RiskSeverity.ERROR if no_metrics_state == RiskState.RED else RiskSeverity.WARN,
             message="no risk metrics available",
             details={},
@@ -159,7 +182,7 @@ def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
         if cfg.atr_red is not None and atr_pct >= cfg.atr_red:
             red_reasons.append(
                 _error_reason(
-                    "atr_pct_above_red",
+                    RiskRuleId.ATR_PCT_ABOVE_RED,
                     "ATR percent exceeded RED threshold",
                     details={"atr_pct": atr_pct, "threshold": cfg.atr_red},
                 )
@@ -167,7 +190,7 @@ def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
         elif cfg.atr_yellow is not None and atr_pct >= cfg.atr_yellow:
             yellow_reasons.append(
                 _warn_reason(
-                    "atr_pct_above_yellow",
+                    RiskRuleId.ATR_PCT_ABOVE_YELLOW,
                     "ATR percent exceeded YELLOW threshold",
                     details={"atr_pct": atr_pct, "threshold": cfg.atr_yellow},
                 )
@@ -177,7 +200,7 @@ def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
         if cfg.rvol_red is not None and realized_vol >= cfg.rvol_red:
             red_reasons.append(
                 _error_reason(
-                    "realized_vol_above_red",
+                    RiskRuleId.REALIZED_VOL_ABOVE_RED,
                     "realized volatility exceeded RED threshold",
                     details={"realized_vol": realized_vol, "threshold": cfg.rvol_red},
                 )
@@ -185,7 +208,7 @@ def evaluate_risk(inputs: RiskInputs, cfg: RiskConfig) -> RiskDecision:
         elif cfg.rvol_yellow is not None and realized_vol >= cfg.rvol_yellow:
             yellow_reasons.append(
                 _warn_reason(
-                    "realized_vol_above_yellow",
+                    RiskRuleId.REALIZED_VOL_ABOVE_YELLOW,
                     "realized volatility exceeded YELLOW threshold",
                     details={"realized_vol": realized_vol, "threshold": cfg.rvol_yellow},
                 )

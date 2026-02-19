@@ -14,6 +14,7 @@ from risk.contracts import (
     RiskState,
     risk_inputs_digest,
 )
+from risk.rule_catalog import RiskRuleId
 
 
 def _permission_for_state(state: RiskState) -> Permission:
@@ -52,35 +53,35 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
     if inputs.invalid_index:
         _append_reason(
             reasons,
-            rule_id="invalid_index",
+            rule_id=RiskRuleId.INVALID_INDEX.value,
             severity=RiskSeverity.ERROR,
             message="input index is invalid",
         )
     if not inputs.timestamps_valid:
         _append_reason(
             reasons,
-            rule_id="invalid_timestamps",
+            rule_id=RiskRuleId.INVALID_TIMESTAMPS.value,
             severity=RiskSeverity.ERROR,
             message="timestamps are invalid or non-monotonic",
         )
     if inputs.invalid_close:
         _append_reason(
             reasons,
-            rule_id="invalid_close",
+            rule_id=RiskRuleId.INVALID_CLOSE.value,
             severity=RiskSeverity.ERROR,
             message="close prices are invalid",
         )
     if inputs.missing_fraction > config.max_missing_fraction:
         _append_reason(
             reasons,
-            rule_id="missing_fraction_exceeded",
+            rule_id=RiskRuleId.MISSING_FRACTION_EXCEEDED.value,
             severity=RiskSeverity.ERROR,
             message="missing fraction exceeded configured threshold",
         )
     if not inputs.latest_metrics_valid:
         _append_reason(
             reasons,
-            rule_id="missing_metrics",
+            rule_id=RiskRuleId.MISSING_METRICS.value,
             severity=RiskSeverity.ERROR,
             message="latest metrics are missing",
         )
@@ -92,6 +93,8 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
             permission=_permission_for_state(state),
             recommended_scale=_scale_for_state(state, config),
             reasons=tuple(reasons),
+            pack_id=config.pack_id,
+            pack_version=config.pack_version,
             config_version=config.config_version,
             inputs_digest=risk_inputs_digest(inputs),
         )
@@ -102,14 +105,14 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
     if atr_pct is not None and atr_pct > config.red_atr_pct:
         _append_reason(
             reasons,
-            rule_id="atr_pct_above_red",
+            rule_id=RiskRuleId.ATR_PCT_ABOVE_RED.value,
             severity=RiskSeverity.ERROR,
             message="ATR percent exceeded RED threshold",
         )
     if realized_vol is not None and realized_vol > config.red_vol:
         _append_reason(
             reasons,
-            rule_id="realized_vol_above_red",
+            rule_id=RiskRuleId.REALIZED_VOL_ABOVE_RED.value,
             severity=RiskSeverity.ERROR,
             message="realized volatility exceeded RED threshold",
         )
@@ -121,17 +124,24 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
             permission=_permission_for_state(state),
             recommended_scale=_scale_for_state(state, config),
             reasons=tuple(reasons),
+            pack_id=config.pack_id,
+            pack_version=config.pack_version,
             config_version=config.config_version,
             inputs_digest=risk_inputs_digest(inputs),
         )
 
     yellow_flags: Iterable[tuple[float | None, float, float, str]] = (
-        (atr_pct, config.yellow_atr_pct, config.red_atr_pct, "atr_pct_between_thresholds"),
+        (
+            atr_pct,
+            config.yellow_atr_pct,
+            config.red_atr_pct,
+            RiskRuleId.ATR_PCT_BETWEEN_THRESHOLDS.value,
+        ),
         (
             realized_vol,
             config.yellow_vol,
             config.red_vol,
-            "realized_vol_between_thresholds",
+            RiskRuleId.REALIZED_VOL_BETWEEN_THRESHOLDS.value,
         ),
     )
 
@@ -150,6 +160,8 @@ def evaluate_policy(inputs: RiskInputs, config: RiskConfig) -> RiskDecision:
         permission=_permission_for_state(state),
         recommended_scale=_scale_for_state(state, config),
         reasons=tuple(reasons),
+        pack_id=config.pack_id,
+        pack_version=config.pack_version,
         config_version=config.config_version,
         inputs_digest=risk_inputs_digest(inputs),
     )
