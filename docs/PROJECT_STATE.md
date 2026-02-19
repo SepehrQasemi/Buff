@@ -1,14 +1,14 @@
-CURRENT_STAGE=S4_RISK_ENGINE_MATURITY
+CURRENT_STAGE=S5_EXECUTION_SAFETY_BOUNDARIES
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=237
-LAST_STAGE_RELEVANT_SHA=b83a0865b1cff8c0c1976166ddd1ef3daa17f58d
+LAST_STAGE_RELEVANT_PR=240
+LAST_STAGE_RELEVANT_SHA=558e427c0b0902d8c6dbd9aed532186a3d5f6a4d
 S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
 SNAPSHOT_SEMANTICS=Stage snapshot fields track stage/governance-relevant merges, not every merge on main.
 
 NEXT_3_ACTIONS=
-- Confirm S4 completion remains clean: strict release gate PASS and no runtime-facing exchange/network ambiguity.
-- Prepare S5 execution safety boundaries with docs updates and tooling enforcement first.
-- Keep lane discipline strict: DocsOnly (`docs/**`, `README.md`), Tooling (`tools/**`, `scripts/**`), Runtime (`src/**`, `apps/**`, `tests/**`).
+- Monitor SIM_ONLY enforcement in CI.
+- Evaluate need for execution capability surface tightening.
+- Continue Phase-6 product iteration (UX + research tools).
 
 HOW_TO_REFRESH=
 - Use canonical operational commands from docs/05_RUNBOOK_DEV_WORKFLOW.md.
@@ -33,10 +33,10 @@ No other document determines current stage.
 ## Machine-Readable Snapshot
 
 
-CURRENT_STAGE=S4_RISK_ENGINE_MATURITY
+CURRENT_STAGE=S5_EXECUTION_SAFETY_BOUNDARIES
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=237
-LAST_STAGE_RELEVANT_SHA=b83a0865b1cff8c0c1976166ddd1ef3daa17f58d
+LAST_STAGE_RELEVANT_PR=240
+LAST_STAGE_RELEVANT_SHA=558e427c0b0902d8c6dbd9aed532186a3d5f6a4d
 S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
