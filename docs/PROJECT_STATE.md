@@ -88,6 +88,18 @@ S6_PLATFORM_OBSERVABILITY_LAYER
 - Stage-relevant authority is anchored at PR #240 with SHA `558e427c0b0902d8c6dbd9aed532186a3d5f6a4d`.
 - Runtime acceptance confirms SIM_ONLY manifest/capability enforcement and fail-closed rejection of execution overrides, with strict release-gate enforcement.
 
+## S6 Platform Observability & Productization - Acceptance Evidence
+STAGE_TOKEN=S6_PLATFORM_OBSERVABILITY_LAYER
+DATE_VERIFIED_UTC=2026-02-19
+MAIN_SHA=cb91cc6ddaeb38565db0294c446eca80f8ec2fa8
+PRS=#244 https://github.com/Buff-Trading-AI/Buff/pull/244; #245 https://github.com/Buff-Trading-AI/Buff/pull/245; #246 https://github.com/Buff-Trading-AI/Buff/pull/246; #247 https://github.com/Buff-Trading-AI/Buff/pull/247
+CI_WORKFLOWS=https://github.com/Buff-Trading-AI/Buff/actions/runs/22183407044; https://github.com/Buff-Trading-AI/Buff/actions/runs/22183926606; https://github.com/Buff-Trading-AI/Buff/actions/runs/22184643631; https://github.com/Buff-Trading-AI/Buff/actions/runs/22184943839
+- Runtime evidence: `GET /api/v1/health/ready` is present for readiness checks.
+- Runtime evidence: observability surfaces are present at `GET /api/v1/observability/runs`, `GET /api/v1/observability/runs/{run_id}`, and `GET /api/v1/observability/registry`.
+- Runtime evidence: deterministic report export is present at `GET /api/v1/runs/{run_id}/report/export`.
+- Runtime evidence: SIM_ONLY invariant preserved; observability surfaces are GET-only; no network execution surface added.
+- Risk note: plugin validation runtime timeout was deliberately increased from 2s to 4s to reduce flakes under load, while keeping fail-closed behavior.
+
 ## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
 - Run indexing layer
 - Queryable artifact registry
