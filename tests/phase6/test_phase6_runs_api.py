@@ -172,6 +172,36 @@ def test_run_create_success(phase6_runs):
     assert any(entry.get("run_id") == run_id for entry in listed)
 
 
+def test_live_mode_rejected(monkeypatch, tmp_path):
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir()
+    monkeypatch.setenv("RUNS_ROOT", str(runs_root))
+
+    client = TestClient(app)
+    payload = _payload()
+    payload["execution_mode"] = "LIVE"
+    response = client.post("/api/v1/runs", json=payload)
+    err = _assert_error_response(response, 400, "RUN_CONFIG_INVALID")
+    field = err.get("details", {}).get("field")
+    if field is None:
+        field = err.get("error", {}).get("details", {}).get("field")
+    assert field == "execution_mode"
+
+
+def test_run_contains_execution_mode(phase6_runs):
+    run_id = phase6_runs["hold"]
+    run_dir = _run_path(phase6_runs["runs_root"], run_id)
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["execution_mode"] == "SIM_ONLY"
+
+
+def test_capabilities_field_present(phase6_runs):
+    run_id = phase6_runs["hold"]
+    run_dir = _run_path(phase6_runs["runs_root"], run_id)
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["capabilities"] == ["SIMULATION", "DATA_READONLY"]
+
+
 def test_run_create_with_upload(monkeypatch):
     runs_root = Path("runs") / "_upload_test"
     if runs_root.exists():
