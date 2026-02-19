@@ -1,7 +1,9 @@
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=0 \
+    PYTHONPATH=/app:/app/src
 
 WORKDIR /app
 
@@ -15,6 +17,8 @@ RUN pip install --no-cache-dir --upgrade pip \
         PyYAML>=6.0
 
 COPY apps /app/apps
+COPY src /app/src
+COPY schemas /app/schemas
 
 EXPOSE 8000
 

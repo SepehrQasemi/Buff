@@ -4,12 +4,11 @@ from typing import Any
 
 from fastapi.responses import JSONResponse
 
+from apps.api.errors import build_error_payload
+
 
 def error_payload(code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
-    normalized = details or {}
-    payload = {"code": code, "message": message, "details": normalized}
-    payload["error"] = {"code": code, "message": message, "details": normalized}
-    return payload
+    return build_error_payload(code, message, details)
 
 
 def error_response(
