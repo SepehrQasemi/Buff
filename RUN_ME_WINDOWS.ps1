@@ -22,6 +22,31 @@ function Write-Fail([string]$Message) {
   Write-Host "[FAIL] $Message"
 }
 
+function Coerce-ToArray([object]$Value) {
+  if ($null -eq $Value) {
+    return @()
+  }
+  return @($Value)
+}
+
+function Get-ObjectPropertyOrDefault([object]$Value, [string]$PropertyName, [object]$DefaultValue) {
+  if ($null -eq $Value) {
+    return $DefaultValue
+  }
+
+  $property = $Value.PSObject.Properties[$PropertyName]
+  if ($null -eq $property) {
+    return $DefaultValue
+  }
+
+  $propertyValue = $property.Value
+  if ($null -eq $propertyValue) {
+    return $DefaultValue
+  }
+
+  return $propertyValue
+}
+
 function Test-CommandAvailable([string]$Name) {
   return $null -ne (Get-Command $Name -ErrorAction SilentlyContinue)
 }
@@ -55,7 +80,7 @@ function Get-PortOwners([int]$Port) {
   } catch {
   }
 
-  if ($owners.Count -gt 0) {
+  if ((@($owners)).Count -gt 0) {
     return $owners
   }
 
@@ -89,16 +114,31 @@ function Get-PortOwners([int]$Port) {
 function Get-PortConflicts([int[]]$Ports) {
   $conflicts = @()
   foreach ($port in $Ports) {
-    $conflicts += Get-PortOwners -Port $port
+    $portOwners = Coerce-ToArray -Value (Get-PortOwners -Port $port)
+    foreach ($owner in $portOwners) {
+      if ($null -eq $owner) {
+        continue
+      }
+      $conflicts += $owner
+    }
   }
   return $conflicts
 }
 
 function Show-PortConflicts([object[]]$Conflicts) {
+  $normalizedConflicts = Coerce-ToArray -Value $Conflicts
+  if ((@($normalizedConflicts)).Count -eq 0) {
+    return
+  }
+
   Write-Fail "Required ports are in use."
-  foreach ($entry in $Conflicts) {
-    $pathSuffix = if ($entry.Path) { " [$($entry.Path)]" } else { "" }
-    Write-Host ("  - Port {0}: PID {1} ({2}){3}" -f $entry.Port, $entry.Pid, $entry.Name, $pathSuffix)
+  foreach ($entry in $normalizedConflicts) {
+    $port = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Port" -DefaultValue "<unknown>"
+    $pid = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Pid" -DefaultValue "<unknown>"
+    $name = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Name" -DefaultValue "<unknown>"
+    $path = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Path" -DefaultValue ""
+    $pathSuffix = if ($path) { " [$path]" } else { "" }
+    Write-Host ("  - Port {0}: PID {1} ({2}){3}" -f $port, $pid, $name, $pathSuffix)
   }
 }
 
@@ -167,10 +207,15 @@ function Show-FailureDiagnostics {
     Write-Fail "docker compose is not available. Update Docker Desktop to include Compose v2."
   }
 
-  $conflicts = Get-PortConflicts -Ports @(3000, 8000)
-  if ($conflicts.Count -gt 0) {
+  $conflicts = Coerce-ToArray -Value (Get-PortConflicts -Ports @(3000, 8000))
+  if ((@($conflicts)).Count -gt 0) {
     Show-PortConflicts -Conflicts $conflicts
   }
+}
+
+trap {
+  Write-Fail "Unexpected startup error: $($_.Exception.Message)"
+  exit 1
 }
 
 Write-Info "Starting Buff local platform..."
@@ -190,8 +235,8 @@ if (-not (Test-ComposeAvailable)) {
   exit 1
 }
 
-$initialConflicts = Get-PortConflicts -Ports @(3000, 8000)
-if ($initialConflicts.Count -gt 0) {
+$initialConflicts = Coerce-ToArray -Value (Get-PortConflicts -Ports @(3000, 8000))
+if ((@($initialConflicts)).Count -gt 0) {
   Show-PortConflicts -Conflicts $initialConflicts
   exit 1
 }
