@@ -1,14 +1,14 @@
 CURRENT_STAGE=S4_RISK_ENGINE_MATURITY
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=234
-LAST_STAGE_RELEVANT_SHA=bee6471c653c1f8fb8269ab03add466b2f5bfc72
+LAST_STAGE_RELEVANT_PR=237
+LAST_STAGE_RELEVANT_SHA=b83a0865b1cff8c0c1976166ddd1ef3daa17f58d
 S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
 SNAPSHOT_SEMANTICS=Stage snapshot fields track stage/governance-relevant merges, not every merge on main.
 
 NEXT_3_ACTIONS=
-- Keep lane boundaries strict: DocsOnly (`docs/**`, `README.md`), Tooling (`tools/**`, `scripts/**`), Runtime (`src/**`, `apps/**`, `tests/**`).
-- Keep `release_gate --strict` as mandatory and preserve enforced `s4_*` checks (`s4_risk_fail_closed`, `s4_risk_contract_surface`, `s4_risk_artifact_presence`).
-- Keep `S5_EXECUTION_SAFETY_BOUNDARIES` as the next stage candidate; no execution or broker integration in S4.
+- Confirm S4 completion remains clean: strict release gate PASS and no runtime-facing exchange/network ambiguity.
+- Prepare S5 execution safety boundaries with docs updates and tooling enforcement first.
+- Keep lane discipline strict: DocsOnly (`docs/**`, `README.md`), Tooling (`tools/**`, `scripts/**`), Runtime (`src/**`, `apps/**`, `tests/**`).
 
 HOW_TO_REFRESH=
 - Use canonical operational commands from docs/05_RUNBOOK_DEV_WORKFLOW.md.
@@ -35,8 +35,8 @@ No other document determines current stage.
 
 CURRENT_STAGE=S4_RISK_ENGINE_MATURITY
 OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=234
-LAST_STAGE_RELEVANT_SHA=bee6471c653c1f8fb8269ab03add466b2f5bfc72
+LAST_STAGE_RELEVANT_PR=237
+LAST_STAGE_RELEVANT_SHA=b83a0865b1cff8c0c1976166ddd1ef3daa17f58d
 S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
@@ -81,8 +81,8 @@ S5_EXECUTION_SAFETY_BOUNDARIES
 - Stage-relevant completion recorded by PR #225 and SHA `3e36db11a5706006bb464f046d2b1ef531f4182f`.
 
 ## S4 Acceptance Evidence
-- S4 risk maturity updates are merged on `main` through PRs #231, #232, and #234.
-- Stage-relevant authority is anchored at PR #234 with SHA `bee6471c653c1f8fb8269ab03add466b2f5bfc72`.
+- S4 risk maturity updates are merged on `main` through PRs #231, #232, #234, and #237.
+- Stage-relevant authority is anchored at PR #237 with SHA `b83a0865b1cff8c0c1976166ddd1ef3daa17f58d`.
 - Strict release gate includes and passes: `s4_risk_fail_closed`, `s4_risk_contract_surface`, and `s4_risk_artifact_presence`.
 
 ## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
@@ -107,4 +107,4 @@ S5_EXECUTION_SAFETY_BOUNDARIES
 
 ## Last Verified Commit
 
-bee6471c653c1f8fb8269ab03add466b2f5bfc72
+b83a0865b1cff8c0c1976166ddd1ef3daa17f58d
