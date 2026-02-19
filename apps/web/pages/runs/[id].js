@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import CandlestickChart from "../../components/workspace/CandlestickChart";
 import ErrorNotice from "../../components/ErrorNotice";
-import { getChatModes, postChat } from "../../lib/api";
+import { getChatModes, getRunReportExportUrl, postChat } from "../../lib/api";
 import { MISSING_RUN_ID_MESSAGE } from "../../lib/errors";
 import { buildClientError } from "../../lib/errorMapping";
 import useWorkspace from "../../lib/useWorkspace";
@@ -184,6 +184,7 @@ export default function ChartWorkspace() {
   const [chatResponse, setChatResponse] = useState(null);
   const [chatError, setChatError] = useState(null);
   const [chatLoading, setChatLoading] = useState(false);
+  const [errorMode, setErrorMode] = useState("simple");
   const [timelineFilters, setTimelineFilters] = useState({
     INFO: true,
     WARN: true,
@@ -460,6 +461,20 @@ export default function ChartWorkspace() {
 
   const risk = summary?.risk || {};
   const provenance = summary?.provenance || {};
+  const provenanceStrategy =
+    provenance?.strategy && typeof provenance.strategy === "object"
+      ? provenance.strategy
+      : {};
+  const strategyHash = provenance.strategy_hash || provenanceStrategy.hash;
+  const strategyId =
+    provenance.strategy_id || provenanceStrategy.id || run?.strategy || "n/a";
+  const strategyVersion =
+    provenance.strategy_version || provenanceStrategy.version || "n/a";
+  const riskLevel = provenance.risk_level ?? risk.level ?? "n/a";
+  const riskConfigHash = provenance.risk_config_hash || "n/a";
+  const runCreatedAt = provenance.run_created_at || run?.created_at || "n/a";
+  const stageToken = provenance.stage_token || summary?.stage_token || "n/a";
+  const reportExportHref = runId ? getRunReportExportUrl(runId) : null;
 
   const updateStrategyParam = (name, value) => {
     setStrategyParams((current) => ({ ...current, [name]: value }));
@@ -544,24 +559,44 @@ export default function ChartWorkspace() {
         </div>
         <div className="workspace-actions">
           {demoMode && <span className="badge info">DEMO</span>}
+          <label className="muted">
+            Error mode
+            <select
+              value={errorMode}
+              onChange={(event) => setErrorMode(event.target.value)}
+              style={{ marginLeft: "8px" }}
+            >
+              <option value="simple">Simple</option>
+              <option value="pro">Pro</option>
+            </select>
+          </label>
+          {reportExportHref && (
+            <a className="secondary" href={reportExportHref}>
+              Export Report
+            </a>
+          )}
           <button className="secondary" onClick={reload}>
             Refresh
           </button>
         </div>
       </header>
 
-      {missingRunError && <ErrorNotice error={missingRunError} />}
+      {missingRunError && <ErrorNotice error={missingRunError} mode={errorMode} />}
       {demoMode && (
         <div className="banner info">
           Demo mode active. This run is loaded from ARTIFACTS_ROOT and is read-only.
         </div>
       )}
-      {networkError && <ErrorNotice error={networkError} onRetry={reload} />}
-      {pluginsError && <ErrorNotice error={pluginsError} onRetry={reload} />}
-      {runError && <ErrorNotice error={runError} onRetry={reload} />}
-      {summaryError && <ErrorNotice error={summaryError} onRetry={reload} />}
-      {ohlcvError && <ErrorNotice error={ohlcvError} onRetry={reload} compact />}
-      {markersError && <ErrorNotice error={markersError} onRetry={reload} compact />}
+      {networkError && <ErrorNotice error={networkError} onRetry={reload} mode={errorMode} />}
+      {pluginsError && <ErrorNotice error={pluginsError} onRetry={reload} mode={errorMode} />}
+      {runError && <ErrorNotice error={runError} onRetry={reload} mode={errorMode} />}
+      {summaryError && <ErrorNotice error={summaryError} onRetry={reload} mode={errorMode} />}
+      {ohlcvError && (
+        <ErrorNotice error={ohlcvError} onRetry={reload} compact mode={errorMode} />
+      )}
+      {markersError && (
+        <ErrorNotice error={markersError} onRetry={reload} compact mode={errorMode} />
+      )}
 
       <section className="workspace-meta">
         <div className="meta-card">
@@ -771,7 +806,7 @@ export default function ChartWorkspace() {
                     </div>
                     <div>
                       <span>Strategy Version</span>
-                      <strong>{provenance.strategy_version || "n/a"}</strong>
+                      <strong>{strategyVersion}</strong>
                     </div>
                     <div>
                       <span>Run ID</span>
@@ -790,7 +825,7 @@ export default function ChartWorkspace() {
                   <div className="kv-grid">
                     <div>
                       <span>Risk Level</span>
-                      <strong>{risk.level ?? "n/a"}</strong>
+                      <strong>{riskLevel}</strong>
                     </div>
                     <div>
                       <span>State</span>
@@ -828,6 +863,26 @@ export default function ChartWorkspace() {
                 <div className="panel-card">
                   <h3>Provenance</h3>
                   <div className="kv-grid">
+                    <div>
+                      <span>Strategy ID</span>
+                      <strong>{strategyId}</strong>
+                    </div>
+                    <div>
+                      <span>Strategy Hash</span>
+                      <strong>{strategyHash || "n/a"}</strong>
+                    </div>
+                    <div>
+                      <span>Risk Config Hash</span>
+                      <strong>{riskConfigHash}</strong>
+                    </div>
+                    <div>
+                      <span>Run Created At</span>
+                      <strong>{runCreatedAt}</strong>
+                    </div>
+                    <div>
+                      <span>Stage Token</span>
+                      <strong>{stageToken}</strong>
+                    </div>
                     <div>
                       <span>Data Snapshot Hash</span>
                       <strong>{provenance.data_snapshot_hash || "n/a"}</strong>
@@ -911,7 +966,12 @@ export default function ChartWorkspace() {
                 {tradesError ? (
                   <div className="panel-card">
                     <h3>Trades</h3>
-                    <ErrorNotice error={tradesError} onRetry={reload} compact />
+                    <ErrorNotice
+                      error={tradesError}
+                      onRetry={reload}
+                      compact
+                      mode={errorMode}
+                    />
                   </div>
                 ) : (
                   <>
@@ -1035,7 +1095,7 @@ export default function ChartWorkspace() {
                           </div>
                           <div>
                             <span>Strategy Version</span>
-                            <strong>{provenance.strategy_version || "n/a"}</strong>
+                            <strong>{strategyVersion}</strong>
                           </div>
                           <div>
                             <span>Data Snapshot Hash</span>
@@ -1044,6 +1104,10 @@ export default function ChartWorkspace() {
                           <div>
                             <span>Feature Snapshot Hash</span>
                             <strong>{provenance.feature_snapshot_hash || "n/a"}</strong>
+                          </div>
+                          <div>
+                            <span>Stage Token</span>
+                            <strong>{stageToken}</strong>
                           </div>
                         </div>
                       ) : (
@@ -1059,7 +1123,12 @@ export default function ChartWorkspace() {
               <div className="panel-card">
                 <h3>Metrics Summary</h3>
                 {metricsError ? (
-                  <ErrorNotice error={metricsError} onRetry={reload} compact />
+                  <ErrorNotice
+                    error={metricsError}
+                    onRetry={reload}
+                    compact
+                    mode={errorMode}
+                  />
                 ) : metrics ? (
                   <>
                     <div className="stat-grid">
@@ -1128,7 +1197,12 @@ export default function ChartWorkspace() {
               <div className="panel-card">
                 <h3>Timeline</h3>
                 {timelineError ? (
-                  <ErrorNotice error={timelineError} onRetry={reload} compact />
+                  <ErrorNotice
+                    error={timelineError}
+                    onRetry={reload}
+                    compact
+                    mode={errorMode}
+                  />
                 ) : (
                   <div className="timeline-list">
                     <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>

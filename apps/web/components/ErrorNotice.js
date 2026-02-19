@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { normalizeError } from "../lib/errorMapping";
 
-export default function ErrorNotice({ error, onRetry, compact = false }) {
+export default function ErrorNotice({ error, onRetry, compact = false, mode = "simple" }) {
   const normalized = normalizeError(error);
   if (!normalized) {
     return null;
   }
 
-  const { title, summary, actions, help, status, code } = normalized;
+  const { title, summary, actions, help, status, code, envelope } = normalized;
   const showFix = (actions && actions.length > 0) || help;
+  const showEnvelope = mode === "pro" && envelope && typeof envelope === "object";
 
   return (
     <div
@@ -48,9 +49,25 @@ export default function ErrorNotice({ error, onRetry, compact = false }) {
       {(status || code) && (
         <div className="muted">
           {code ? `Code: ${code}` : ""}
-          {code && status ? " • " : ""}
+          {code && status ? " | " : ""}
           {status ? `HTTP ${status}` : ""}
         </div>
+      )}
+
+      {showEnvelope && (
+        <details>
+          <summary className="muted">Full error envelope</summary>
+          <pre
+            style={{
+              marginTop: "8px",
+              fontSize: "0.75rem",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-word",
+            }}
+          >
+            {JSON.stringify(envelope, null, 2)}
+          </pre>
+        </details>
       )}
     </div>
   );

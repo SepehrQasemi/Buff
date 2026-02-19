@@ -8,13 +8,20 @@ const MISSING_ARTIFACTS_MESSAGE =
 
 const extractErrorInfo = (payload) => {
   if (!payload || typeof payload !== "object") {
-    return { code: null, message: null, details: null };
+    return { code: null, message: null, details: null, envelope: null };
   }
+  const directEnvelope =
+    payload.error_envelope ||
+    payload.error?.envelope ||
+    payload.details?.error_envelope ||
+    payload.error?.details?.error_envelope ||
+    null;
   if (payload.error && typeof payload.error === "object") {
     return {
       code: payload.error.code || null,
       message: payload.error.message || null,
       details: payload.error.details || null,
+      envelope: directEnvelope,
     };
   }
   if (payload.detail && typeof payload.detail === "object") {
@@ -22,12 +29,14 @@ const extractErrorInfo = (payload) => {
       code: payload.detail.code || null,
       message: payload.detail.message || null,
       details: payload.detail.details || null,
+      envelope: directEnvelope,
     };
   }
   return {
     code: payload.code || null,
     message: payload.message || null,
     details: payload.details || null,
+    envelope: directEnvelope,
   };
 };
 

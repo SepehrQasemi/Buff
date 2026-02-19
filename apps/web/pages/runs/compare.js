@@ -323,6 +323,37 @@ export default function CompareRunsPage() {
     return tfA !== tfB;
   }, [runMetaA?.timeframe, runMetaB?.timeframe]);
 
+  const marketMismatch = useMemo(() => {
+    const marketA =
+      summaryA?.provenance?.market ||
+      summaryA?.provenance?.exchange ||
+      runMetaA?.market ||
+      "";
+    const marketB =
+      summaryB?.provenance?.market ||
+      summaryB?.provenance?.exchange ||
+      runMetaB?.market ||
+      "";
+    if (!marketA || !marketB) {
+      return false;
+    }
+    return String(marketA) !== String(marketB);
+  }, [summaryA, summaryB, runMetaA?.market, runMetaB?.market]);
+
+  const mismatchLabel = useMemo(() => {
+    const parts = [];
+    if (symbolMismatch) {
+      parts.push("symbol");
+    }
+    if (timeframeMismatch) {
+      parts.push("timeframe");
+    }
+    if (marketMismatch) {
+      parts.push("market");
+    }
+    return parts.join(", ");
+  }, [symbolMismatch, timeframeMismatch, marketMismatch]);
+
   const candles = useMemo(() => (ohlcv?.candles ? ohlcv.candles : []), [ohlcv]);
   const metricKeys = useMemo(() => {
     const keys = new Set();
@@ -376,9 +407,9 @@ export default function CompareRunsPage() {
 
       {invalidParams && <div className="banner">{invalidParams}</div>}
       {runsError && <div className="banner">{runsError}</div>}
-      {(symbolMismatch || timeframeMismatch) && (
+      {(symbolMismatch || timeframeMismatch || marketMismatch) && (
         <div className="banner">
-          Runs differ in symbol/timeframe; marker alignment may be inaccurate.
+          {`Runs differ in ${mismatchLabel}; compare remains artifact-backed but alignment may be partial.`}
         </div>
       )}
 
