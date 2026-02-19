@@ -31,6 +31,8 @@ from .registry import compute_inputs_hash, lock_registry, upsert_registry_entry
 ENGINE_VERSION = "phase6-1.0.0"
 BUILDER_VERSION = "phase6-1.0.0"
 INITIAL_EQUITY = 10_000.0
+_EXECUTION_MODE = "SIM_ONLY"
+_CAPABILITIES = ["SIMULATION", "DATA_READONLY"]
 
 RUN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{2,63}$")
 
@@ -222,6 +224,28 @@ def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
 
 
 def _normalize_request(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    if "execution_mode" in payload:
+        raise RunBuilderError(
+            "RUN_CONFIG_INVALID",
+            "execution_mode override is not allowed",
+            400,
+            details={"field": "execution_mode"},
+        )
+    if "live" in payload:
+        raise RunBuilderError(
+            "RUN_CONFIG_INVALID",
+            "live execution is not supported",
+            400,
+            details={"field": "live"},
+        )
+    if "broker" in payload:
+        raise RunBuilderError(
+            "RUN_CONFIG_INVALID",
+            "broker execution is not supported",
+            400,
+            details={"field": "broker"},
+        )
+
     schema_version = payload.get("schema_version")
     if not isinstance(schema_version, str) or not schema_version.strip():
         raise RunBuilderError("RUN_CONFIG_INVALID", "schema_version is required", 400)
@@ -643,6 +667,8 @@ def _build_manifest(
         "created_at": created_at,
         "engine_version": ENGINE_VERSION,
         "builder_version": BUILDER_VERSION,
+        "execution_mode": _EXECUTION_MODE,
+        "capabilities": list(_CAPABILITIES),
         "status": status,
         "status_history": status_history,
         "inputs": inputs,
