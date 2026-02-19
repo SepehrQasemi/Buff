@@ -153,6 +153,108 @@ def reason_payloads(reasons: Sequence[RiskReason | str]) -> list[dict[str, JsonV
     return [RiskReason.from_value(reason).to_dict() for reason in reasons]
 
 
+def _sorted_reason_payloads(reasons: Sequence[RiskReason | str]) -> list[dict[str, JsonValue]]:
+    payloads = reason_payloads(reasons)
+    return sorted(
+        payloads,
+        key=lambda item: (
+            str(item.get("rule_id", "")),
+            str(item.get("severity", "")),
+            str(item.get("message", "")),
+            stable_json_dumps(item.get("details", {})),
+        ),
+    )
+
+
+def _normalize_optional_token(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def risk_decision_hash_payload(
+    *,
+    decision: RiskState | str,
+    reasons: Sequence[RiskReason | str],
+    config_version: str,
+    inputs_digest: str,
+    pack_id: str | None = None,
+    pack_version: str | None = None,
+) -> dict[str, JsonValue]:
+    if isinstance(decision, RiskState):
+        decision_value = decision.value
+    elif isinstance(decision, str) and decision.strip():
+        decision_value = decision.strip()
+    else:
+        raise ValueError("decision must be a non-empty RiskState/str")
+
+    cfg = _normalize_optional_token(config_version)
+    if cfg is None:
+        raise ValueError("config_version must be a non-empty string")
+    digest = _normalize_optional_token(inputs_digest)
+    if digest is None:
+        raise ValueError("inputs_digest must be a non-empty string")
+
+    payload: dict[str, JsonValue] = {
+        "decision": decision_value,
+        "reasons": _sorted_reason_payloads(reasons),
+        "config_version": cfg,
+        "inputs_digest": digest,
+    }
+    normalized_pack_id = _normalize_optional_token(pack_id)
+    normalized_pack_version = _normalize_optional_token(pack_version)
+    if normalized_pack_id is not None:
+        payload["pack_id"] = normalized_pack_id
+    if normalized_pack_version is not None:
+        payload["pack_version"] = normalized_pack_version
+    return payload
+
+
+def compute_risk_decision_hash(
+    *,
+    decision: RiskState | str,
+    reasons: Sequence[RiskReason | str],
+    config_version: str,
+    inputs_digest: str,
+    pack_id: str | None = None,
+    pack_version: str | None = None,
+) -> str:
+    payload = risk_decision_hash_payload(
+        decision=decision,
+        reasons=reasons,
+        config_version=config_version,
+        inputs_digest=inputs_digest,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+    return _sha256_hex(stable_json_dumps(payload))
+
+
+def verify_risk_decision_hash(
+    *,
+    decision: RiskState | str,
+    reasons: Sequence[RiskReason | str],
+    config_version: str,
+    inputs_digest: str,
+    stable_hash: str,
+    pack_id: str | None = None,
+    pack_version: str | None = None,
+) -> bool:
+    candidate = _normalize_optional_token(stable_hash)
+    if candidate is None:
+        return False
+    expected = compute_risk_decision_hash(
+        decision=decision,
+        reasons=reasons,
+        config_version=config_version,
+        inputs_digest=inputs_digest,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+    return expected == candidate
+
+
 def risk_inputs_digest(inputs: RiskInputs | Mapping[str, Any] | dict[str, Any]) -> str:
     payload: Mapping[str, Any]
     if isinstance(inputs, RiskInputs):
@@ -261,6 +363,7 @@ class RiskDecision:
     pack_version: str = "v1"
     config_version: str = "v1"
     inputs_digest: str = ""
+    stable_hash: str = ""
 
     def __post_init__(self) -> None:
         if not isinstance(self.state, RiskState):
@@ -291,6 +394,21 @@ class RiskDecision:
                 raise ValueError("inputs_digest must be a string")
         else:
             object.__setattr__(self, "inputs_digest", risk_inputs_digest(self.snapshot))
+        expected_hash = compute_risk_decision_hash(
+            decision=self.state,
+            reasons=self.reasons,
+            config_version=self.config_version,
+            inputs_digest=self.inputs_digest,
+            pack_id=self.pack_id,
+            pack_version=self.pack_version,
+        )
+        if self.stable_hash:
+            if not isinstance(self.stable_hash, str):
+                raise ValueError("stable_hash must be a string")
+            if self.stable_hash != expected_hash:
+                raise ValueError("stable_hash does not match computed risk decision hash")
+        else:
+            object.__setattr__(self, "stable_hash", expected_hash)
 
 
 @dataclass(frozen=True)

@@ -2,17 +2,33 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import re
 
 import pytest
 
+from audit.decision_records import DecisionRecordWriter
+from audit.replay import replay_verify
 from control_plane.state import ControlState, SystemState
 from execution.engine import execute_paper_run
-from risk.contracts import RiskConfig, RiskInputs, RiskReason, risk_inputs_digest
+from risk.contracts import (
+    RiskConfig,
+    RiskDecision,
+    RiskInputs,
+    RiskReason,
+    RiskState,
+    compute_risk_decision_hash,
+    risk_inputs_digest,
+    verify_risk_decision_hash,
+)
 from risk.state_machine import evaluate_risk
 from risk.veto import risk_veto
+from selector.records import selection_to_record
+from selector.selector import select_strategy
 
 
 pytestmark = pytest.mark.unit
+
+SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _config(*, config_version: str = "v2") -> RiskConfig:
@@ -101,17 +117,178 @@ def test_risk_artifact_contains_risk_reasons(
     record = json.loads(raw.strip())
     assert "risk" in record
     risk_block = record["risk"]
-    assert set(risk_block.keys()) == {
+    required_keys = {
         "decision",
         "permission",
         "reasons",
         "config_version",
         "inputs_digest",
+        "stable_hash",
+        "pack_id",
+        "pack_version",
     }
+    assert required_keys.issubset(set(risk_block.keys()))
     assert risk_block["decision"] == "RED"
     assert risk_block["config_version"] == "risk-semantics-v2"
+    assert risk_block["pack_id"] == "L3_BALANCED"
+    assert risk_block["pack_version"] == "v1"
     assert isinstance(risk_block["inputs_digest"], str) and risk_block["inputs_digest"]
+    assert isinstance(risk_block["stable_hash"], str) and SHA256_HEX_RE.fullmatch(
+        risk_block["stable_hash"]
+    )
     assert isinstance(risk_block["reasons"], list) and risk_block["reasons"]
     first_reason = risk_block["reasons"][0]
     assert set(first_reason.keys()) == {"rule_id", "severity", "message", "details"}
     assert first_reason["rule_id"] == "atr_pct_above_red"
+
+
+def test_risk_hash_deterministic_order_independent() -> None:
+    reasons_a = [
+        RiskReason(
+            "RISK_POLICY_MISSING",
+            severity="ERROR",
+            message="risk policy configuration is missing",
+            details={"source": "gate", "priority": 2},
+        ),
+        RiskReason(
+            "invalid_inputs",
+            severity="ERROR",
+            message="risk inputs failed validation",
+            details={"source": "schema", "priority": 1},
+        ),
+    ]
+    reasons_b = [reasons_a[1], reasons_a[0]]
+    digest = risk_inputs_digest(_inputs().to_dict())
+
+    hash_a = compute_risk_decision_hash(
+        decision="RED",
+        reasons=reasons_a,
+        config_version="risk-semantics-v2",
+        inputs_digest=digest,
+        pack_id="L3_BALANCED",
+        pack_version="v1",
+    )
+    hash_b = compute_risk_decision_hash(
+        decision=RiskState.RED,
+        reasons=reasons_b,
+        config_version="risk-semantics-v2",
+        inputs_digest=digest,
+        pack_id="L3_BALANCED",
+        pack_version="v1",
+    )
+    assert hash_a == hash_b
+
+    decision_a = RiskDecision(
+        state=RiskState.RED,
+        reasons=reasons_a,
+        snapshot=_inputs().to_dict(),
+        config_version="risk-semantics-v2",
+        inputs_digest=digest,
+    )
+    decision_b = RiskDecision(
+        state=RiskState.RED,
+        reasons=reasons_b,
+        snapshot=_inputs().to_dict(),
+        config_version="risk-semantics-v2",
+        inputs_digest=digest,
+    )
+    assert decision_a.stable_hash == decision_b.stable_hash
+
+
+def test_risk_replay_hash_mismatch_detected(tmp_path: Path) -> None:
+    out_path = tmp_path / "decision_records.jsonl"
+    writer = DecisionRecordWriter(out_path=str(out_path), run_id="risk-hash-replay")
+    signals = {
+        "trend_state": "up",
+        "volatility_regime": "low",
+        "momentum_state": "neutral",
+        "structure_state": "breakout",
+    }
+    writer.append(
+        timeframe="1m",
+        risk_state=RiskState.GREEN.value,
+        market_state=signals,
+        selection=selection_to_record(select_strategy(signals, RiskState.GREEN)),
+    )
+    writer.close()
+
+    lines = out_path.read_text(encoding="utf-8").splitlines()
+    record = json.loads(lines[0])
+    reasons = [
+        {
+            "rule_id": "RISK_POLICY_MISSING",
+            "severity": "ERROR",
+            "message": "risk policy configuration is missing",
+            "details": {"source": "gate"},
+        }
+    ]
+    inputs_digest = risk_inputs_digest(
+        {
+            "run_id": record["run_id"],
+            "seq": record["seq"],
+            "timeframe": record["timeframe"],
+        }
+    )
+    good_hash = compute_risk_decision_hash(
+        decision="RED",
+        reasons=reasons,
+        config_version="risk-semantics-v2",
+        inputs_digest=inputs_digest,
+        pack_id="L3_BALANCED",
+        pack_version="v1",
+    )
+    tampered_hash = f"{'0' if good_hash[0] != '0' else '1'}{good_hash[1:]}"
+    record["risk"] = {
+        "decision": "RED",
+        "permission": "BLOCK",
+        "reasons": reasons,
+        "config_version": "risk-semantics-v2",
+        "inputs_digest": inputs_digest,
+        "pack_id": "L3_BALANCED",
+        "pack_version": "v1",
+        "stable_hash": tampered_hash,
+    }
+    out_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    result = replay_verify(records_path=str(out_path))
+    assert result.hash_mismatch == 1
+    assert result.matched == 0
+
+
+def test_risk_hash_present_in_artifact(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    execute_paper_run(
+        input_data={"run_id": "run-hash", "timeframe": "1m"},
+        features={},
+        risk_decision={
+            "risk_state": "RED",
+            "config_version": "risk-semantics-v2",
+            "pack_id": "L3_BALANCED",
+            "pack_version": "v1",
+            "reasons": [
+                {
+                    "rule_id": "atr_pct_above_red",
+                    "severity": "ERROR",
+                    "message": "ATR percent exceeded RED threshold",
+                    "details": {"atr_pct": 0.1, "threshold": 0.05},
+                }
+            ],
+        },
+        selected_strategy={"name": "demo", "version": "1.0.0"},
+        control_state=ControlState(state=SystemState.ARMED),
+    )
+    raw = (Path("workspaces") / "run-hash" / "decision_records.jsonl").read_text(encoding="utf-8")
+    record = json.loads(raw.strip())
+    risk_block = record["risk"]
+    assert isinstance(risk_block.get("stable_hash"), str)
+    stable_hash = risk_block["stable_hash"]
+    assert SHA256_HEX_RE.fullmatch(stable_hash)
+    assert verify_risk_decision_hash(
+        decision=risk_block["decision"],
+        reasons=risk_block["reasons"],
+        config_version=risk_block["config_version"],
+        inputs_digest=risk_block["inputs_digest"],
+        stable_hash=stable_hash,
+        pack_id=risk_block.get("pack_id"),
+        pack_version=risk_block.get("pack_version"),
+    )
