@@ -2,79 +2,56 @@ from __future__ import annotations
 
 from importlib import import_module
 from pathlib import Path
+import re
 import sys
-from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 CANONICAL_SURFACE = "risk.veto"
+CANONICAL_CONTRACTS = "risk.contracts"
 
-# Canonical authoring modules used by the active gate path in risk.veto.
-AUTHORITATIVE_DEFINERS: dict[str, str] = {
-    "RiskInputs": "risk.contracts",
-    "RiskConfig": "risk.state_machine",
-    "RiskDecision": "risk.state_machine",
-    "RiskState": "risk.state_machine",
-    "risk_veto": "risk.veto",
-}
-
-SCANNED_DEFINER_MODULES = ("risk.contracts", "risk.state_machine", "risk.types")
-
-# Explicitly declared duplicate definitions that are tolerated but non-authoritative.
-ALLOWED_NON_AUTHORITATIVE_DEFINERS: dict[str, set[str]] = {
-    "RiskInputs": {"risk.types"},
-    "RiskConfig": {"risk.types"},
-    "RiskDecision": {"risk.types"},
-    "RiskState": {"risk.types"},
-}
-
-
-def _defined_here(module_name: str, symbol: str) -> bool:
-    module = import_module(module_name)
-    if not hasattr(module, symbol):
-        return False
-    value = getattr(module, symbol)
-    return getattr(value, "__module__", None) == module_name
-
-
-def _load_symbol(module_name: str, symbol: str) -> Any:
-    module = import_module(module_name)
-    assert hasattr(module, symbol), f"{module_name} missing symbol: {symbol}"
-    return getattr(module, symbol)
+TYPE_SYMBOLS = ("RiskInputs", "RiskConfig", "RiskDecision", "RiskState")
+IMPORT_FROM_RISK_TYPES = re.compile(r"^\s*from\s+risk\.types\s+import\b", re.MULTILINE)
+IMPORT_RISK_TYPES = re.compile(r"^\s*import\s+risk\.types\b", re.MULTILINE)
 
 
 def test_s4_canonical_surface_is_importable() -> None:
     surface = import_module(CANONICAL_SURFACE)
+    contracts = import_module(CANONICAL_CONTRACTS)
 
-    for symbol in AUTHORITATIVE_DEFINERS:
+    for symbol in (*TYPE_SYMBOLS, "risk_veto"):
         assert hasattr(surface, symbol), f"{CANONICAL_SURFACE} missing export: {symbol}"
+    for symbol in TYPE_SYMBOLS:
+        assert getattr(surface, symbol) is getattr(contracts, symbol), (
+            f"{CANONICAL_SURFACE}.{symbol} must resolve to {CANONICAL_CONTRACTS}.{symbol}"
+        )
 
     assert callable(surface.risk_veto)
 
 
-def test_s4_canonical_surface_points_to_authoritative_symbols() -> None:
-    surface = import_module(CANONICAL_SURFACE)
+def test_s4_state_machine_type_aliases_stay_canonical() -> None:
+    contracts = import_module(CANONICAL_CONTRACTS)
+    state_machine = import_module("risk.state_machine")
 
-    for symbol, authoritative_module in AUTHORITATIVE_DEFINERS.items():
-        assert getattr(surface, symbol) is _load_symbol(authoritative_module, symbol)
+    for symbol in ("RiskConfig", "RiskDecision", "RiskState"):
+        assert hasattr(state_machine, symbol), f"risk.state_machine missing: {symbol}"
+        assert getattr(state_machine, symbol) is getattr(contracts, symbol), (
+            f"risk.state_machine.{symbol} must alias {CANONICAL_CONTRACTS}.{symbol}"
+        )
 
 
-def test_s4_fragmentation_is_explicit_and_bounded() -> None:
-    for symbol, authoritative_module in AUTHORITATIVE_DEFINERS.items():
-        if symbol == "risk_veto":
+def test_s4_no_risk_types_imports_in_runtime_or_tests() -> None:
+    violations: list[str] = []
+    for root in ("src", "apps", "tests"):
+        root_path = Path(root)
+        if not root_path.exists():
             continue
+        for path in root_path.rglob("*.py"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            if IMPORT_FROM_RISK_TYPES.search(text) or IMPORT_RISK_TYPES.search(text):
+                violations.append(path.as_posix())
 
-        defining_modules = {
-            module_name
-            for module_name in SCANNED_DEFINER_MODULES
-            if _defined_here(module_name, symbol)
-        }
-        assert authoritative_module in defining_modules, (
-            f"authoritative definer missing for {symbol}: {authoritative_module}"
-        )
-
-        non_authoritative = defining_modules - {authoritative_module}
-        unexpected = non_authoritative - ALLOWED_NON_AUTHORITATIVE_DEFINERS.get(symbol, set())
-        assert not unexpected, (
-            f"fragmented contract surface for {symbol}; unexpected definers: {sorted(unexpected)}"
-        )
+    assert not violations, (
+        f"risk.types imports are forbidden; replace with {CANONICAL_CONTRACTS}: "
+        f"{sorted(violations)}"
+    )
