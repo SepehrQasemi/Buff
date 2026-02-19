@@ -20,7 +20,7 @@ from buff.features.contract import build_feature_specs_from_registry
 from buff.features.metadata import build_source_fingerprint, get_git_sha, sha256_file
 from buff.features.registry import FEATURES
 from src.data.aggregate import aggregate_ohlcv
-from src.data.ingest import download_ohlcv_1m
+from src.data.offline_binance_ingest import download_ohlcv_1m
 from src.data.store import CANONICAL_COLUMNS, write_parquet
 from src.data.validate import (
     DataValidationError,

@@ -15,7 +15,7 @@ from buff.features.contract import build_feature_specs_from_registry
 from buff.features.metadata import build_source_fingerprint, get_git_sha, sha256_file
 from buff.features.registry import FEATURES
 from .aggregate import aggregate_ohlcv
-from .ingest import (
+from .offline_binance_ingest import (
     DEFAULT_MAX_RETRIES,
     DEFAULT_RATE_LIMIT_SLEEP,
     DEFAULT_TIMEOUT_SECONDS,

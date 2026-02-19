@@ -7,7 +7,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.data import cli as data_cli
-from src.data import ingest as data_ingest
+from src.data import offline_binance_ingest as data_ingest
 
 MS = 60_000
 

@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 
 FORBIDDEN_PATTERNS: dict[str, re.Pattern[str]] = {
-    "place_order": re.compile(r"\b(place|submit|send)\s+order(s)?\b"),
+    # Instruction-only lexical filter labels; this does not execute anything.
+    "trade_intent": re.compile(r"\b(place|submit|send)\s+order(s)?\b"),
     "execute_trade": re.compile(r"\bexecute\s+(trade|order)(s)?\b"),
     "arm_control_plane": re.compile(r"\barm\b.*\b(control|live)\b"),
     "broker_action": re.compile(r"\bbroker\b.*\b(order|trade|execute)\b"),

@@ -116,7 +116,12 @@ def main() -> None:
         default="tests/fixtures/ohlcv",
         help="Fixture directory for offline mode",
     )
-    parser.add_argument("--exchange", type=str, default="binance", help="Exchange name")
+    parser.add_argument(
+        "--exchange",
+        type=str,
+        default="",
+        help="Exchange name for online ingest (required unless --offline).",
+    )
     parser.add_argument("--market_type", type=str, default="future", help="Market type")
     parser.add_argument("--limit", type=int, default=1000, help="Fetch limit per request")
     parser.add_argument("--run_id", type=str, default="", help="Workspace run id for snapshot")
@@ -147,10 +152,12 @@ def main() -> None:
     exchange = None
     start_ms = None
     if not args.offline:
+        if not isinstance(args.exchange, str) or not args.exchange.strip():
+            raise ValueError("--exchange is required unless --offline is set")
         start_date = datetime.strptime(args.start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         start_ms = int(start_date.timestamp() * 1000)
         cfg = IngestConfig(
-            exchange=args.exchange,
+            exchange=args.exchange.strip(),
             market_type=args.market_type,
             timeframe=base_timeframe,
             limit=args.limit,
