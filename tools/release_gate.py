@@ -328,8 +328,8 @@ def main(argv: list[str] | None = None) -> int:
                 if _looks_like_network_failure(combined):
                     message = (
                         "mvp_smoke downloads Binance 1m data over the network and no offline "
-                        "mode is available. Ensure outbound HTTPS access to fapi.binance.com or "
-                        "add an offline mode before running the release gate."
+                        "mode is available. Keep --with-network-smoke disabled in offline "
+                        "environments, or add an offline mode before running this step."
                     )
                     steps[-1]["details"]["actionable_message"] = message
                     print(f"error: {message}", file=sys.stderr)
