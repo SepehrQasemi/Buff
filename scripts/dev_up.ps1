@@ -10,10 +10,18 @@ $resolvedRepo = [System.IO.Path]::GetFullPath($repoRoot)
 $resolvedRuns = [System.IO.Path]::GetFullPath($runsRoot)
 
 function Invoke-Compose {
-  param([string[]]$Args)
+  param([string[]]$ComposeArgs)
+
+  $composeArgsList = @($ComposeArgs)
+  if ($composeArgsList.Count -eq 0) {
+    Write-Host "[FAIL] docker compose arguments are empty."
+    exit 1
+  }
+
+  Write-Host ("[INFO] docker compose {0}" -f ($composeArgsList -join " "))
   Push-Location $repoRoot
   try {
-    & docker compose @Args
+    & docker compose @composeArgsList
   } finally {
     Pop-Location
   }
@@ -31,25 +39,25 @@ function Assert-SafeRunsRoot {
 switch ($Action) {
   "up" {
     New-Item -ItemType Directory -Path $resolvedRuns -Force | Out-Null
-    $args = @("up", "-d", "--build")
+    $composeArgs = @("up", "-d", "--build")
     if ($Services) {
-      $args += $Services
+      $composeArgs += $Services
     }
-    Invoke-Compose -Args $args
+    Invoke-Compose -ComposeArgs $composeArgs
   }
   "down" {
-    $args = @("down", "--remove-orphans")
+    $composeArgs = @("down", "--remove-orphans")
     if ($Services) {
-      $args += $Services
+      $composeArgs += $Services
     }
-    Invoke-Compose -Args $args
+    Invoke-Compose -ComposeArgs $composeArgs
   }
   "logs" {
-    $args = @("logs", "-f")
+    $composeArgs = @("logs", "-f")
     if ($Services) {
-      $args += $Services
+      $composeArgs += $Services
     }
-    Invoke-Compose -Args $args
+    Invoke-Compose -ComposeArgs $composeArgs
   }
   "reset-runs" {
     Assert-SafeRunsRoot
