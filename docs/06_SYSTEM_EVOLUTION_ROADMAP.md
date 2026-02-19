@@ -1,4 +1,4 @@
-﻿# SYSTEM_EVOLUTION_ROADMAP
+# SYSTEM_EVOLUTION_ROADMAP
 
 This document defines all possible future stages.
 It does NOT determine current stage.
