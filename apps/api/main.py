@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import uuid
+import zipfile
 from email.parser import BytesParser
 from email.policy import default as email_default
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -41,7 +43,7 @@ from .artifacts import (
     validate_decision_records,
 )
 from .chat import router as chat_router
-from .errors import build_error_payload, raise_api_error
+from .errors import build_error_envelope, build_error_payload, raise_api_error
 from .plugins import get_validation_summary, list_active_plugins, list_failed_plugins
 from .phase6.http import error_response
 from .phase6.paths import (
@@ -69,6 +71,8 @@ router = APIRouter()
 KILL_SWITCH_ENV = "BUFF_KILL_SWITCH"
 DEMO_MODE_ENV = "DEMO_MODE"
 DEFAULT_USER_ENV = "BUFF_DEFAULT_USER"
+API_VERSION = "1"
+STAGE_TOKEN = "S5_EXECUTION_SAFETY_BOUNDARIES"
 
 
 def _kill_switch_enabled() -> bool:
@@ -77,6 +81,276 @@ def _kill_switch_enabled() -> bool:
 
 def _demo_mode_enabled() -> bool:
     return os.getenv(DEMO_MODE_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _utc_now_iso() -> str:
+    text = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    if text.endswith("+00:00"):
+        return text[:-6] + "Z"
+    return text
+
+
+def _canonical_hash(value: object) -> str | None:
+    if value is None:
+        return None
+    try:
+        encoded = json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except TypeError:
+        return None
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _resolve_stage_token(manifest: dict[str, object]) -> str:
+    meta = manifest.get("meta")
+    if isinstance(meta, dict):
+        token = meta.get("stage_token")
+        if isinstance(token, str):
+            token = token.strip()
+            if token:
+                return token
+    return STAGE_TOKEN
+
+
+def _read_registry_payload_read_only(user_root_path: Path) -> tuple[dict[str, object], str | None]:
+    registry_path = user_root_path / "index.json"
+    if not registry_path.exists():
+        return {"schema_version": "1.0.0", "generated_at": None, "runs": []}, None
+    try:
+        payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"schema_version": "1.0.0", "generated_at": None, "runs": []}, str(exc)
+    if not isinstance(payload, dict):
+        return {"schema_version": "1.0.0", "generated_at": None, "runs": []}, "index.json invalid"
+    runs = payload.get("runs")
+    if not isinstance(runs, list):
+        return {
+            "schema_version": "1.0.0",
+            "generated_at": None,
+            "runs": [],
+        }, "index.json runs invalid"
+    return payload, None
+
+
+def _iter_candidate_run_dirs(runs_root: Path) -> Iterable[Path]:
+    if not runs_root.exists() or not runs_root.is_dir():
+        return []
+    candidates: list[Path] = []
+    for child in sorted(runs_root.iterdir(), key=lambda item: item.name):
+        if not child.is_dir():
+            continue
+        name = child.name.strip()
+        if not name or name.startswith("."):
+            continue
+        lowered = name.lower()
+        if lowered in {"inputs", "__pycache__", "tmp", "temp", "users"}:
+            continue
+        if lowered.startswith("tmp_") or lowered.startswith("tmp-"):
+            continue
+        if lowered.startswith(".tmp_") or lowered.startswith(".tmp-"):
+            continue
+        has_sentinel = (child / "manifest.json").exists() or (
+            child / "decision_records.jsonl"
+        ).exists()
+        if not has_sentinel:
+            continue
+        candidates.append(child.resolve())
+    return candidates
+
+
+def _build_missing_registry_entry(
+    run_id: str, existing: dict[str, object], *, user_id: str
+) -> dict[str, object]:
+    created_at = existing.get("created_at")
+    if not isinstance(created_at, str) or not created_at.strip():
+        created_at = _utc_now_iso()
+    return {
+        "run_id": run_id,
+        "created_at": created_at,
+        "owner_user_id": user_id,
+        "status": "CORRUPTED",
+        "health": "CORRUPTED",
+        "artifacts_present": [],
+        "missing_artifacts": ["run_dir"],
+        "invalid_artifacts": [],
+        "checks": {"required": {"run_dir": {"status": "missing"}}, "json_parse": {}},
+        "last_verified_at": _utc_now_iso(),
+        "meta": {
+            "owner_user_id": user_id,
+            "observed_read_only": True,
+        },
+    }
+
+
+def _collect_registry_entries_read_only(
+    owner_root: Path,
+    runs_root: Path,
+    *,
+    user_id: str,
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    payload, registry_error = _read_registry_payload_read_only(owner_root)
+    raw_runs = payload.get("runs")
+    runs_from_index = raw_runs if isinstance(raw_runs, list) else []
+
+    index_map: dict[str, dict[str, object]] = {}
+    invalid_entries = 0
+    for raw in runs_from_index:
+        if not isinstance(raw, dict):
+            invalid_entries += 1
+            continue
+        run_id = str(raw.get("run_id") or "").strip()
+        if not run_id:
+            invalid_entries += 1
+            continue
+        if run_id in index_map:
+            invalid_entries += 1
+            continue
+        index_map[run_id] = raw
+
+    entries: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for run_id in sorted(index_map):
+        raw = index_map[run_id]
+        seen.add(run_id)
+        run_dir = (runs_root / run_id).resolve()
+        if not is_within_root(run_dir, runs_root) or not run_dir.exists() or not run_dir.is_dir():
+            entries.append(_build_missing_registry_entry(run_id, raw, user_id=user_id))
+            continue
+        manifest = _load_manifest(run_dir)
+        status_hint = raw.get("status")
+        fallback_status = str(status_hint) if isinstance(status_hint, str) else None
+        entries.append(
+            build_registry_entry(
+                run_dir,
+                manifest,
+                user_id=user_id,
+                fallback_status=fallback_status,
+            )
+        )
+
+    for run_dir in _iter_candidate_run_dirs(runs_root):
+        run_id = run_dir.name
+        if run_id in seen:
+            continue
+        manifest = _load_manifest(run_dir)
+        entries.append(build_registry_entry(run_dir, manifest, user_id=user_id))
+
+    entries = sorted(entries, key=lambda item: str(item.get("run_id") or ""))
+    metadata = {
+        "registry_error": registry_error,
+        "invalid_entries": invalid_entries,
+        "index_path": str((owner_root / "index.json").resolve()),
+    }
+    return entries, metadata
+
+
+def _artifact_status(entry: dict[str, object]) -> str:
+    missing = _normalize_artifact_list(entry.get("missing_artifacts"))
+    invalid = _normalize_artifact_list(entry.get("invalid_artifacts"))
+    if missing:
+        return "missing"
+    if invalid:
+        return "corrupt"
+    return "present"
+
+
+def _validation_status(entry: dict[str, object]) -> str:
+    return "pass" if _artifact_status(entry) == "present" else "fail"
+
+
+def _error_code_for_entry(entry: dict[str, object]) -> str | None:
+    status = _artifact_status(entry)
+    if status == "missing":
+        return "RUN_CORRUPTED"
+    if status == "corrupt":
+        return "RUN_ARTIFACT_INVALID"
+    return None
+
+
+def _manifest_provenance(
+    run_id: str, manifest: dict[str, object], entry: dict[str, object]
+) -> dict[str, object]:
+    strategy = manifest.get("strategy")
+    strategy_obj = strategy if isinstance(strategy, dict) else {}
+    risk = manifest.get("risk")
+    risk_obj = risk if isinstance(risk, dict) else {}
+    strategy_id_raw = strategy_obj.get("id") or entry.get("strategy_id")
+    strategy_id = str(strategy_id_raw) if strategy_id_raw is not None else None
+    strategy_version_raw = strategy_obj.get("version")
+    strategy_version = str(strategy_version_raw) if strategy_version_raw is not None else None
+    strategy_hash = _canonical_hash(strategy_obj if strategy_obj else strategy_id)
+    risk_level = risk_obj.get("level")
+    if not isinstance(risk_level, int):
+        risk_level = None
+    return {
+        "run_id": run_id,
+        "strategy": {
+            "id": strategy_id,
+            "version": strategy_version,
+            "hash": strategy_hash,
+        },
+        "risk_level": risk_level,
+        "risk_config_hash": _canonical_hash(risk_obj if risk_obj else None),
+        "stage_token": _resolve_stage_token(manifest),
+        "created_at": manifest.get("created_at"),
+    }
+
+
+def _error_envelope_for_entry(
+    run_id: str, entry: dict[str, object], manifest: dict[str, object]
+) -> dict[str, object] | None:
+    code = _error_code_for_entry(entry)
+    if code is None:
+        return None
+    provenance = _manifest_provenance(run_id, manifest, entry)
+    strategy = provenance.get("strategy")
+    strategy_obj = strategy if isinstance(strategy, dict) else {}
+    details: dict[str, object] = {
+        "run_id": run_id,
+        "strategy_id": strategy_obj.get("id"),
+        "strategy_version": strategy_obj.get("version"),
+        "strategy_hash": strategy_obj.get("hash"),
+        "risk_level": provenance.get("risk_level"),
+        "stage_token": provenance.get("stage_token"),
+        "artifact_reference": ",".join(
+            _normalize_artifact_list(entry.get("missing_artifacts"))
+            or _normalize_artifact_list(entry.get("invalid_artifacts"))
+        )
+        or None,
+    }
+    if code == "RUN_CORRUPTED":
+        message = "Run artifacts missing"
+    else:
+        message = "Run artifacts invalid"
+    return build_error_envelope(code, message, details)
+
+
+def _artifact_digests(run_dir: Path) -> list[dict[str, object]]:
+    if not run_dir.exists() or not run_dir.is_dir():
+        return []
+    files: list[dict[str, object]] = []
+    for child in sorted(run_dir.iterdir(), key=lambda item: item.name):
+        if not child.is_file():
+            continue
+        digest = hashlib.sha256()
+        with child.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                digest.update(chunk)
+        files.append(
+            {
+                "name": child.name,
+                "sha256": digest.hexdigest(),
+                "size_bytes": child.stat().st_size,
+            }
+        )
+    return files
 
 
 def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
@@ -121,6 +395,154 @@ def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
             {"path": str(runs_root), "error": error or "permission denied"},
         )
     return runs_root, {"status": "ok", "path": str(runs_root), "writable": True}
+
+
+def _runs_root_readiness_check() -> tuple[dict[str, object], Path | None]:
+    runs_root = get_runs_root()
+    if runs_root is None:
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_UNSET",
+                "message": "RUNS_ROOT is not set",
+                "details": {"env": RUNS_ROOT_ENV},
+            },
+            None,
+        )
+    if not runs_root.exists():
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_MISSING",
+                "message": "RUNS_ROOT does not exist",
+                "details": {"path": str(runs_root)},
+            },
+            None,
+        )
+    if not runs_root.is_dir():
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_INVALID",
+                "message": "RUNS_ROOT is not a directory",
+                "details": {"path": str(runs_root)},
+            },
+            None,
+        )
+    writable, error = _check_runs_root_writable(runs_root)
+    if not writable:
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_NOT_WRITABLE",
+                "message": "RUNS_ROOT is not writable",
+                "details": {"path": str(runs_root), "error": error or "permission denied"},
+            },
+            None,
+        )
+    return (
+        {
+            "name": "runs_root",
+            "ok": True,
+            "code": "OK",
+            "message": "RUNS_ROOT ready",
+            "details": {"path": str(runs_root), "writable": True},
+        },
+        runs_root,
+    )
+
+
+def _readiness_registry_and_integrity_checks(base_runs_root: Path) -> list[dict[str, object]]:
+    users_root = base_runs_root / "users"
+    if not users_root.exists() or not users_root.is_dir():
+        return [
+            {
+                "name": "registry_access",
+                "ok": True,
+                "code": "OK",
+                "message": "No user registries found",
+                "details": {"users_checked": 0},
+            },
+            {
+                "name": "run_integrity",
+                "ok": True,
+                "code": "OK",
+                "message": "No corrupted runs detected",
+                "details": {"corrupted_runs": []},
+            },
+        ]
+
+    users_checked = 0
+    registry_errors: list[dict[str, object]] = []
+    corrupted_runs: list[str] = []
+
+    for user_dir in sorted(users_root.iterdir(), key=lambda item: item.name):
+        if not user_dir.is_dir():
+            continue
+        user_id = user_dir.name
+        users_checked += 1
+        runs_root = user_runs_root(base_runs_root, user_id)
+        entries, metadata = _collect_registry_entries_read_only(
+            user_dir, runs_root, user_id=user_id
+        )
+        registry_error = metadata.get("registry_error")
+        if isinstance(registry_error, str) and registry_error:
+            registry_errors.append(
+                {
+                    "user_id": user_id,
+                    "index_path": metadata.get("index_path"),
+                    "error": registry_error,
+                }
+            )
+        for entry in entries:
+            run_id = str(entry.get("run_id") or "").strip()
+            if not run_id:
+                continue
+            status = str(entry.get("status") or "").upper()
+            health = str(entry.get("health") or "").upper()
+            if status == "CORRUPTED" or health == "CORRUPTED":
+                corrupted_runs.append(f"{user_id}:{run_id}")
+
+    registry_check = {
+        "name": "registry_access",
+        "ok": len(registry_errors) == 0,
+        "code": "OK" if len(registry_errors) == 0 else "REGISTRY_UNREADABLE",
+        "message": "Registry readable"
+        if len(registry_errors) == 0
+        else "Registry access errors found",
+        "details": {
+            "users_checked": users_checked,
+            "errors": registry_errors,
+        },
+    }
+    integrity_check = {
+        "name": "run_integrity",
+        "ok": len(corrupted_runs) == 0,
+        "code": "OK" if len(corrupted_runs) == 0 else "CORRUPTED_RUNS_DETECTED",
+        "message": "No corrupted runs detected"
+        if len(corrupted_runs) == 0
+        else "Corrupted runs detected",
+        "details": {
+            "users_checked": users_checked,
+            "corrupted_runs": corrupted_runs,
+        },
+    }
+    return [registry_check, integrity_check]
+
+
+def _ready_payload(checks: list[dict[str, object]]) -> dict[str, object]:
+    ready = all(bool(item.get("ok")) for item in checks)
+    return {
+        "status": "ready" if ready else "not_ready",
+        "checks": checks,
+        "timestamp": _utc_now_iso(),
+        "version": API_VERSION,
+        "stage_token": STAGE_TOKEN,
+    }
 
 
 def _resolve_user_context(request: Request) -> UserContext | JSONResponse:
@@ -349,9 +771,93 @@ def _resolve_run_dir_for_read(
     return run_dir, "runs_root", user_ctx.user_id
 
 
+def _enrich_summary_with_manifest(
+    summary: dict[str, object], run_path: Path, run_id: str
+) -> dict[str, object]:
+    manifest = _load_manifest(run_path)
+    provenance_raw = summary.get("provenance")
+    provenance = provenance_raw if isinstance(provenance_raw, dict) else {}
+
+    manifest_strategy = manifest.get("strategy")
+    strategy_obj = manifest_strategy if isinstance(manifest_strategy, dict) else {}
+    manifest_risk = manifest.get("risk")
+    risk_obj = manifest_risk if isinstance(manifest_risk, dict) else {}
+
+    strategy_id = strategy_obj.get("id")
+    if strategy_id is not None:
+        provenance.setdefault("strategy_id", strategy_id)
+    strategy_version = strategy_obj.get("version")
+    if strategy_version is not None:
+        provenance.setdefault("strategy_version", strategy_version)
+    strategy_hash = _canonical_hash(strategy_obj if strategy_obj else strategy_id)
+    if strategy_hash is not None:
+        provenance.setdefault("strategy_hash", strategy_hash)
+
+    risk_level = risk_obj.get("level")
+    if isinstance(risk_level, int):
+        provenance.setdefault("risk_level", risk_level)
+    risk_config_hash = _canonical_hash(risk_obj if risk_obj else None)
+    if risk_config_hash is not None:
+        provenance.setdefault("risk_config_hash", risk_config_hash)
+
+    stage_token = _resolve_stage_token(manifest)
+    provenance.setdefault("stage_token", stage_token)
+    provenance.setdefault("run_created_at", manifest.get("created_at"))
+
+    summary["provenance"] = provenance
+    summary["stage_token"] = stage_token
+
+    risk_raw = summary.get("risk")
+    risk = risk_raw if isinstance(risk_raw, dict) else {}
+    if isinstance(risk_level, int):
+        risk.setdefault("level", risk_level)
+    if isinstance(risk, dict):
+        summary["risk"] = risk
+
+    summary.setdefault("run_id", run_id)
+    return summary
+
+
+def _build_export_bundle(run_path: Path, run_id: str) -> bytes:
+    artifact_names = sorted([path.name for path in run_path.iterdir() if path.is_file()])
+    stream = io.BytesIO()
+    with zipfile.ZipFile(stream, mode="w", compression=zipfile.ZIP_STORED) as archive:
+        for name in artifact_names:
+            path = run_path / name
+            info = zipfile.ZipInfo(filename=name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_STORED
+            info.external_attr = 0o644 << 16
+            archive.writestr(info, path.read_bytes())
+        manifest = {
+            "run_id": run_id,
+            "stage_token": STAGE_TOKEN,
+            "artifacts": artifact_names,
+        }
+        info = zipfile.ZipInfo(
+            filename="export_manifest.json",
+            date_time=(1980, 1, 1, 0, 0, 0),
+        )
+        info.compress_type = zipfile.ZIP_STORED
+        info.external_attr = 0o644 << 16
+        archive.writestr(
+            info,
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+        )
+    return stream.getvalue()
+
+
 @router.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "api_version": "1"}
+    return {"status": "ok", "api_version": API_VERSION}
+
+
+@router.get("/health/ready")
+def health_ready() -> dict[str, object]:
+    runs_root_check, base_runs_root = _runs_root_readiness_check()
+    checks: list[dict[str, object]] = [runs_root_check]
+    if base_runs_root is not None:
+        checks.extend(_readiness_registry_and_integrity_checks(base_runs_root))
+    return _ready_payload(checks)
 
 
 @router.get("/ready", response_model=None)
@@ -375,7 +881,7 @@ def ready() -> object:
             }
             return {
                 "status": "degraded",
-                "api_version": "1",
+                "api_version": API_VERSION,
                 "checks": {"runs_root": runs_check, "legacy_migration": migration_check},
             }
         try:
@@ -388,7 +894,7 @@ def ready() -> object:
             }
             return {
                 "status": "degraded",
-                "api_version": "1",
+                "api_version": API_VERSION,
                 "checks": {"runs_root": runs_check, "legacy_migration": migration_check},
             }
         migration_check = {
@@ -406,7 +912,7 @@ def ready() -> object:
         "registry": {"status": "ok", "users": len(user_dirs)},
         "legacy_migration": migration_check,
     }
-    return {"status": "ready", "api_version": "1", "checks": checks}
+    return {"status": "ready", "api_version": API_VERSION, "checks": checks}
 
 
 @router.get("/runs")
@@ -441,6 +947,245 @@ def list_runs(request: Request) -> object:
         return registry_result
     runs = registry_result.get("runs", []) if isinstance(registry_result, dict) else []
     return _build_registry_run_list(runs_root, runs if isinstance(runs, list) else [])
+
+
+def _resolve_observability_scope(
+    request: Request,
+) -> tuple[UserContext, Path, Path, Path] | JSONResponse:
+    user_ctx = _resolve_user_context(request)
+    if isinstance(user_ctx, JSONResponse):
+        return user_ctx
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        return readiness
+    base_runs_root, _ = readiness
+    owner_root = user_root(base_runs_root, user_ctx.user_id)
+    runs_root = user_runs_root(base_runs_root, user_ctx.user_id)
+    return user_ctx, base_runs_root, owner_root, runs_root
+
+
+@router.get("/observability/runs")
+def observability_runs(request: Request) -> object:
+    scope = _resolve_observability_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, _, owner_root, runs_root = scope
+    entries, metadata = _collect_registry_entries_read_only(
+        owner_root,
+        runs_root,
+        user_id=user_ctx.user_id,
+    )
+    rows: list[dict[str, object]] = []
+    for entry in entries:
+        run_id = str(entry.get("run_id") or "").strip()
+        if not run_id:
+            continue
+        run_dir = (runs_root / run_id).resolve()
+        manifest = _load_manifest(run_dir) if run_dir.exists() else {}
+        manifest_risk = manifest.get("risk") if isinstance(manifest.get("risk"), dict) else {}
+        risk_level = manifest_risk.get("level")
+        if not isinstance(risk_level, int):
+            risk_level = None
+        rows.append(
+            {
+                "run_id": run_id,
+                "state": str(entry.get("status") or "UNKNOWN"),
+                "strategy_id": entry.get("strategy_id")
+                or (
+                    (manifest.get("strategy") or {}).get("id")
+                    if isinstance(manifest, dict)
+                    else None
+                ),
+                "risk_level": risk_level,
+                "created_at": entry.get("created_at") or manifest.get("created_at"),
+                "updated_at": entry.get("last_verified_at"),
+                "artifact_status": _artifact_status(entry),
+                "validation_status": _validation_status(entry),
+                "error_code": _error_code_for_entry(entry),
+            }
+        )
+    return {
+        "runs": rows,
+        "total": len(rows),
+        "timestamp": _utc_now_iso(),
+        "stage_token": STAGE_TOKEN,
+        "registry_error": metadata.get("registry_error"),
+    }
+
+
+@router.get("/observability/runs/{run_id}")
+def observability_run_detail(run_id: str, request: Request) -> object:
+    if _is_invalid_component(run_id):
+        return _invalid_run_id_response(run_id)
+    scope = _resolve_observability_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, _, owner_root, runs_root = scope
+    entries, _ = _collect_registry_entries_read_only(
+        owner_root, runs_root, user_id=user_ctx.user_id
+    )
+    by_id = {
+        str(entry.get("run_id") or ""): entry
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("run_id")
+    }
+    entry = by_id.get(run_id)
+    if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+
+    run_dir = (runs_root / run_id).resolve()
+    manifest = _load_manifest(run_dir) if run_dir.exists() and run_dir.is_dir() else {}
+    provenance = _manifest_provenance(run_id, manifest, entry)
+    envelope = _error_envelope_for_entry(run_id, entry, manifest)
+    return {
+        "run_id": run_id,
+        "lifecycle": {
+            "state": entry.get("status") or "UNKNOWN",
+            "history": manifest.get("status_history")
+            if isinstance(manifest.get("status_history"), list)
+            else [],
+        },
+        "artifact_integrity": {
+            "status": _artifact_status(entry),
+            "missing_artifacts": _normalize_artifact_list(entry.get("missing_artifacts")),
+            "invalid_artifacts": _normalize_artifact_list(entry.get("invalid_artifacts")),
+            "checks": entry.get("checks") if isinstance(entry.get("checks"), dict) else {},
+            "files": _artifact_digests(run_dir),
+        },
+        "validation": {
+            "status": _validation_status(entry),
+            "health": entry.get("health"),
+            "last_verified_at": entry.get("last_verified_at"),
+        },
+        "error_envelope": envelope,
+        "provenance": provenance,
+    }
+
+
+def _read_plugin_validation_failures(artifacts_root: Path) -> tuple[str, list[dict[str, object]]]:
+    root = artifacts_root / "plugin_validation"
+    if not root.exists() or not root.is_dir():
+        return "empty", []
+
+    failures: list[dict[str, object]] = []
+    for plugin_type in ("indicator", "strategy"):
+        folder = root / plugin_type
+        if not folder.exists() or not folder.is_dir():
+            continue
+        for artifact_path in sorted(folder.glob("*.json"), key=lambda item: item.name):
+            try:
+                payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                failures.append(
+                    {
+                        "plugin_type": plugin_type,
+                        "id": artifact_path.stem,
+                        "status": "INVALID",
+                        "error_envelope": build_error_envelope(
+                            "PLUGIN_VALIDATION_ARTIFACT_INVALID",
+                            "Plugin validation artifact invalid",
+                            {
+                                "artifact_reference": str(artifact_path),
+                                "human_message": f"Invalid plugin validation artifact: {artifact_path.name}",
+                                "run_id": None,
+                            },
+                        ),
+                        "raw_error": str(exc),
+                    }
+                )
+                continue
+            if not isinstance(payload, dict):
+                continue
+            status = str(payload.get("status") or "INVALID").upper()
+            if status == "VALID":
+                continue
+            plugin_id = str(payload.get("id") or artifact_path.stem)
+            errors = payload.get("errors")
+            first_error = errors[0] if isinstance(errors, list) and errors else {}
+            if not isinstance(first_error, dict):
+                first_error = {}
+            rule_id = first_error.get("rule_id")
+            message = first_error.get("message")
+            failures.append(
+                {
+                    "plugin_type": plugin_type,
+                    "id": plugin_id,
+                    "status": status,
+                    "error_envelope": build_error_envelope(
+                        "PLUGIN_VALIDATION_FAILED",
+                        f"Plugin validation failed for {plugin_id}",
+                        {
+                            "artifact_reference": str(artifact_path),
+                            "human_message": str(message)
+                            if isinstance(message, str) and message.strip()
+                            else f"Plugin {plugin_id} failed validation.",
+                            "run_id": None,
+                            "strategy_id": plugin_id if plugin_type == "strategy" else None,
+                            "stage_token": STAGE_TOKEN,
+                        },
+                    ),
+                    "rule_id": rule_id if isinstance(rule_id, str) else None,
+                    "artifact_path": str(artifact_path),
+                }
+            )
+    status = "ok" if len(failures) == 0 else "degraded"
+    return status, failures
+
+
+@router.get("/observability/registry")
+def observability_registry(request: Request) -> object:
+    scope = _resolve_observability_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, _, owner_root, runs_root = scope
+    entries, metadata = _collect_registry_entries_read_only(
+        owner_root,
+        runs_root,
+        user_id=user_ctx.user_id,
+    )
+    corrupted = [
+        str(entry.get("run_id"))
+        for entry in entries
+        if isinstance(entry, dict) and _artifact_status(entry) != "present"
+    ]
+    registry_error = metadata.get("registry_error")
+    if isinstance(registry_error, str) and registry_error:
+        registry_status = "corrupt"
+    elif corrupted:
+        registry_status = "degraded"
+    else:
+        registry_status = "healthy"
+
+    plugin_status, failed_plugins = _read_plugin_validation_failures(get_artifacts_root())
+    strategy_contract_versions: list[str] = []
+    for failed in failed_plugins:
+        envelope = failed.get("error_envelope")
+        if not isinstance(envelope, dict):
+            continue
+        provenance = envelope.get("provenance")
+        if not isinstance(provenance, dict):
+            continue
+        strategy = provenance.get("strategy")
+        if not isinstance(strategy, dict):
+            continue
+        version = strategy.get("version")
+        if isinstance(version, str) and version.strip():
+            strategy_contract_versions.append(version)
+
+    return {
+        "registry_integrity_status": registry_status,
+        "registry_error": registry_error,
+        "corrupted_runs": corrupted,
+        "plugin_load_status": plugin_status,
+        "failed_plugins": failed_plugins,
+        "contracts": {
+            "strategy_contract_versions": sorted(set(strategy_contract_versions)),
+            "risk_contract_versions_in_effect": ["v1"],
+            "run_schema_version": "1.0.0",
+        },
+        "stage_token": STAGE_TOKEN,
+        "timestamp": _utc_now_iso(),
+    }
 
 
 def _parse_multipart_form(body: bytes, content_type: str) -> dict[str, dict[str, object]]:
@@ -739,6 +1484,7 @@ def run_summary(run_id: str, request: Request) -> dict[str, object]:
     summary = dict(build_summary(decision_path))
     summary["run_id"] = run_id
     summary["artifacts"] = collect_run_artifacts(run_path)
+    summary = _enrich_summary_with_manifest(summary, run_path, run_id)
     if mode == "demo":
         summary["mode"] = "demo"
     return summary
@@ -1128,6 +1874,20 @@ def export_trades(
     except ValueError as exc:
         raise_api_error(400, "invalid_export_format", str(exc), {"run_id": run_id})
     return _export_response(stream, media_type, f"{run_id}-trades.{format}")
+
+
+@router.get("/runs/{run_id}/report/export", response_model=None)
+def export_report_bundle(run_id: str, request: Request) -> StreamingResponse:
+    resolved = _resolve_run_dir_for_read(request, run_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    run_path, _, _ = resolved
+    bundle = _build_export_bundle(run_path, run_id)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{run_id}-report.zip"',
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(iter([bundle]), media_type="application/zip", headers=headers)
 
 
 app = FastAPI(title="Buff Artifacts API", docs_url="/api/docs", openapi_url="/api/openapi.json")

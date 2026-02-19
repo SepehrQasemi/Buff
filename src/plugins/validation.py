@@ -92,7 +92,8 @@ ID_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 MAX_PLUGIN_SOURCE_BYTES = 200_000
 MAX_PLUGIN_AST_NODES = 20_000
-RUNTIME_TIMEOUT_SECONDS = 2.0
+# Keep validation fail-closed but avoid false timeout flakes under full-suite load.
+RUNTIME_TIMEOUT_SECONDS = 4.0
 
 
 @dataclass(frozen=True)

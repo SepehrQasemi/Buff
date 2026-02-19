@@ -320,6 +320,30 @@ def main(argv: list[str] | None = None) -> int:
             [sys.executable, "-m", "pytest", "-q", "tools/test_s4_risk_artifact_presence.py"],
         )
 
+        _log("release_gate: s6_observability_surface")
+        run_step(
+            "s6_observability_surface",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s6_observability_surface.py"],
+        )
+
+        _log("release_gate: s6_sim_only_invariant")
+        run_step(
+            "s6_sim_only_invariant",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s6_sim_only_invariant.py"],
+        )
+
+        _log("release_gate: s6_no_network_runtime_surface")
+        run_step(
+            "s6_no_network_runtime_surface",
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "tools/test_s6_no_network_runtime_surface.py",
+            ],
+        )
+
         if args.with_network_smoke:
             _log("release_gate: mvp_smoke (network)")
             proc = run_step("mvp_smoke", _mvp_smoke_command())
