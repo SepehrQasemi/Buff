@@ -6,6 +6,7 @@ Canonical operational guide for core local run, verification, and recovery flows
 - [Quickstart](#quickstart)
 - [Verification Gates](#verification-gates)
 - [Service Lifecycle](#service-lifecycle)
+- [One-command Local Run (Compose)](#one-command-local-run-compose)
 - [Export Report Workflow](#export-report-workflow)
 - [Long-Run Harness](#long-run-harness)
 - [Troubleshooting Matrix](#troubleshooting-matrix)
@@ -60,6 +61,28 @@ Operational defaults:
 Next.js lock recovery:
 - Confirm no UI listener exists on `3000..3020`.
 - Remove stale lock: `Remove-Item -Force .\apps\web\.next\dev\lock`
+
+## One-command Local Run (Compose)
+Use the canonical compose wrapper scripts:
+
+```bash
+scripts/dev_up.sh up
+scripts/dev_up.sh logs
+scripts/dev_up.sh down
+scripts/dev_up.sh reset-runs
+```
+
+```powershell
+.\scripts\dev_up.ps1 up
+.\scripts\dev_up.ps1 logs
+.\scripts\dev_up.ps1 down
+.\scripts\dev_up.ps1 reset-runs
+```
+
+Notes:
+- Compose uses repo-local deterministic run storage at `.runs_compose` by default (`RUNS_ROOT_HOST` override supported).
+- `reset-runs` is scoped to `RUNS_ROOT_HOST` only and refuses unsafe paths.
+- API readiness contract for compose healthcheck is `GET /api/v1/health/ready`.
 
 ## Export Report Workflow
 
