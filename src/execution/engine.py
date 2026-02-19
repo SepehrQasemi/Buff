@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from risk.contracts import (
+    compute_risk_decision_hash,
     Permission,
     RiskConfig as GateRiskConfig,
     RiskInputs,
@@ -16,6 +17,7 @@ from risk.contracts import (
     RiskState,
     reason_payloads,
     risk_inputs_digest,
+    verify_risk_decision_hash,
 )
 from execution.gate import gate_execution
 from risk_fundamental.integration import apply_fundamental_permission, get_default_rules_path
@@ -694,6 +696,45 @@ def _risk_artifact_block(
                 "reasons": reason_payloads(reasons),
             }
         )
+    pack_id_raw = risk_decision.get("pack_id")
+    pack_id = (
+        str(pack_id_raw).strip() if isinstance(pack_id_raw, str) and pack_id_raw.strip() else ""
+    )
+    if not pack_id:
+        pack_id = "L3_BALANCED"
+    pack_version_raw = risk_decision.get("pack_version")
+    pack_version = (
+        str(pack_version_raw).strip()
+        if isinstance(pack_version_raw, str) and pack_version_raw.strip()
+        else ""
+    )
+    if not pack_version:
+        pack_version = "v1"
+    computed_stable_hash = compute_risk_decision_hash(
+        decision=risk_state,
+        reasons=reasons,
+        config_version=config_version,
+        inputs_digest=inputs_digest_value,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+    stable_hash_raw = risk_decision.get("stable_hash")
+    if (
+        isinstance(stable_hash_raw, str)
+        and stable_hash_raw.strip()
+        and verify_risk_decision_hash(
+            decision=risk_state,
+            reasons=reasons,
+            config_version=config_version,
+            inputs_digest=inputs_digest_value,
+            stable_hash=stable_hash_raw,
+            pack_id=pack_id,
+            pack_version=pack_version,
+        )
+    ):
+        stable_hash = stable_hash_raw.strip()
+    else:
+        stable_hash = computed_stable_hash
 
     permission_raw = risk_decision.get("permission")
     if isinstance(permission_raw, str) and permission_raw.strip():
@@ -709,6 +750,9 @@ def _risk_artifact_block(
         "reasons": reason_payloads(reasons),
         "config_version": config_version,
         "inputs_digest": inputs_digest_value,
+        "pack_id": pack_id,
+        "pack_version": pack_version,
+        "stable_hash": stable_hash,
     }
 
 

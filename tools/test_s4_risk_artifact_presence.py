@@ -11,10 +11,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from control_plane.state import ControlState, SystemState
 from execution.engine import execute_paper_run
+from risk.contracts import verify_risk_decision_hash
 
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
-REQUIRED_RISK_KEYS = {"decision", "reasons", "config_version", "inputs_digest"}
-OPTIONAL_RISK_KEYS = {"permission", "reason_details"}
+REQUIRED_RISK_KEYS = {"decision", "reasons", "config_version", "inputs_digest", "stable_hash"}
+OPTIONAL_RISK_KEYS = {"permission", "reason_details", "pack_id", "pack_version"}
 
 
 def _is_json_tree(value: Any) -> bool:
@@ -112,6 +113,10 @@ def test_s4_risk_artifact_presence_on_runtime_artifact(tmp_path: Path) -> None:
         assert isinstance(inputs_digest, str) and SHA256_HEX_RE.fullmatch(inputs_digest), (
             "risk.inputs_digest must be a 64-char sha256 hex"
         )
+        stable_hash = risk_block.get("stable_hash")
+        assert isinstance(stable_hash, str) and SHA256_HEX_RE.fullmatch(stable_hash), (
+            "risk.stable_hash must be a 64-char sha256 hex"
+        )
 
         reasons = risk_block.get("reasons")
         assert isinstance(reasons, list), "risk.reasons must be a list"
@@ -126,5 +131,24 @@ def test_s4_risk_artifact_presence_on_runtime_artifact(tmp_path: Path) -> None:
             for entry in reason_details:
                 _assert_structured_reason(entry)
             json.dumps(reason_details, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+        pack_id = risk_block.get("pack_id")
+        if pack_id is not None:
+            assert isinstance(pack_id, str) and pack_id.strip(), "risk.pack_id must be non-empty"
+        pack_version = risk_block.get("pack_version")
+        if pack_version is not None:
+            assert isinstance(pack_version, str) and pack_version.strip(), (
+                "risk.pack_version must be non-empty"
+            )
+
+        assert verify_risk_decision_hash(
+            decision=decision,
+            reasons=reasons,
+            config_version=config_version,
+            inputs_digest=inputs_digest,
+            stable_hash=stable_hash,
+            pack_id=pack_id if isinstance(pack_id, str) else None,
+            pack_version=pack_version if isinstance(pack_version, str) else None,
+        ), "risk.stable_hash must match recomputed canonical hash"
     finally:
         os.chdir(cwd)

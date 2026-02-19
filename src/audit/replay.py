@@ -17,10 +17,10 @@ from audit.decision_record import (
 from audit.decision_records import compute_market_state_hash, parse_json_line
 from audit.snapshot import Snapshot
 from risk.contracts import RiskInputs as RiskInputsContract
-from risk.contracts import validate_risk_inputs
 from risk.contracts import RiskConfig, RiskState as RiskStateMachine
 from risk.state_machine import evaluate_risk
 from risk.contracts import RiskState
+from risk.contracts import validate_risk_inputs, verify_risk_decision_hash
 from selector.records import selection_to_record
 from selector.selector import select_strategy
 
@@ -113,6 +113,51 @@ def normalize_selection(sel: dict) -> dict:
     }
 
 
+def _non_empty_text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized if normalized else None
+
+
+def _risk_replay_hash_matches(record: Mapping[str, Any]) -> bool:
+    risk_payload = record.get("risk")
+    if not isinstance(risk_payload, Mapping):
+        return True
+
+    decision = _non_empty_text(risk_payload.get("decision"))
+    config_version = _non_empty_text(risk_payload.get("config_version"))
+    inputs_digest = _non_empty_text(risk_payload.get("inputs_digest"))
+    stable_hash = _non_empty_text(risk_payload.get("stable_hash"))
+    if decision is None or config_version is None or inputs_digest is None or stable_hash is None:
+        return False
+
+    pack_id = _non_empty_text(risk_payload.get("pack_id"))
+    pack_version = _non_empty_text(risk_payload.get("pack_version"))
+
+    reasons_raw = risk_payload.get("reasons")
+    reason_details_raw = risk_payload.get("reason_details")
+    reasons: list[object]
+    if isinstance(reasons_raw, (list, tuple)):
+        reasons = list(reasons_raw)
+    elif isinstance(reason_details_raw, (list, tuple)):
+        reasons = list(reason_details_raw)
+    elif isinstance(reasons_raw, str) and reasons_raw.strip():
+        reasons = [reasons_raw.strip()]
+    else:
+        reasons = []
+
+    return verify_risk_decision_hash(
+        decision=decision,
+        reasons=reasons,
+        config_version=config_version,
+        inputs_digest=inputs_digest,
+        stable_hash=stable_hash,
+        pack_id=pack_id,
+        pack_version=pack_version,
+    )
+
+
 def replay_verify(*, records_path: str, strict: bool = False) -> ReplayResult:
     _ = strict
     records = load_decision_records(records_path)
@@ -128,6 +173,9 @@ def replay_verify(*, records_path: str, strict: bool = False) -> ReplayResult:
         expected_hash = record.get("market_state_hash")
         computed_hash = compute_market_state_hash(record.get("market_state", {}))
         if computed_hash != expected_hash:
+            hash_mismatch += 1
+            continue
+        if not _risk_replay_hash_matches(record):
             hash_mismatch += 1
             continue
 
