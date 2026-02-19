@@ -268,6 +268,15 @@ const postForm = async (path, formData) => {
 
 export const getRuns = (options) => request("/runs", undefined, options);
 
+export const getObservabilityRuns = (options) =>
+  request("/observability/runs", undefined, options);
+
+export const getObservabilityRun = (id, options) =>
+  request(`/observability/runs/${id}`, undefined, options);
+
+export const getObservabilityRegistry = (options) =>
+  request("/observability/registry", undefined, options);
+
 export const getRunSummary = (id, options) =>
   request(`/runs/${id}/summary`, undefined, options);
 
@@ -298,6 +307,8 @@ export const getFailedPlugins = (options) => request("/plugins/failed", undefine
 export const getChatModes = () => request("/chat/modes");
 
 export const postChat = (payload) => post("/chat", payload);
+
+export const getRunReportExportUrl = (id) => buildApiUrl(`/runs/${id}/report/export`);
 
 export const createRun = (payload, file) => {
   if (file) {
