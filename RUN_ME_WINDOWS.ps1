@@ -134,15 +134,19 @@ function Show-PortConflicts([object[]]$Conflicts) {
   Write-Fail "Required ports are in use."
   foreach ($entry in $normalizedConflicts) {
     $port = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Port" -DefaultValue "<unknown>"
-    $pid = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Pid" -DefaultValue "<unknown>"
+    $entryPid = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Pid" -DefaultValue "<unknown>"
     $name = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Name" -DefaultValue "<unknown>"
     $path = Get-ObjectPropertyOrDefault -Value $entry -PropertyName "Path" -DefaultValue ""
     $pathSuffix = if ($path) { " [$path]" } else { "" }
-    Write-Host ("  - Port {0}: PID {1} ({2}){3}" -f $port, $pid, $name, $pathSuffix)
+    Write-Host ("  - Port {0}: PID {1} ({2}){3}" -f $port, $entryPid, $name, $pathSuffix)
   }
 }
 
 function Read-ErrorResponseBody([System.Exception]$Exception) {
+  if ($null -eq $Exception) {
+    return "Unknown request error."
+  }
+
   try {
     $response = $Exception.Response
     if (-not $response) {
@@ -160,17 +164,30 @@ function Read-ErrorResponseBody([System.Exception]$Exception) {
       $stream.Dispose()
     }
   } catch {
-    return $Exception.Message
+    if ($Exception -and $Exception.Message) {
+      return $Exception.Message
+    }
+    return "Unknown request error."
   }
 }
 
 function Wait-ForReadiness([string]$Url, [int]$TimeoutSeconds) {
   $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
   $lastBody = ""
+  $iwrSupportsBasicParsing = (Get-Command Invoke-WebRequest).Parameters.ContainsKey("UseBasicParsing")
 
   while ((Get-Date) -lt $deadline) {
     try {
-      $response = Invoke-WebRequest -Uri $Url -Method Get -TimeoutSec 5 -ErrorAction Stop
+      $requestArgs = @{
+        Uri         = $Url
+        Method      = "Get"
+        TimeoutSec  = 5
+        ErrorAction = "Stop"
+      }
+      if ($iwrSupportsBasicParsing) {
+        $requestArgs["UseBasicParsing"] = $true
+      }
+      $response = Invoke-WebRequest @requestArgs
       $body = ($response.Content | Out-String).Trim()
       if ($body) {
         $lastBody = $body
@@ -211,6 +228,29 @@ function Show-FailureDiagnostics {
   if ((@($conflicts)).Count -gt 0) {
     Show-PortConflicts -Conflicts $conflicts
   }
+}
+
+function Get-RunningComposeServices {
+  $running = @()
+  $output = & docker compose ps --services --status running 2>$null
+  if ($LASTEXITCODE -ne 0) {
+    return @()
+  }
+
+  foreach ($line in @($output)) {
+    $trimmed = "$line".Trim()
+    if ($trimmed) {
+      $running += $trimmed
+    }
+  }
+  return $running
+}
+
+function Show-ComposeStartupDiagnostics {
+  Write-Host "[INFO] docker compose ps:"
+  & docker compose ps
+  Write-Host "[INFO] docker compose logs --tail 50:"
+  & docker compose logs --tail 50
 }
 
 trap {
@@ -261,6 +301,13 @@ try {
   exit 1
 } finally {
   Pop-Location
+}
+
+$runningServices = Get-RunningComposeServices
+if ((@($runningServices)).Count -eq 0) {
+  Write-Fail "docker compose did not start any services."
+  Show-ComposeStartupDiagnostics
+  exit 1
 }
 
 Write-Info "Waiting for readiness at $ReadyUrl (timeout: $TimeoutSeconds seconds)..."
