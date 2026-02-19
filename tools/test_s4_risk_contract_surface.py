@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 CANONICAL_SURFACE = "risk.veto"
 CANONICAL_CONTRACTS = "risk.contracts"
+RULE_CATALOG_PATH = Path("src/risk/rule_catalog.py")
 
 TYPE_SYMBOLS = ("RiskInputs", "RiskConfig", "RiskDecision", "RiskState")
 IMPORT_FROM_RISK_TYPES = re.compile(r"^\s*from\s+risk\.types\s+import\b", re.MULTILINE)
@@ -38,6 +39,19 @@ def test_s4_state_machine_type_aliases_stay_canonical() -> None:
         assert getattr(state_machine, symbol) is getattr(contracts, symbol), (
             f"risk.state_machine.{symbol} must alias {CANONICAL_CONTRACTS}.{symbol}"
         )
+
+
+def test_s4_rule_catalog_exists_and_imports() -> None:
+    assert RULE_CATALOG_PATH.exists(), "src/risk/rule_catalog.py missing"
+    catalog = import_module("risk.rule_catalog")
+    assert hasattr(catalog, "RiskRuleId"), "risk.rule_catalog missing RiskRuleId"
+
+    rule_enum = catalog.RiskRuleId
+    values = [item.value for item in rule_enum]
+    assert values, "RiskRuleId must contain at least one rule id"
+    assert all(isinstance(value, str) and value for value in values), (
+        "RiskRuleId values must be non-empty strings"
+    )
 
 
 def test_s4_no_risk_types_imports_in_runtime_or_tests() -> None:

@@ -11,10 +11,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from control_plane.state import ControlState, SystemState
 from execution.engine import execute_paper_run
+from risk.rule_catalog import RiskRuleId
 
 SHA256_HEX_RE = re.compile(r"^[0-9a-f]{64}$")
-REQUIRED_RISK_KEYS = {"decision", "reasons", "config_version", "inputs_digest"}
-OPTIONAL_RISK_KEYS = {"permission", "reason_details"}
+VERSION_TOKEN_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@/\\-]{0,127}$")
+REQUIRED_RISK_KEYS = {"decision", "reasons", "inputs_digest"}
+OPTIONAL_RISK_KEYS = {"permission", "reason_details", "config_version", "pack_id", "pack_version"}
+ALLOWED_RULE_IDS = {item.value for item in RiskRuleId}
+ALLOWED_SEVERITIES = {"INFO", "WARN", "ERROR"}
 
 
 def _is_json_tree(value: Any) -> bool:
@@ -38,7 +42,9 @@ def _assert_structured_reason(reason: object) -> None:
     details = reason.get("details")
 
     assert isinstance(rule_id, str) and rule_id.strip(), "rule_id must be non-empty"
+    assert rule_id in ALLOWED_RULE_IDS, f"rule_id not in RiskRuleId catalog: {rule_id}"
     assert isinstance(severity, str) and severity.strip(), "severity must be non-empty"
+    assert severity in ALLOWED_SEVERITIES, f"invalid severity: {severity}"
     assert isinstance(message, str) and message.strip(), "message must be non-empty"
     assert isinstance(details, dict), "details must be a dict"
     assert _is_json_tree(details), "details must be JSON-serializable primitives"
@@ -56,6 +62,29 @@ def _is_deny_decision(decision: str, permission: str | None) -> bool:
     } or permission_normalized in {"DENY", "REJECT", "BLOCK", "BLOCKED"}
 
 
+def _validate_version_fields(risk_block: dict[str, object]) -> None:
+    config_version = risk_block.get("config_version")
+    pack_id = risk_block.get("pack_id")
+    pack_version = risk_block.get("pack_version")
+
+    has_config_version = (
+        isinstance(config_version, str)
+        and bool(config_version.strip())
+        and bool(VERSION_TOKEN_RE.fullmatch(config_version.strip()))
+    )
+    has_pack_id = isinstance(pack_id, str) and bool(pack_id.strip())
+    has_pack_version = isinstance(pack_version, str) and bool(pack_version.strip())
+    has_pack_pair = has_pack_id and has_pack_version
+
+    assert has_config_version or has_pack_pair, (
+        "risk block must include non-empty config_version or pack_id+pack_version"
+    )
+    if "config_version" in risk_block:
+        assert has_config_version, "risk.config_version must be a non-empty version token"
+    if "pack_id" in risk_block or "pack_version" in risk_block:
+        assert has_pack_pair, "risk.pack_id and risk.pack_version must both be non-empty"
+
+
 def test_s4_risk_artifact_presence_on_runtime_artifact(tmp_path: Path) -> None:
     run_id = "s4-risk-v2-artifact"
     cwd = Path.cwd()
@@ -69,7 +98,7 @@ def test_s4_risk_artifact_presence_on_runtime_artifact(tmp_path: Path) -> None:
                 "config_version": "risk-v2",
                 "reasons": [
                     {
-                        "rule_id": "RISK_POLICY_MISSING",
+                        "rule_id": RiskRuleId.RISK_POLICY_MISSING.value,
                         "severity": "ERROR",
                         "message": "risk policy configuration is missing",
                         "details": {"source": "gate"},
@@ -103,10 +132,7 @@ def test_s4_risk_artifact_presence_on_runtime_artifact(tmp_path: Path) -> None:
                 "risk.permission must be non-empty when present"
             )
 
-        config_version = risk_block.get("config_version")
-        assert isinstance(config_version, str) and config_version.strip(), (
-            "risk.config_version must be a non-empty string"
-        )
+        _validate_version_fields(risk_block)
 
         inputs_digest = risk_block.get("inputs_digest")
         assert isinstance(inputs_digest, str) and SHA256_HEX_RE.fullmatch(inputs_digest), (
@@ -126,5 +152,13 @@ def test_s4_risk_artifact_presence_on_runtime_artifact(tmp_path: Path) -> None:
             for entry in reason_details:
                 _assert_structured_reason(entry)
             json.dumps(reason_details, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+        # Forbid ad-hoc rule strings across artifact reason channels.
+        all_reason_dicts = list(reasons)
+        if isinstance(reason_details, list):
+            all_reason_dicts.extend(reason_details)
+        assert all_reason_dicts, "artifact must expose at least one structured reason dict"
+        for reason in all_reason_dicts:
+            _assert_structured_reason(reason)
     finally:
         os.chdir(cwd)

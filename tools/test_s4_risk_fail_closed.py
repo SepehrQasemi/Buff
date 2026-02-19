@@ -10,6 +10,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from risk.rule_catalog import RiskRuleId
 from risk.state_machine import RiskConfig, RiskState
 from risk.veto import risk_veto
 
@@ -71,7 +72,7 @@ def _extract_rule_id(reason: object) -> str:
 
 
 def _resolve_policy_missing_rule_ids() -> set[str]:
-    candidates = {"RISK_POLICY_MISSING"}
+    candidates = {RiskRuleId.RISK_POLICY_MISSING.value}
     for module_name in ("risk.state_machine", "risk.veto", "risk.contracts"):
         module = import_module(module_name)
         for name in dir(module):
@@ -134,3 +135,4 @@ def test_s4_fail_closed_on_missing_policy_includes_policy_rule_id() -> None:
     assert rule_ids & expected_policy_ids, (
         f"expected one of policy-missing ids {sorted(expected_policy_ids)}, found {sorted(rule_ids)}"
     )
+    assert RiskRuleId.RISK_POLICY_MISSING.value in rule_ids
