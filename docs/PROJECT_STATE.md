@@ -43,25 +43,28 @@ OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 ---
 
 ## Current Stage
-S4 - Risk Engine Maturity
+S5_EXECUTION_SAFETY_BOUNDARIES
 
 ## Stage Description
-Fail-closed, artifact-driven, deterministic analysis system.
-No trade execution.
+Fail-closed, artifact-driven, deterministic analysis system with execution safety boundaries.
+SIM_ONLY execution is enforced in runtime manifests and capabilities.
+Execution overrides (`execution_mode`, `live`, `broker`) are rejected fail-closed.
+Runtime guardrails preserve network ingest isolation and deterministic behavior.
 No broker integration.
 No live state mutation.
 
 ## Current Objective
-Build S4 risk semantics and controls on top of completed S3 controlled execution simulation without weakening deterministic/runtime safeguards.
+Harden execution safety boundaries by enforcing SIM_ONLY behavior, rejecting execution overrides, preserving runtime/network guardrails, and keeping strict verification gates green.
 
 ## Definition of Done
 - All normative constraints centralized
 - No broken links
 - Single-source operational command strings: runnable command blocks and inline runnable commands appear only in `docs/05_RUNBOOK_DEV_WORKFLOW.md`.
   Other docs may mention gate names but must link to the runbook.
-- `RiskDecision` semantics are explainable and deterministic with `reasons`, `config_version`, `inputs_digest`, and `stable_hash`.
-- Risk artifacts contain stable structured risk fields and enforce canonical `rule_id` taxonomy membership.
-- `release_gate --strict --timeout-seconds 900` PASS includes `s4_risk_fail_closed`, `s4_risk_contract_surface`, and `s4_risk_artifact_presence`.
+- SIM_ONLY execution mode is written to run manifests and capabilities.
+- Execution override fields (`execution_mode`, `live`, `broker`) are rejected fail-closed with stable API errors.
+- Runtime guardrails keep network ingest isolation and deterministic behavior intact.
+- `release_gate --strict --timeout-seconds 900` PASS on `main`.
 - CI green on current `main` tip SHA for active workflows (historical runs from decommissioned workflows may remain in history)
 - release_gate PASS
 
@@ -73,17 +76,17 @@ Build S4 risk semantics and controls on top of completed S3 controlled execution
 - Canonical contract authority enforced
 
 ## Next Stage Candidate
-S5_EXECUTION_SAFETY_BOUNDARIES
+S6_PLATFORM_OBSERVABILITY_LAYER
 
 ## S3 Acceptance Evidence
 - S3 runtime acceptance validated on `main` at `3e36db11a5706006bb464f046d2b1ef531f4182f` with deterministic run/replay behavior.
 - Strict release gate includes and passes: `s3_double_run_compare`, `s3_input_digest_verification`, `s3_cross_tenant_isolation`, `s3_no_network`, `s3_no_live_execution_path`, `s3_artifact_pack_completeness`, and `s3_smoke_demo`.
 - Stage-relevant completion recorded by PR #225 and SHA `3e36db11a5706006bb464f046d2b1ef531f4182f`.
 
-## S4 Acceptance Evidence
-- S4 risk maturity updates are merged on `main` through PRs #231, #232, #234, and #237.
-- Stage-relevant authority is anchored at PR #237 with SHA `b83a0865b1cff8c0c1976166ddd1ef3daa17f58d`.
-- Strict release gate includes and passes: `s4_risk_fail_closed`, `s4_risk_contract_surface`, and `s4_risk_artifact_presence`.
+## S5 Acceptance Evidence
+- Lean S5 guardrails are merged on `main` in PR #240 (`phase6: enforce SIM_ONLY run manifest + reject execution overrides`).
+- Stage-relevant authority is anchored at PR #240 with SHA `558e427c0b0902d8c6dbd9aed532186a3d5f6a4d`.
+- Runtime acceptance confirms SIM_ONLY manifest/capability enforcement and fail-closed rejection of execution overrides, with strict release-gate enforcement.
 
 ## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
 - Run indexing layer
@@ -107,4 +110,4 @@ S5_EXECUTION_SAFETY_BOUNDARIES
 
 ## Last Verified Commit
 
-b83a0865b1cff8c0c1976166ddd1ef3daa17f58d
+558e427c0b0902d8c6dbd9aed532186a3d5f6a4d
