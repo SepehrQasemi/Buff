@@ -1,4 +1,4 @@
-"""OHLCV ingestion from Binance Futures via ccxt."""
+"""Optional data-ingest adapter (offline-first, online exchange opt-in)."""
 
 import time
 from dataclasses import dataclass
@@ -11,7 +11,7 @@ import pandas as pd
 class IngestConfig:
     """Configuration for OHLCV ingestion."""
 
-    exchange: str = "binance"
+    exchange: str = ""
     market_type: str = "future"
     timeframe: str = "1h"
     limit: int = 1000  # Binance max: 1000 candles per request
@@ -27,11 +27,15 @@ def make_exchange(cfg: IngestConfig) -> ccxt.Exchange:
     Returns:
         Configured ccxt.Exchange instance.
     """
+    exchange_name = cfg.exchange.strip()
+    if not exchange_name:
+        raise ValueError("exchange must be provided for online ingest")
+
     params = {"defaultType": cfg.market_type}
     if not cfg.rate_limit:
         params["enableRateLimit"] = False
 
-    exchange_class = getattr(ccxt, cfg.exchange)
+    exchange_class = getattr(ccxt, exchange_name)
     return exchange_class(params)
 
 
