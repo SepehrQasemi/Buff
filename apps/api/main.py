@@ -54,11 +54,13 @@ from .phase6.paths import (
     get_runs_root,
     is_valid_component,
     is_within_root,
+    user_experiments_root,
     user_imports_root,
     user_root,
     user_runs_root,
     user_uploads_root,
 )
+from .phase6.experiment_builder import ExperimentBuilderError, create_experiment
 from .phase6.registry import (
     build_registry_entry,
     has_legacy_runs,
@@ -1743,6 +1745,52 @@ def _status_percent(state: str) -> int:
     return 0
 
 
+def _invalid_experiment_id_response(experiment_id: str) -> JSONResponse:
+    return error_response(
+        400,
+        "EXPERIMENT_ID_INVALID",
+        "Invalid experiment id",
+        {"experiment_id": experiment_id},
+    )
+
+
+def _resolve_experiment_dir_for_read(
+    request: Request, experiment_id: str
+) -> tuple[Path, UserContext] | JSONResponse:
+    if _is_invalid_component(experiment_id):
+        return _invalid_experiment_id_response(experiment_id)
+
+    scope = _resolve_user_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, base_runs_root, _, _, _ = scope
+    experiments_root = user_experiments_root(base_runs_root, user_ctx.user_id)
+    experiment_dir = (experiments_root / experiment_id).resolve()
+    if not is_within_root(experiment_dir, experiments_root):
+        return _invalid_experiment_id_response(experiment_id)
+    if not experiment_dir.exists() or not experiment_dir.is_dir():
+        return error_response(
+            404,
+            "EXPERIMENT_NOT_FOUND",
+            "Experiment not found",
+            {"experiment_id": experiment_id},
+        )
+    return experiment_dir, user_ctx
+
+
+def _load_experiment_artifact(experiment_dir: Path, name: str) -> dict[str, object] | None:
+    artifact_path = experiment_dir / name
+    if not artifact_path.exists() or not artifact_path.is_file():
+        return None
+    try:
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
 @router.post("/runs")
 async def create_run_endpoint(request: Request) -> JSONResponse:
     if _kill_switch_enabled():
@@ -1844,6 +1892,66 @@ async def create_run_endpoint(request: Request) -> JSONResponse:
         return error_response(exc.status_code, exc.code, exc.message, exc.details)
     except Exception:
         return error_response(500, "INTERNAL", "Internal error")
+
+
+@router.post("/experiments")
+async def create_experiment_endpoint(request: Request) -> JSONResponse:
+    if _kill_switch_enabled():
+        return error_response(
+            503,
+            "KILL_SWITCH_ENABLED",
+            "Experiment creation disabled",
+            {"env": KILL_SWITCH_ENV},
+        )
+    user_ctx = _resolve_user_context(request)
+    if isinstance(user_ctx, JSONResponse):
+        return user_ctx
+    try:
+        payload = await request.json()
+    except Exception:
+        return error_response(400, "EXPERIMENT_CONFIG_INVALID", "Invalid JSON payload")
+
+    try:
+        status_code, response = create_experiment(payload, user_id=user_ctx.user_id)
+        return JSONResponse(status_code=status_code, content=response)
+    except ExperimentBuilderError as exc:
+        return error_response(exc.status_code, exc.code, exc.message, exc.details)
+    except Exception:
+        return error_response(500, "INTERNAL", "Internal error")
+
+
+@router.get("/experiments/{experiment_id}/manifest")
+def experiment_manifest(experiment_id: str, request: Request) -> JSONResponse:
+    resolved = _resolve_experiment_dir_for_read(request, experiment_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    experiment_dir, _ = resolved
+    payload = _load_experiment_artifact(experiment_dir, "experiment_manifest.json")
+    if payload is None:
+        return error_response(
+            409,
+            "EXPERIMENT_CORRUPTED",
+            "Experiment manifest invalid",
+            {"experiment_id": experiment_id},
+        )
+    return JSONResponse(status_code=200, content=payload)
+
+
+@router.get("/experiments/{experiment_id}/comparison")
+def experiment_comparison(experiment_id: str, request: Request) -> JSONResponse:
+    resolved = _resolve_experiment_dir_for_read(request, experiment_id)
+    if isinstance(resolved, JSONResponse):
+        return resolved
+    experiment_dir, _ = resolved
+    payload = _load_experiment_artifact(experiment_dir, "comparison_summary.json")
+    if payload is None:
+        return error_response(
+            409,
+            "EXPERIMENT_CORRUPTED",
+            "comparison_summary.json invalid",
+            {"experiment_id": experiment_id},
+        )
+    return JSONResponse(status_code=200, content=payload)
 
 
 @router.get("/runs/{run_id}/status")

@@ -71,6 +71,10 @@ def user_runs_root(base_runs_root: Path, user_id: str) -> Path:
     return user_root(base_runs_root, user_id) / "runs"
 
 
+def user_experiments_root(base_runs_root: Path, user_id: str) -> Path:
+    return user_root(base_runs_root, user_id) / "experiments"
+
+
 def user_uploads_root(base_runs_root: Path, user_id: str) -> Path:
     return user_root(base_runs_root, user_id) / "inputs"
 
