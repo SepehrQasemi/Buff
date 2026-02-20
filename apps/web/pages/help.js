@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useEffect } from "react";
 
 const QUICK_LINKS = [
   { href: "/help#first-run", label: "First Run Checklist" },
@@ -10,6 +11,37 @@ const QUICK_LINKS = [
 ];
 
 export default function HelpPage() {
+  useEffect(() => {
+    const rawHash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+    if (!rawHash) {
+      return;
+    }
+    const anchors = [
+      "first-run",
+      "runs-root",
+      "dataset-missing",
+      "run-stuck",
+      "backend-verify",
+      "logs-report",
+    ];
+    const normalized = anchors.find(
+      (anchor) =>
+        rawHash === anchor ||
+        rawHash.startsWith(`${anchor}/`) ||
+        rawHash.startsWith(`${anchor}?`) ||
+        rawHash.startsWith(`${anchor}&`)
+    );
+    if (!normalized || normalized === rawHash) {
+      return;
+    }
+    const section = document.getElementById(normalized);
+    if (!section) {
+      return;
+    }
+    window.history.replaceState(null, "", `/help#${normalized}`);
+    section.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
   return (
     <main>
       <header>

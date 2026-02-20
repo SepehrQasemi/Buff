@@ -1,8 +1,8 @@
 import { API_UNREACHABLE_MESSAGE, extractErrorInfo } from "./errors.js";
 
-const HELP_FIRST_RUN = "/help#first-run";
+const HELP_FIRST_RUN = "/help#first-run/FIRST_RUN.md#troubleshooting";
 const HELP_RUNS_ROOT = "/help#runs-root";
-const HELP_DATASET_MISSING = "/help#dataset-missing";
+const HELP_DATASET_MISSING = "/help#dataset-missing/FIRST_RUN.md#csv-requirements";
 const HELP_RUN_STUCK = "/help#run-stuck";
 const HELP_BACKEND_VERIFY = "/help#backend-verify";
 const HELP_LOGS_REPORT = "/help#logs-report";
