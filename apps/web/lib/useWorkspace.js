@@ -11,23 +11,73 @@ import {
   getTrades,
   invalidateCache,
 } from "./api";
-import { RUN_NOT_INDEXED_MESSAGE } from "./errors";
+import { RUN_NOT_INDEXED_MESSAGE, extractErrorInfo } from "./errors";
 import { buildClientError, mapApiErrorDetails } from "./errorMapping";
+import {
+  buildOhlcvUnavailableMessage,
+  deriveAvailableTimeframes,
+  pickPreferredTimeframe,
+} from "./workspaceState";
 
-const DEFAULT_TIMEFRAMES = [
-  "1m",
-  "5m",
-  "15m",
-  "30m",
-  "1h",
-  "2h",
-  "4h",
-  "1d",
-  "1w",
-  "1M",
-];
 const DEFAULT_TRADES_PAGE_SIZE = 250;
 const MAX_TRADES_PAGE_SIZE = 500;
+const TRANSIENT_RETRY_DELAYS_MS = [250, 500, 1000];
+const TRANSIENT_RETRY_MESSAGE = "Temporary filesystem probe failure, retrying...";
+
+const isTransientFilesystemFailure = (result) => {
+  if (!result || result.ok || result.aborted || result.status !== 503) {
+    return false;
+  }
+  const { code } = extractErrorInfo(result.data);
+  if (!code) {
+    return true;
+  }
+  return (
+    code === "RUNS_ROOT_UNSET" ||
+    code === "RUNS_ROOT_MISSING" ||
+    code === "RUNS_ROOT_INVALID" ||
+    code === "RUNS_ROOT_NOT_WRITABLE" ||
+    code === "REGISTRY_LOCK_TIMEOUT"
+  );
+};
+
+const waitWithAbort = (delayMs, signal) =>
+  new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve(false);
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      resolve(true);
+    }, delayMs);
+    const onAbort = () => {
+      clearTimeout(timeoutId);
+      cleanup();
+      resolve(false);
+    };
+    const cleanup = () => signal?.removeEventListener?.("abort", onAbort);
+    signal?.addEventListener?.("abort", onAbort, { once: true });
+  });
+
+const requestWithTransientRetry = async ({ request, signal, onRetry }) => {
+  for (let attempt = 0; ; attempt += 1) {
+    const result = await request();
+    if (result.ok || result.aborted || !isTransientFilesystemFailure(result)) {
+      return result;
+    }
+    if (attempt >= TRANSIENT_RETRY_DELAYS_MS.length) {
+      return result;
+    }
+    if (onRetry) {
+      onRetry();
+    }
+    const keepGoing = await waitWithAbort(TRANSIENT_RETRY_DELAYS_MS[attempt], signal);
+    if (!keepGoing) {
+      return { ok: false, aborted: true };
+    }
+  }
+};
 
 export default function useWorkspace(runId) {
   const [run, setRun] = useState(null);
@@ -52,6 +102,7 @@ export default function useWorkspace(runId) {
   const [failedPlugins, setFailedPlugins] = useState({ indicators: [], strategies: [] });
   const [pluginsError, setPluginsError] = useState(null);
   const [networkError, setNetworkError] = useState(null);
+  const [transientRetryNotice, setTransientRetryNotice] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
 
   const [symbol, setSymbol] = useState("");
@@ -125,14 +176,21 @@ export default function useWorkspace(runId) {
     runsAbortRef.current = controller;
     setRunError(null);
     async function loadRun() {
-      const result = await getRuns({ signal: controller.signal });
+      const result = await requestWithTransientRetry({
+        request: () => getRuns({ signal: controller.signal }),
+        signal: controller.signal,
+        onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
+      });
       if (runsRequestId.current !== requestId || result.aborted) {
         return;
       }
       if (!result.ok) {
+        setTransientRetryNotice(null);
+        setRun(null);
         setRunError(mapApiErrorDetails(result, "Failed to load runs"));
         return;
       }
+      setTransientRetryNotice(null);
       setNetworkError(null);
       const list = Array.isArray(result.data) ? result.data : [];
       const match = list.find((item) => item.id === runId) || null;
@@ -147,7 +205,10 @@ export default function useWorkspace(runId) {
             ],
           })
         );
+        setRun(null);
+        return;
       }
+      setRunError(null);
       setRun(match);
     }
     loadRun();
@@ -163,13 +224,26 @@ export default function useWorkspace(runId) {
     if (!symbol && Array.isArray(run.symbols) && run.symbols.length) {
       setSymbol(run.symbols[0]);
     }
-    if (!timeframe && run.timeframe) {
-      setTimeframe(run.timeframe);
+  }, [run, runId, symbol]);
+
+  const availableTimeframes = useMemo(
+    () => deriveAvailableTimeframes(summary, run?.timeframe),
+    [summary, run?.timeframe]
+  );
+
+  useEffect(() => {
+    if (!runId) {
+      return;
     }
-    if (!timeframe && !run.timeframe) {
-      setTimeframe("1m");
+    const preferred = pickPreferredTimeframe({
+      currentTimeframe: timeframe,
+      runTimeframe: run?.timeframe,
+      availableTimeframes,
+    });
+    if (preferred !== timeframe) {
+      setTimeframe(preferred);
     }
-  }, [run, runId, symbol, timeframe]);
+  }, [availableTimeframes, run?.timeframe, runId, timeframe]);
 
   useEffect(() => {
     if (!runId) {
@@ -184,19 +258,29 @@ export default function useWorkspace(runId) {
     summaryAbortRef.current = controller;
     setSummaryLoading(true);
     setSummaryError(null);
+    setSummary(null);
+    setTransientRetryNotice(null);
     async function loadSummary() {
-      const result = await getRunSummary(runId, {
+      const result = await requestWithTransientRetry({
+        request: () =>
+          getRunSummary(runId, {
+            signal: controller.signal,
+            cache: true,
+          }),
         signal: controller.signal,
-        cache: true,
+        onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
       });
       if (summaryRequestId.current !== requestId || result.aborted) {
         return;
       }
       if (!result.ok) {
+        setTransientRetryNotice(null);
+        setSummary(null);
         setSummaryError(mapApiErrorDetails(result, "Failed to load run summary"));
         setSummaryLoading(false);
         return;
       }
+      setTransientRetryNotice(null);
       setNetworkError(null);
       setSummary(result.data);
       setSummaryLoading(false);
@@ -221,6 +305,24 @@ export default function useWorkspace(runId) {
     setOhlcvError(null);
     async function loadOhlcv() {
       setOhlcvLoading(true);
+      if (!availableTimeframes.includes(timeframe)) {
+        const fallbackTimeframe = availableTimeframes[0] || "1m";
+        setOhlcvError(
+          buildClientError({
+            title: "OHLCV timeframe unavailable",
+            summary: buildOhlcvUnavailableMessage(timeframe, availableTimeframes),
+            actions: [
+              "Select a timeframe that exists in run artifacts.",
+              "Regenerate artifacts if additional timeframes are required.",
+            ],
+          })
+        );
+        if (fallbackTimeframe !== timeframe) {
+          setTimeframe(fallbackTimeframe);
+        }
+        setOhlcvLoading(false);
+        return;
+      }
       const params = {
         symbol: symbol || undefined,
         timeframe: timeframe || undefined,
@@ -228,18 +330,44 @@ export default function useWorkspace(runId) {
         end_ts: range.end_ts || undefined,
         limit: 2000,
       };
-      const result = await getOhlcv(runId, params, {
+      const result = await requestWithTransientRetry({
+        request: () =>
+          getOhlcv(runId, params, {
+            signal: controller.signal,
+            cache: true,
+          }),
         signal: controller.signal,
-        cache: true,
+        onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
       });
       if (ohlcvRequestId.current !== currentId || result.aborted) {
         return;
       }
       if (!result.ok) {
+        const { code } = extractErrorInfo(result.data);
+        if (result.status === 404 && code === "ohlcv_missing") {
+          const fallbackTimeframe = availableTimeframes[0] || "1m";
+          setOhlcvError(
+            buildClientError({
+              title: "OHLCV timeframe unavailable",
+              summary: buildOhlcvUnavailableMessage(timeframe, availableTimeframes),
+              actions: [
+                "Switch to one of the available timeframes.",
+                "Regenerate run artifacts if this timeframe is required.",
+              ],
+            })
+          );
+          if (fallbackTimeframe !== timeframe) {
+            setTimeframe(fallbackTimeframe);
+          }
+          setOhlcvLoading(false);
+          return;
+        }
+        setTransientRetryNotice(null);
         setOhlcvError(mapApiErrorDetails(result, "Failed to load OHLCV"));
         setOhlcvLoading(false);
         return;
       }
+      setTransientRetryNotice(null);
       setOhlcv(result.data);
       setOhlcvLoading(false);
     }
@@ -251,7 +379,7 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, symbol, timeframe, range, reloadToken]);
+  }, [runId, symbol, timeframe, range, reloadToken, availableTimeframes]);
 
   useEffect(() => {
     if (!runId) {
@@ -269,17 +397,24 @@ export default function useWorkspace(runId) {
         start_ts: range.start_ts || undefined,
         end_ts: range.end_ts || undefined,
       };
-      const result = await getTradeMarkers(runId, params, {
+      const result = await requestWithTransientRetry({
+        request: () =>
+          getTradeMarkers(runId, params, {
+            signal: controller.signal,
+            cache: true,
+          }),
         signal: controller.signal,
-        cache: true,
+        onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
       });
       if (markersRequestId.current !== requestId || result.aborted) {
         return;
       }
       if (!result.ok) {
+        setTransientRetryNotice(null);
         setMarkersError(mapApiErrorDetails(result, "Failed to load trade markers"));
         return;
       }
+      setTransientRetryNotice(null);
       setMarkers(Array.isArray(result.data?.markers) ? result.data.markers : []);
       setMarkersError(null);
     }
@@ -326,21 +461,28 @@ export default function useWorkspace(runId) {
     const controller = new AbortController();
     tradesAbortRef.current = controller;
     async function loadTrades() {
-      const result = await getTrades(
-        runId,
-        { page: effectiveTradesPage, page_size: effectiveTradesPageSize },
-        {
-          signal: controller.signal,
-          cache: true,
-        }
-      );
+      const result = await requestWithTransientRetry({
+        request: () =>
+          getTrades(
+            runId,
+            { page: effectiveTradesPage, page_size: effectiveTradesPageSize },
+            {
+              signal: controller.signal,
+              cache: true,
+            }
+          ),
+        signal: controller.signal,
+        onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
+      });
       if (tradesRequestId.current !== requestId || result.aborted) {
         return;
       }
       if (!result.ok) {
+        setTransientRetryNotice(null);
         setTradesError(mapApiErrorDetails(result, "Failed to load trades"));
         return;
       }
+      setTransientRetryNotice(null);
       setTrades(result.data || { results: [] });
       setTradesError(null);
     }
@@ -362,17 +504,24 @@ export default function useWorkspace(runId) {
     const controller = new AbortController();
     metricsAbortRef.current = controller;
     async function loadMetrics() {
-      const result = await getMetrics(runId, {
+      const result = await requestWithTransientRetry({
+        request: () =>
+          getMetrics(runId, {
+            signal: controller.signal,
+            cache: true,
+          }),
         signal: controller.signal,
-        cache: true,
+        onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
       });
       if (metricsRequestId.current !== requestId || result.aborted) {
         return;
       }
       if (!result.ok) {
+        setTransientRetryNotice(null);
         setMetricsError(mapApiErrorDetails(result, "Failed to load metrics"));
         return;
       }
+      setTransientRetryNotice(null);
       setMetrics(result.data);
       setMetricsError(null);
     }
@@ -394,21 +543,28 @@ export default function useWorkspace(runId) {
     const controller = new AbortController();
     timelineAbortRef.current = controller;
     async function loadTimeline() {
-      const result = await getTimeline(
-        runId,
-        { source: "auto" },
-        {
-          signal: controller.signal,
-          cache: true,
-        }
-      );
+      const result = await requestWithTransientRetry({
+        request: () =>
+          getTimeline(
+            runId,
+            { source: "auto" },
+            {
+              signal: controller.signal,
+              cache: true,
+            }
+          ),
+        signal: controller.signal,
+        onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
+      });
       if (timelineRequestId.current !== requestId || result.aborted) {
         return;
       }
       if (!result.ok) {
+        setTransientRetryNotice(null);
         setTimelineError(mapApiErrorDetails(result, "Failed to load timeline"));
         return;
       }
+      setTransientRetryNotice(null);
       const events = Array.isArray(result.data?.events) ? result.data.events : [];
       setTimeline(events);
       setTimelineError(null);
@@ -432,8 +588,16 @@ export default function useWorkspace(runId) {
     pluginsAbortRef.current = controller;
     async function loadPlugins() {
       const [activeResult, failedResult] = await Promise.all([
-        getActivePlugins({ signal: controller.signal }),
-        getFailedPlugins({ signal: controller.signal }),
+        requestWithTransientRetry({
+          request: () => getActivePlugins({ signal: controller.signal }),
+          signal: controller.signal,
+          onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
+        }),
+        requestWithTransientRetry({
+          request: () => getFailedPlugins({ signal: controller.signal }),
+          signal: controller.signal,
+          onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
+        }),
       ]);
       if (
         pluginsRequestId.current !== requestId ||
@@ -448,15 +612,19 @@ export default function useWorkspace(runId) {
       });
 
       if (!activeResult.ok) {
+        setTransientRetryNotice(null);
         setPluginsError(mapApiErrorDetails(activeResult, "Failed to load active plugins"));
       } else {
+        setTransientRetryNotice(null);
         setActivePlugins(normalize(activeResult.data));
         setPluginsError(null);
       }
 
       if (!failedResult.ok) {
+        setTransientRetryNotice(null);
         setPluginsError(mapApiErrorDetails(failedResult, "Failed to load plugin diagnostics"));
       } else {
+        setTransientRetryNotice(null);
         setFailedPlugins(normalize(failedResult.data));
       }
     }
@@ -465,13 +633,6 @@ export default function useWorkspace(runId) {
       controller.abort();
     };
   }, [runId, reloadToken]);
-
-  const availableTimeframes = useMemo(() => {
-    if (run?.timeframe && !DEFAULT_TIMEFRAMES.includes(run.timeframe)) {
-      return [run.timeframe, ...DEFAULT_TIMEFRAMES];
-    }
-    return DEFAULT_TIMEFRAMES;
-  }, [run]);
 
   const reload = () => {
     invalidateCache({ runId });
@@ -503,6 +664,7 @@ export default function useWorkspace(runId) {
     failedPlugins,
     pluginsError,
     networkError,
+    transientRetryNotice,
     symbol,
     setSymbol,
     timeframe,

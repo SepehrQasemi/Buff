@@ -1,5 +1,9 @@
 import assert from "assert";
 import { mapApiErrorDetails } from "../lib/errorMapping.js";
+import {
+  deriveAvailableTimeframes,
+  evaluateRiskPanelState,
+} from "../lib/workspaceState.js";
 
 const importApi = async () => {
   global.window = { __RUNTIME_CONFIG__: { API_BASE: "http://localhost:8000" } };
@@ -89,6 +93,28 @@ const run = async () => {
   assert.strictEqual(statusResult.data.state, "RUNNING");
   assert.strictEqual(statusResult.data.percent, 70);
   assert.ok(calls[2].url.endsWith("/api/v1/runs/run_abc/status"));
+
+  const availableTimeframes = deriveAvailableTimeframes(
+    { ohlcv_available_timeframes: ["1m"] },
+    "1h"
+  );
+  assert.deepStrictEqual(availableTimeframes, ["1m"]);
+  assert.strictEqual(
+    availableTimeframes.includes("1h"),
+    false,
+    "timeframe options should only include available artifact timeframes"
+  );
+
+  const summaryUnavailableRiskState = evaluateRiskPanelState({
+    summary: null,
+    summaryLoading: false,
+    summaryError: { message: "summary unavailable" },
+  });
+  assert.strictEqual(
+    summaryUnavailableRiskState.mode,
+    "summary_unavailable",
+    "risk warning should not show when summary is missing"
+  );
 
   console.log("Product flow UI test OK");
 };
