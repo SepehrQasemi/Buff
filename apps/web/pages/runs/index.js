@@ -2,7 +2,7 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import ErrorNotice from "../../components/ErrorNotice";
-import { getObservabilityRuns } from "../../lib/api";
+import { getDataImports, getObservabilityRuns } from "../../lib/api";
 import { mapApiErrorDetails } from "../../lib/errorMapping";
 
 const normalizeRun = (row) => {
@@ -40,6 +40,7 @@ const statusBadge = (state) => {
 export default function RunsPage() {
   const router = useRouter();
   const [runs, setRuns] = useState([]);
+  const [datasetCount, setDatasetCount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -51,19 +52,27 @@ export default function RunsPage() {
   useEffect(() => {
     let active = true;
     async function load() {
-      const result = await getObservabilityRuns({ cache: true, bypassCache: true });
+      const [runsResult, importsResult] = await Promise.all([
+        getObservabilityRuns({ cache: true, bypassCache: true }),
+        getDataImports(),
+      ]);
       if (!active) {
         return;
       }
-      if (!result.ok) {
-        setError(mapApiErrorDetails(result, "Failed to load run observability index"));
+      if (!runsResult.ok) {
+        setError(mapApiErrorDetails(runsResult, "Failed to load run observability index"));
         setRuns([]);
         setLoading(false);
         return;
       }
-      const payloadRuns = Array.isArray(result.data?.runs) ? result.data.runs : [];
+      const payloadRuns = Array.isArray(runsResult.data?.runs) ? runsResult.data.runs : [];
       const normalized = payloadRuns.map(normalizeRun).filter(Boolean);
       setRuns(normalized);
+      if (importsResult.ok) {
+        setDatasetCount(Number.isFinite(importsResult.data?.total) ? importsResult.data.total : 0);
+      } else {
+        setDatasetCount(null);
+      }
       setError(null);
       setLoading(false);
     }
@@ -215,6 +224,21 @@ export default function RunsPage() {
 
       {loading ? (
         <div className="card fade-up">Loading runs...</div>
+      ) : runs.length === 0 ? (
+        <div className="card fade-up">
+          <h3 style={{ marginBottom: "8px" }}>Create Your First Run</h3>
+          <p className="muted" style={{ marginTop: 0 }}>
+            No runs found yet. Start by importing data and creating a run.
+          </p>
+          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <button onClick={() => router.push("/runs/new")}>Create Your First Run</button>
+            {datasetCount === 0 && (
+              <button className="secondary" onClick={() => router.push("/runs/new")}>
+                Import Data
+              </button>
+            )}
+          </div>
+        </div>
       ) : filteredRuns.length === 0 ? (
         <div className="card fade-up">No runs match the selected filters.</div>
       ) : (

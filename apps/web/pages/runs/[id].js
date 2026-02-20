@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import CandlestickChart from "../../components/workspace/CandlestickChart";
 import ErrorNotice from "../../components/ErrorNotice";
-import { getChatModes, getRunReportExportUrl, postChat } from "../../lib/api";
+import { exportRunReport, getChatModes, getRunStatus, postChat } from "../../lib/api";
 import { MISSING_RUN_ID_MESSAGE } from "../../lib/errors";
-import { buildClientError } from "../../lib/errorMapping";
+import { buildClientError, mapApiErrorDetails } from "../../lib/errorMapping";
 import useWorkspace from "../../lib/useWorkspace";
 
 const formatNumber = (value, digits = 2) => {
@@ -108,6 +108,19 @@ const parseCsv = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const TERMINAL_RUN_STATES = new Set(["COMPLETED", "FAILED", "CORRUPTED", "OK"]);
+
+const runStateBadgeKind = (state) => {
+  const normalized = String(state || "").toUpperCase();
+  if (normalized === "COMPLETED" || normalized === "OK") {
+    return "ok";
+  }
+  if (normalized === "FAILED" || normalized === "CORRUPTED") {
+    return "invalid";
+  }
+  return "info";
+};
+
 export default function ChartWorkspace() {
   const router = useRouter();
   const { id } = router.query;
@@ -190,6 +203,10 @@ export default function ChartWorkspace() {
     WARN: true,
     ERROR: true,
   });
+  const [liveStatus, setLiveStatus] = useState(null);
+  const [liveStatusError, setLiveStatusError] = useState(null);
+  const [reportExporting, setReportExporting] = useState(false);
+  const [reportExportError, setReportExportError] = useState(null);
 
   const rangeStart = range?.start_ts ?? "";
   const rangeEnd = range?.end_ts ?? "";
@@ -237,6 +254,43 @@ export default function ChartWorkspace() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!runId) {
+      setLiveStatus(null);
+      setLiveStatusError(null);
+      return undefined;
+    }
+    let active = true;
+    let timerId = null;
+
+    const poll = async () => {
+      const result = await getRunStatus(runId, { bypassCache: true });
+      if (!active) {
+        return;
+      }
+      if (!result.ok) {
+        setLiveStatusError(mapApiErrorDetails(result, "Failed to load live status"));
+        timerId = setTimeout(poll, 4000);
+        return;
+      }
+      const statusPayload = result.data && typeof result.data === "object" ? result.data : null;
+      setLiveStatus(statusPayload);
+      setLiveStatusError(null);
+      const state = String(statusPayload?.state || "").toUpperCase();
+      if (!TERMINAL_RUN_STATES.has(state)) {
+        timerId = setTimeout(poll, 2500);
+      }
+    };
+
+    poll();
+    return () => {
+      active = false;
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [runId]);
 
   const candles = useMemo(() => ohlcv?.candles || [], [ohlcv]);
   const tradeRows = useMemo(() => trades?.results || [], [trades]);
@@ -474,7 +528,21 @@ export default function ChartWorkspace() {
   const riskConfigHash = provenance.risk_config_hash || "n/a";
   const runCreatedAt = provenance.run_created_at || run?.created_at || "n/a";
   const stageToken = provenance.stage_token || summary?.stage_token || "n/a";
-  const reportExportHref = runId ? getRunReportExportUrl(runId) : null;
+  const liveState = String(liveStatus?.state || run?.status || "UNKNOWN").toUpperCase();
+  const livePercent = Number.isFinite(liveStatus?.percent) ? liveStatus.percent : 0;
+  const liveLastEvent =
+    liveStatus?.last_event && typeof liveStatus.last_event === "object"
+      ? liveStatus.last_event
+      : null;
+  const liveEnvelope =
+    liveStatus?.error_envelope && typeof liveStatus.error_envelope === "object"
+      ? liveStatus.error_envelope
+      : null;
+  const liveRecoveryHint =
+    typeof liveEnvelope?.recovery_hint === "string" ? liveEnvelope.recovery_hint : null;
+  const liveHumanMessage =
+    typeof liveEnvelope?.human_message === "string" ? liveEnvelope.human_message : null;
+  const liveFailed = liveState === "FAILED" || liveState === "CORRUPTED";
 
   const updateStrategyParam = (name, value) => {
     setStrategyParams((current) => ({ ...current, [name]: value }));
@@ -548,6 +616,36 @@ export default function ChartWorkspace() {
     );
   };
 
+  const handleReportExport = async () => {
+    if (!runId || reportExporting) {
+      return;
+    }
+    setReportExporting(true);
+    setReportExportError(null);
+    const result = await exportRunReport(runId);
+    if (!result.ok) {
+      setReportExporting(false);
+      setReportExportError(mapApiErrorDetails(result, "Report export failed"));
+      return;
+    }
+
+    if (typeof window === "undefined") {
+      setReportExporting(false);
+      return;
+    }
+    const blob = result.data;
+    const filename = result.filename || `${runId}-report.zip`;
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+    setReportExporting(false);
+  };
+
   return (
     <main className="workspace-shell" data-testid="chart-workspace">
       <header className="workspace-header">
@@ -570,11 +668,13 @@ export default function ChartWorkspace() {
               <option value="pro">Pro</option>
             </select>
           </label>
-          {reportExportHref && (
-            <a className="secondary" href={reportExportHref}>
-              Export Report
-            </a>
-          )}
+          <button
+            className="secondary"
+            onClick={handleReportExport}
+            disabled={!runId || reportExporting}
+          >
+            {reportExporting ? "Exporting..." : "Export Report"}
+          </button>
           <button className="secondary" onClick={reload}>
             Refresh
           </button>
@@ -597,11 +697,14 @@ export default function ChartWorkspace() {
       {markersError && (
         <ErrorNotice error={markersError} onRetry={reload} compact mode={errorMode} />
       )}
+      {reportExportError && (
+        <ErrorNotice error={reportExportError} onRetry={handleReportExport} mode={errorMode} />
+      )}
 
       <section className="workspace-meta">
         <div className="meta-card">
           <div className="meta-label">Status</div>
-          <div className="meta-value">{run?.status || "n/a"}</div>
+          <div className="meta-value">{liveState || "n/a"}</div>
         </div>
         <div className="meta-card">
           <div className="meta-label">Strategy</div>
@@ -628,6 +731,49 @@ export default function ChartWorkspace() {
               : "n/a"}
           </div>
         </div>
+      </section>
+
+      <section className="card fade-up" style={{ marginBottom: "16px" }}>
+        <div className="section-title">
+          <h3>Live Status</h3>
+          <span className={`badge ${runStateBadgeKind(liveState)}`}>{liveState}</span>
+        </div>
+        {liveStatusError ? (
+          <ErrorNotice error={liveStatusError} onRetry={reload} compact mode={errorMode} />
+        ) : (
+          <div className="grid two">
+            <div className="kpi">
+              <span>Progress</span>
+              <strong>{livePercent}%</strong>
+            </div>
+            <div className="kpi">
+              <span>Last Event</span>
+              <strong>{liveLastEvent?.stage || "n/a"}</strong>
+            </div>
+            <div className="kpi">
+              <span>Event Time</span>
+              <strong>{liveLastEvent?.timestamp || "n/a"}</strong>
+            </div>
+            <div className="kpi">
+              <span>Detail</span>
+              <strong>{liveLastEvent?.detail || "n/a"}</strong>
+            </div>
+          </div>
+        )}
+        {liveFailed && (
+          <div className="banner" style={{ marginTop: "12px", marginBottom: 0 }}>
+            <strong>{liveHumanMessage || "Run failed."}</strong>
+            {liveRecoveryHint && <div style={{ marginTop: "6px" }}>{liveRecoveryHint}</div>}
+            {liveEnvelope && (
+              <details style={{ marginTop: "8px" }}>
+                <summary>Show details</summary>
+                <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", marginTop: "6px" }}>
+                  {JSON.stringify(liveEnvelope, null, 2)}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
       </section>
 
       <div className="workspace-body">

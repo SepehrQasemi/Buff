@@ -154,6 +154,34 @@ const parseErrorMessage = (data, fallback) => {
   return fallback;
 };
 
+const parseResponseData = async (response) => {
+  const contentType = response.headers.get("content-type") || "";
+  const isJson = contentType.includes("json");
+  if (isJson) {
+    return { data: await response.json(), isJson: true };
+  }
+  return { data: await response.text(), isJson: false };
+};
+
+const parseContentDispositionFilename = (value) => {
+  if (!value || typeof value !== "string") {
+    return null;
+  }
+  const utf8Match = value.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match && utf8Match[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].replace(/["']/g, ""));
+    } catch {
+      return utf8Match[1].replace(/["']/g, "");
+    }
+  }
+  const match = value.match(/filename="?([^";]+)"?/i);
+  if (!match || !match[1]) {
+    return null;
+  }
+  return match[1];
+};
+
 export const buildApiUrl = (path, params) => {
   const normalizedPath = String(path || "").replace(/^\/+/, "");
   const url = new URL(normalizedPath, API_BASE);
@@ -179,14 +207,7 @@ const request = async (path, params, options = {}) => {
 
   try {
     const response = await fetch(url, { signal });
-    const contentType = response.headers.get("content-type") || "";
-    const isJson = contentType.includes("application/json");
-    let data;
-    if (isJson) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
+    const { data, isJson } = await parseResponseData(response);
 
     if (!response.ok) {
       return {
@@ -217,13 +238,7 @@ const post = async (path, payload) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload || {}),
     });
-    const contentType = response.headers.get("content-type") || "";
-    let data;
-    if (contentType.includes("application/json")) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
+    const { data } = await parseResponseData(response);
     if (!response.ok) {
       return {
         ok: false,
@@ -245,13 +260,7 @@ const postForm = async (path, formData) => {
       method: "POST",
       body: formData,
     });
-    const contentType = response.headers.get("content-type") || "";
-    let data;
-    if (contentType.includes("application/json")) {
-      data = await response.json();
-    } else {
-      data = await response.text();
-    }
+    const { data } = await parseResponseData(response);
     if (!response.ok) {
       return {
         ok: false,
@@ -261,6 +270,28 @@ const postForm = async (path, formData) => {
       };
     }
     return { ok: true, status: response.status, data };
+  } catch (error) {
+    return { ok: false, error: error?.message || "Network error" };
+  }
+};
+
+const requestBlob = async (path) => {
+  const url = buildApiUrl(path);
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      const { data } = await parseResponseData(response);
+      return {
+        ok: false,
+        status: response.status,
+        error: parseErrorMessage(data, `Request failed (${response.status})`),
+        data,
+      };
+    }
+    const blob = await response.blob();
+    const filename =
+      parseContentDispositionFilename(response.headers.get("content-disposition")) || null;
+    return { ok: true, status: response.status, data: blob, filename };
   } catch (error) {
     return { ok: false, error: error?.message || "Network error" };
   }
@@ -304,11 +335,28 @@ export const getActivePlugins = (options) => request("/plugins/active", undefine
 
 export const getFailedPlugins = (options) => request("/plugins/failed", undefined, options);
 
+export const getStrategies = (options) => request("/strategies", undefined, options);
+
+export const getDataImports = (options) => request("/data/imports", undefined, options);
+
+export const importData = (file) => {
+  const formData = new FormData();
+  formData.append("file", file, file?.name || "dataset.csv");
+  return postForm("/data/import", formData);
+};
+
+export const createProductRun = (payload) => post("/runs", payload);
+
+export const getRunStatus = (id, options) =>
+  request(`/runs/${id}/status`, undefined, options);
+
 export const getChatModes = () => request("/chat/modes");
 
 export const postChat = (payload) => post("/chat", payload);
 
 export const getRunReportExportUrl = (id) => buildApiUrl(`/runs/${id}/report/export`);
+
+export const exportRunReport = (id) => requestBlob(`/runs/${id}/report/export`);
 
 export const createRun = (payload, file) => {
   if (file) {
