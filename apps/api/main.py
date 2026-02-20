@@ -82,6 +82,7 @@ router = APIRouter()
 KILL_SWITCH_ENV = "BUFF_KILL_SWITCH"
 DEMO_MODE_ENV = "DEMO_MODE"
 DEFAULT_USER_ENV = "BUFF_DEFAULT_USER"
+DEV_UI_PORT_ENV = "BUFF_DEV_UI_PORT"
 API_VERSION = "1"
 STAGE_TOKEN = "S5_EXECUTION_SAFETY_BOUNDARIES"
 DATASET_MAX_BYTES = 10 * 1024 * 1024
@@ -96,6 +97,30 @@ def _kill_switch_enabled() -> bool:
 
 def _demo_mode_enabled() -> bool:
     return os.getenv(DEMO_MODE_ENV, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_dev_ui_port(raw: str | None) -> int | None:
+    if raw is None or raw == "":
+        return None
+    try:
+        port = int(raw)
+    except ValueError:
+        return None
+    if not 1 <= port <= 65535:
+        return None
+    return port
+
+
+def _cors_allow_origins() -> list[str]:
+    origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    dev_ui_port = _parse_dev_ui_port(os.getenv(DEV_UI_PORT_ENV))
+    if dev_ui_port is None:
+        return origins
+    for host in ("localhost", "127.0.0.1"):
+        origin = f"http://{host}:{dev_ui_port}"
+        if origin not in origins:
+            origins.append(origin)
+    return origins
 
 
 def _utc_now_iso() -> str:
@@ -2452,7 +2477,7 @@ app = FastAPI(title="Buff Artifacts API", docs_url="/api/docs", openapi_url="/ap
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_cors_allow_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
