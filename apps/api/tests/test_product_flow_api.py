@@ -146,6 +146,29 @@ def test_status_endpoint_deterministic(api_client: tuple[TestClient, Path]) -> N
     assert isinstance(payload.get("last_event"), dict)
 
 
+def test_summary_includes_available_ohlcv_timeframes(
+    api_client: tuple[TestClient, Path],
+) -> None:
+    client, _ = api_client
+    imported = _import_dataset(client, SAMPLE_CSV.read_bytes())
+    create_response = client.post(
+        "/api/v1/runs",
+        json={
+            "dataset_id": imported["dataset_id"],
+            "strategy_id": "hold",
+            "params": {},
+            "risk_level": 3,
+        },
+    )
+    assert create_response.status_code in {200, 201}
+    run_id = create_response.json()["run_id"]
+
+    summary = client.get(f"/api/v1/runs/{run_id}/summary")
+    assert summary.status_code == 200
+    payload = summary.json()
+    assert payload["ohlcv_available_timeframes"] == ["1m"]
+
+
 def test_product_flow_has_no_network_access(
     api_client: tuple[TestClient, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -156,7 +179,21 @@ def test_product_flow_has_no_network_access(
 
     monkeypatch.setattr(urllib.request, "urlopen", _fail_urlopen, raising=True)
 
-    _import_dataset(client, SAMPLE_CSV.read_bytes())
+    imported = _import_dataset(client, SAMPLE_CSV.read_bytes())
+    create_response = client.post(
+        "/api/v1/runs",
+        json={
+            "dataset_id": imported["dataset_id"],
+            "strategy_id": "hold",
+            "params": {},
+            "risk_level": 3,
+        },
+    )
+    assert create_response.status_code in {200, 201}
+    run_id = create_response.json()["run_id"]
     strategies = client.get("/api/v1/strategies")
     assert strategies.status_code == 200
     assert isinstance(strategies.json(), list)
+    summary = client.get(f"/api/v1/runs/{run_id}/summary")
+    assert summary.status_code == 200
+    assert summary.json()["ohlcv_available_timeframes"] == ["1m"]
