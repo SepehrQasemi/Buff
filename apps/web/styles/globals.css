@@ -186,6 +186,54 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.step-pill {
+  border: 1px solid var(--border);
+  background: var(--panel-soft);
+  color: var(--muted);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.step-pill-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+.step-pill-complete {
+  background: rgba(15, 107, 95, 0.16);
+  border-color: rgba(15, 107, 95, 0.32);
+  color: var(--accent);
+}
+
+.upload-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.upload-dropzone[data-active="true"] {
+  border-color: var(--accent);
+  background: rgba(15, 107, 95, 0.08);
+}
+
+.selector-card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: 12px;
+  box-shadow: none;
+}
+
+.selector-card.selected {
+  border-color: var(--accent);
+  background: rgba(15, 107, 95, 0.08);
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

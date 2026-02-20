@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "test:product-flow": "node scripts/product-flow.test.mjs"
   },
   "dependencies": {
     "next": "^16.1.6",

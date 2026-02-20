@@ -1,286 +1,466 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { buildApiUrl, createRun, getActivePlugins } from "../../lib/api";
 import ErrorNotice from "../../components/ErrorNotice";
-import { mapApiErrorDetails } from "../../lib/errorMapping";
+import {
+  createProductRun,
+  getDataImports,
+  getStrategies,
+  importData,
+} from "../../lib/api";
+import { buildClientError, mapApiErrorDetails } from "../../lib/errorMapping";
 
-const DEFAULT_PAYLOAD = {
-  schema_version: "1.0.0",
-  data_source: {
-    type: "csv",
-    path: "",
-    symbol: "",
-    timeframe: "1m",
-    start_ts: "",
-    end_ts: "",
-  },
-  strategy: {
-    id: "",
-    params: {},
-  },
-  risk: {
-    level: 3,
-  },
-  costs: {
-    commission_bps: 0,
-    slippage_bps: 0,
-  },
-  run_id: "",
+const STEP_IMPORT = 1;
+const STEP_STRATEGY = 2;
+const STEP_CONFIGURE = 3;
+const STEP_RUN = 4;
+
+const RISK_LEVEL_OPTIONS = [
+  { value: 1, label: "Conservative" },
+  { value: 3, label: "Balanced" },
+  { value: 5, label: "Aggressive" },
+];
+
+const PARAM_TEXT_TYPES = new Set(["string"]);
+const PARAM_INTEGER_TYPES = new Set(["integer", "int"]);
+const PARAM_NUMBER_TYPES = new Set(["number", "float"]);
+const PARAM_BOOLEAN_TYPES = new Set(["boolean", "bool"]);
+
+const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const normalizeSchemaType = (rawType) => {
+  if (Array.isArray(rawType)) {
+    const first = rawType.find((value) => typeof value === "string");
+    return String(first || "").toLowerCase();
+  }
+  return String(rawType || "").toLowerCase();
 };
 
-const TIMEFRAMES = ["1m", "5m"];
-const RISK_LEVELS = [1, 2, 3, 4, 5];
-
-const normalizeParams = (params) =>
-  Array.isArray(params) ? params.filter((param) => param && param.name) : [];
-
-const buildParamDefaults = (params) => {
-  const defaults = {};
-  normalizeParams(params).forEach((param) => {
-    if (param.default !== undefined) {
-      defaults[param.name] = param.default;
-    }
-  });
-  return defaults;
+const formatTimeRange = (range) => {
+  if (!isObject(range)) {
+    return "n/a";
+  }
+  const start = range.start_ts || "n/a";
+  const end = range.end_ts || "n/a";
+  return `${start} to ${end}`;
 };
 
-const coerceParamValue = (param, value, fallback) => {
-  if (!param) {
-    return value;
+const normalizeDataset = (item) => {
+  if (!isObject(item)) {
+    return null;
   }
-  const type = String(param.type || "").toLowerCase();
-  if (type === "bool" || type === "boolean") {
-    return Boolean(value);
+  const id = String(item.content_hash || "").trim().toLowerCase();
+  if (!id) {
+    return null;
   }
-  if (type === "int" || type === "integer") {
-    if (value === "") {
-      return value;
+  return {
+    content_hash: id,
+    filename: String(item.filename || "dataset.csv"),
+    row_count: Number(item.row_count || 0),
+    columns: Array.isArray(item.columns) ? item.columns.map((col) => String(col)) : [],
+    inferred_time_range: isObject(item.inferred_time_range) ? item.inferred_time_range : {},
+    imported_at: item.imported_at || null,
+  };
+};
+
+const normalizeStrategy = (item) => {
+  if (!isObject(item)) {
+    return null;
+  }
+  const id = String(item.id || "").trim();
+  if (!id) {
+    return null;
+  }
+  return {
+    id,
+    display_name: String(item.display_name || id),
+    description: String(item.description || ""),
+    param_schema: isObject(item.param_schema) ? item.param_schema : {},
+    default_params: isObject(item.default_params) ? item.default_params : {},
+    tags: Array.isArray(item.tags) ? item.tags.map((tag) => String(tag)) : [],
+  };
+};
+
+const getParamDefaultValue = (name, schema, defaults) => {
+  if (isObject(defaults) && Object.prototype.hasOwnProperty.call(defaults, name)) {
+    return defaults[name];
+  }
+  if (isObject(schema) && Object.prototype.hasOwnProperty.call(schema, "default")) {
+    return schema.default;
+  }
+  return "";
+};
+
+const getStrategyParameters = (strategy) => {
+  if (!strategy) {
+    return [];
+  }
+  const schema = isObject(strategy.param_schema) ? strategy.param_schema : {};
+  const properties = isObject(schema.properties) ? schema.properties : {};
+  const requiredList = Array.isArray(schema.required) ? schema.required : [];
+  const required = new Set(requiredList.map((value) => String(value)));
+
+  return Object.keys(properties)
+    .sort()
+    .map((name) => {
+      const propertySchema = isObject(properties[name]) ? properties[name] : {};
+      return {
+        name,
+        schema: propertySchema,
+        required: required.has(name),
+        type: normalizeSchemaType(propertySchema.type),
+        defaultValue: getParamDefaultValue(name, propertySchema, strategy.default_params),
+      };
+    });
+};
+
+const coerceParameterValue = (parameter, value) => {
+  const type = parameter.type;
+  const schema = parameter.schema;
+
+  if (value === null || value === undefined || value === "") {
+    if (parameter.required) {
+      return {
+        ok: false,
+        error: `${parameter.name} is required.`,
+      };
     }
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) ? parsed : fallback;
+    return { ok: true, skip: true };
   }
-  if (type === "float" || type === "number") {
-    if (value === "") {
-      return value;
+
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) {
+    if (!schema.enum.includes(value)) {
+      return {
+        ok: false,
+        error: `${parameter.name} must be one of: ${schema.enum.join(", ")}`,
+      };
     }
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
   }
-  return value;
+
+  if (PARAM_BOOLEAN_TYPES.has(type)) {
+    return { ok: true, value: Boolean(value) };
+  }
+
+  if (PARAM_INTEGER_TYPES.has(type)) {
+    const parsed = Number.parseInt(String(value), 10);
+    if (!Number.isFinite(parsed)) {
+      return { ok: false, error: `${parameter.name} must be an integer.` };
+    }
+    if (Number.isFinite(schema.minimum) && parsed < schema.minimum) {
+      return { ok: false, error: `${parameter.name} must be >= ${schema.minimum}.` };
+    }
+    if (Number.isFinite(schema.maximum) && parsed > schema.maximum) {
+      return { ok: false, error: `${parameter.name} must be <= ${schema.maximum}.` };
+    }
+    return { ok: true, value: parsed };
+  }
+
+  if (PARAM_NUMBER_TYPES.has(type)) {
+    const parsed = Number.parseFloat(String(value));
+    if (!Number.isFinite(parsed)) {
+      return { ok: false, error: `${parameter.name} must be a number.` };
+    }
+    if (Number.isFinite(schema.minimum) && parsed < schema.minimum) {
+      return { ok: false, error: `${parameter.name} must be >= ${schema.minimum}.` };
+    }
+    if (Number.isFinite(schema.maximum) && parsed > schema.maximum) {
+      return { ok: false, error: `${parameter.name} must be <= ${schema.maximum}.` };
+    }
+    return { ok: true, value: parsed };
+  }
+
+  if (PARAM_TEXT_TYPES.has(type) || !type) {
+    return { ok: true, value: String(value) };
+  }
+
+  return { ok: true, value };
+};
+
+const buildRunParameters = (parameters, values) => {
+  const output = {};
+  for (const parameter of parameters) {
+    const rawValue = values[parameter.name];
+    const normalized = coerceParameterValue(parameter, rawValue);
+    if (!normalized.ok) {
+      return { ok: false, error: normalized.error };
+    }
+    if (normalized.skip) {
+      continue;
+    }
+    output[parameter.name] = normalized.value;
+  }
+  return { ok: true, value: output };
+};
+
+const mergeDatasets = (existing, incoming) => {
+  const byId = new Map();
+  for (const item of existing) {
+    byId.set(item.content_hash, item);
+  }
+  for (const item of incoming) {
+    byId.set(item.content_hash, item);
+  }
+  return Array.from(byId.values()).sort((a, b) => a.content_hash.localeCompare(b.content_hash));
+};
+
+const stepClass = (currentStep, step) => {
+  if (currentStep === step) {
+    return "step-pill step-pill-active";
+  }
+  if (currentStep > step) {
+    return "step-pill step-pill-complete";
+  }
+  return "step-pill";
 };
 
 export default function RunsNewPage() {
   const router = useRouter();
-  const [form, setForm] = useState(DEFAULT_PAYLOAD);
+  const hiddenFileInput = useRef(null);
+
+  const [step, setStep] = useState(STEP_IMPORT);
   const [strategies, setStrategies] = useState([]);
-  const [loadingStrategies, setLoadingStrategies] = useState(true);
-  const [submitState, setSubmitState] = useState("idle");
-  const [reloadToken, setReloadToken] = useState(0);
+  const [datasets, setDatasets] = useState([]);
+  const [loadingInitial, setLoadingInitial] = useState(true);
   const [error, setError] = useState(null);
   const [info, setInfo] = useState(null);
-  const [uploadFile, setUploadFile] = useState(null);
-  const pluginsUrl = buildApiUrl("/plugins/active");
+
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  const [datasetId, setDatasetId] = useState("");
+  const [datasetManifest, setDatasetManifest] = useState(null);
+
+  const [strategyId, setStrategyId] = useState("");
+  const [parameterValues, setParameterValues] = useState({});
+  const [riskLevel, setRiskLevel] = useState(3);
+  const [creatingRun, setCreatingRun] = useState(false);
+
   const selectedStrategy = useMemo(
-    () => strategies.find((strategy) => strategy.id === form.strategy.id) || null,
-    [form.strategy.id, strategies]
+    () => strategies.find((strategy) => strategy.id === strategyId) || null,
+    [strategies, strategyId]
   );
-  const strategyParams = useMemo(
-    () => normalizeParams(selectedStrategy?.schema?.params),
+  const strategyParameters = useMemo(
+    () => getStrategyParameters(selectedStrategy),
     [selectedStrategy]
   );
-  const lastStrategyIdRef = useRef("");
+  const selectedDataset = useMemo(
+    () =>
+      datasetManifest ||
+      datasets.find((item) => item.content_hash === datasetId) ||
+      null,
+    [datasetManifest, datasets, datasetId]
+  );
 
   useEffect(() => {
     let active = true;
-    async function loadStrategies() {
-      setLoadingStrategies(true);
-      const result = await getActivePlugins();
+    const load = async () => {
+      setLoadingInitial(true);
+      const [strategiesResult, importsResult] = await Promise.all([
+        getStrategies(),
+        getDataImports(),
+      ]);
       if (!active) {
         return;
       }
-      if (!result.ok) {
-        setError(mapApiErrorDetails(result, "Failed to load active strategies"));
-        setStrategies([]);
-        setLoadingStrategies(false);
-        return;
+
+      const nextStrategies = strategiesResult.ok
+        ? (Array.isArray(strategiesResult.data)
+            ? strategiesResult.data.map(normalizeStrategy).filter(Boolean)
+            : [])
+        : [];
+      const nextDatasets = importsResult.ok
+        ? (Array.isArray(importsResult.data?.datasets)
+            ? importsResult.data.datasets.map(normalizeDataset).filter(Boolean)
+            : [])
+        : [];
+
+      if (!strategiesResult.ok) {
+        setError(mapApiErrorDetails(strategiesResult, "Failed to load strategies"));
+      } else if (!importsResult.ok) {
+        setError(mapApiErrorDetails(importsResult, "Failed to load imported datasets"));
+      } else {
+        setError(null);
       }
-      setError(null);
-      const data = result.data || {};
-      const items = Array.isArray(data.strategies) ? data.strategies : [];
-      setStrategies(items);
-      setLoadingStrategies(false);
-    }
-    loadStrategies();
+
+      setStrategies(nextStrategies);
+      setDatasets(nextDatasets);
+      setLoadingInitial(false);
+    };
+
+    load();
     return () => {
       active = false;
     };
-  }, [pluginsUrl, reloadToken]);
+  }, []);
 
   useEffect(() => {
-    const currentId = form.strategy.id;
-    if (lastStrategyIdRef.current === currentId) {
+    if (!selectedStrategy) {
+      setParameterValues({});
       return;
     }
-    lastStrategyIdRef.current = currentId;
-    const defaults = buildParamDefaults(strategyParams);
-    setForm((current) => ({
-      ...current,
-      strategy: { ...current.strategy, params: defaults },
-    }));
-  }, [form.strategy.id, strategyParams]);
+    const defaults = {};
+    for (const parameter of getStrategyParameters(selectedStrategy)) {
+      defaults[parameter.name] = parameter.defaultValue;
+    }
+    setParameterValues(defaults);
+  }, [selectedStrategy]);
 
-  const handleFileChange = (event) => {
-    const file = event.target?.files?.[0] || null;
-    setUploadFile(file);
-    if (file) {
-      setForm((current) => ({
-        ...current,
-        data_source: { ...current.data_source, path: "" },
-      }));
-    }
-  };
+  const canProceedToStrategy = Boolean(datasetId);
+  const canProceedToConfigure = canProceedToStrategy && Boolean(strategyId);
+  const canCreateRun = canProceedToConfigure && Number.isInteger(riskLevel);
 
-  const canSubmit = useMemo(() => {
-    if (submitState === "submitting") {
-      return false;
-    }
-    const hasFile = Boolean(uploadFile);
-    const hasPath = Boolean(form.data_source.path.trim());
-    if (!hasFile && !hasPath) {
-      return false;
-    }
-    if (!form.data_source.symbol.trim()) {
-      return false;
-    }
-    if (!form.strategy.id.trim()) {
-      return false;
-    }
-    if (!form.risk.level) {
-      return false;
-    }
-    if (!TIMEFRAMES.includes(form.data_source.timeframe)) {
-      return false;
-    }
-    return true;
-  }, [form, submitState, uploadFile]);
-
-  const handleChange = (keyPath) => (event) => {
-    const value = event.target.value;
-    setForm((current) => {
-      const next = { ...current };
-      if (keyPath === "data_source.path") {
-        next.data_source = { ...next.data_source, path: value };
-      } else if (keyPath === "data_source.symbol") {
-        next.data_source = { ...next.data_source, symbol: value };
-      } else if (keyPath === "data_source.timeframe") {
-        next.data_source = { ...next.data_source, timeframe: value };
-      } else if (keyPath === "data_source.start_ts") {
-        next.data_source = { ...next.data_source, start_ts: value };
-      } else if (keyPath === "data_source.end_ts") {
-        next.data_source = { ...next.data_source, end_ts: value };
-      } else if (keyPath === "strategy.id") {
-        next.strategy = { ...next.strategy, id: value };
-      } else if (keyPath === "risk.level") {
-        next.risk = { ...next.risk, level: Number(value) };
-      } else if (keyPath === "costs.commission_bps") {
-        next.costs = { ...next.costs, commission_bps: Number(value) };
-      } else if (keyPath === "costs.slippage_bps") {
-        next.costs = { ...next.costs, slippage_bps: Number(value) };
-      } else if (keyPath === "run_id") {
-        next.run_id = value;
-      }
-      return next;
-    });
-  };
-
-  const handleParamChange = (param) => (event) => {
-    if (!param || !param.name) {
+  const selectDataset = (dataset) => {
+    if (!dataset?.content_hash) {
       return;
     }
-    const isBool = ["bool", "boolean"].includes(String(param.type || "").toLowerCase());
-    const rawValue = isBool ? event.target.checked : event.target.value;
-    setForm((current) => {
-      const currentParams = current.strategy.params || {};
-      const nextValue = coerceParamValue(param, rawValue, currentParams[param.name]);
-      return {
-        ...current,
-        strategy: {
-          ...current.strategy,
-          params: { ...currentParams, [param.name]: nextValue },
-        },
-      };
-    });
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
+    setDatasetId(dataset.content_hash);
+    setDatasetManifest(dataset);
+    setInfo(`Selected dataset ${dataset.content_hash.slice(0, 12)}...`);
     setError(null);
-    setInfo(null);
+    setStep(STEP_STRATEGY);
+  };
 
-    if (!canSubmit) {
-      setError("Fill in all required fields before creating a run.");
+  const onFilePicked = (file) => {
+    if (!file) {
+      return;
+    }
+    setSelectedFile(file);
+    setInfo(`Selected file: ${file.name}`);
+    setError(null);
+  };
+
+  const handleImportData = async () => {
+    if (!selectedFile) {
+      setError(
+        buildClientError({
+          title: "CSV file required",
+          summary: "Select a CSV file before importing data.",
+          actions: ["Pick a CSV file with timestamp/open/high/low/close/volume columns."],
+        })
+      );
+      return;
+    }
+    setImporting(true);
+    setError(null);
+    setInfo("Importing CSV...");
+    const result = await importData(selectedFile);
+    if (!result.ok) {
+      setImporting(false);
+      setInfo(null);
+      setError(mapApiErrorDetails(result, "Data import failed"));
+      return;
+    }
+    const importedId = String(result.data?.dataset_id || "");
+    const manifest = normalizeDataset(result.data?.manifest);
+    if (!importedId || !manifest) {
+      setImporting(false);
+      setInfo(null);
+      setError(
+        buildClientError({
+          title: "Import response invalid",
+          summary: "Server response did not include dataset details.",
+          actions: ["Retry import. If it persists, check API logs."],
+        })
+      );
+      return;
+    }
+    setDatasetId(importedId);
+    setDatasetManifest(manifest);
+    setDatasets((current) => mergeDatasets(current, [manifest]));
+    setImporting(false);
+    setStep(STEP_STRATEGY);
+    setInfo(`Import complete. Dataset id: ${importedId}`);
+  };
+
+  const handleCreateRun = async () => {
+    if (!canCreateRun) {
+      setError(
+        buildClientError({
+          title: "Missing required fields",
+          summary: "Import data, select a strategy, and choose a risk level before creating a run.",
+        })
+      );
+      return;
+    }
+    const paramsResult = buildRunParameters(strategyParameters, parameterValues);
+    if (!paramsResult.ok) {
+      setError(
+        buildClientError({
+          title: "Strategy parameters invalid",
+          summary: paramsResult.error,
+        })
+      );
       return;
     }
 
-    const rawParams = form.strategy.params || {};
-    const cleanedParams = Object.fromEntries(
-      Object.entries(rawParams).filter(
-        ([, value]) => value !== "" && value !== null && value !== undefined
-      )
-    );
-
-    const payload = {
-      schema_version: form.schema_version,
-      data_source: {
-        type: "csv",
-        path: form.data_source.path.trim(),
-        symbol: form.data_source.symbol.trim().toUpperCase(),
-        timeframe: form.data_source.timeframe,
-      },
-      strategy: {
-        id: form.strategy.id.trim(),
-        params: cleanedParams,
-      },
-      risk: {
-        level: Number(form.risk.level),
-      },
-      costs: {
-        commission_bps: Number(form.costs.commission_bps),
-        slippage_bps: Number(form.costs.slippage_bps),
-      },
-    };
-
-    if (form.data_source.start_ts.trim()) {
-      payload.data_source.start_ts = form.data_source.start_ts.trim();
-    }
-    if (form.data_source.end_ts.trim()) {
-      payload.data_source.end_ts = form.data_source.end_ts.trim();
-    }
-    if (form.run_id.trim()) {
-      payload.run_id = form.run_id.trim();
-    }
-
-    setSubmitState("submitting");
-    setInfo("Submitting run request...");
-    const result = await createRun(payload, uploadFile);
+    setCreatingRun(true);
+    setError(null);
+    setInfo("Creating run...");
+    const result = await createProductRun({
+      dataset_id: datasetId,
+      strategy_id: strategyId,
+      params: paramsResult.value,
+      risk_level: riskLevel,
+    });
     if (!result.ok) {
-      setSubmitState("idle");
+      setCreatingRun(false);
       setInfo(null);
       setError(mapApiErrorDetails(result, "Run creation failed"));
       return;
     }
 
-    const runId = result.data?.run_id;
+    const runId = String(result.data?.run_id || "");
     if (!runId) {
-      setSubmitState("idle");
+      setCreatingRun(false);
       setInfo(null);
-      setError("Run created but run_id missing from response.");
+      setError(
+        buildClientError({
+          title: "Run creation failed",
+          summary: "Server response did not include run id.",
+        })
+      );
       return;
     }
 
+    setStep(STEP_RUN);
     setInfo(`Run created: ${runId}. Redirecting...`);
     router.push(`/runs/${runId}`);
+  };
+
+  const handleDrop = (event) => {
+    event.preventDefault();
+    setDragActive(false);
+    const file = event.dataTransfer?.files?.[0] || null;
+    onFilePicked(file);
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = (event) => {
+    event.preventDefault();
+    setDragActive(false);
+  };
+
+  const jumpToStep = (target) => {
+    if (target === STEP_IMPORT) {
+      setStep(target);
+      return;
+    }
+    if (target === STEP_STRATEGY && canProceedToStrategy) {
+      setStep(target);
+      return;
+    }
+    if (target === STEP_CONFIGURE && canProceedToConfigure) {
+      setStep(target);
+      return;
+    }
+    if (target === STEP_RUN && canCreateRun) {
+      setStep(target);
+    }
   };
 
   return (
@@ -288,7 +468,7 @@ export default function RunsNewPage() {
       <header>
         <div className="header-title">
           <h1>Create Run</h1>
-          <span>Stage-4 create flow using CSV inputs.</span>
+          <span>Import data, choose strategy, configure, and run.</span>
         </div>
         <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
           <Link className="badge info" href="/runs">
@@ -297,236 +477,355 @@ export default function RunsNewPage() {
         </div>
       </header>
 
-      <div className="banner info">
-        Runs are stored under RUNS_ROOT on the API host. Upload a CSV file to create a
-        run. A legacy repo-relative path input remains available as a temporary fallback.
-      </div>
-
-      <div className="card fade-up" style={{ marginBottom: "16px" }}>
-        Active plugins endpoint: {pluginsUrl}
-      </div>
-
-      {error && <ErrorNotice error={error} onRetry={() => setReloadToken((v) => v + 1)} />}
-      {info && <div className="card fade-up">{info}</div>}
-
-      <form className="card fade-up" onSubmit={handleSubmit}>
+      <section className="card fade-up" style={{ marginBottom: "16px" }}>
         <div className="section-title">
-          <h3>Run Inputs</h3>
-          <span className="muted">All fields are validated server-side.</span>
+          <h3>Wizard Steps</h3>
+          <span className="muted">Follow in order</span>
         </div>
-
-        <div className="grid two" style={{ marginTop: "16px" }}>
-          <label>
-            CSV File (upload)
-            <input
-              type="file"
-              accept=".csv,text/csv"
-              onChange={handleFileChange}
-            />
-          </label>
-
-          <label>
-            CSV Path (legacy, repo-relative)
-            <input
-              type="text"
-              placeholder="tests/fixtures/phase6/sample.csv"
-              value={form.data_source.path}
-              onChange={handleChange("data_source.path")}
-            />
-          </label>
-
-          <label>
-            Symbol
-            <input
-              type="text"
-              placeholder="BTCUSDT"
-              value={form.data_source.symbol}
-              onChange={handleChange("data_source.symbol")}
-              required
-            />
-          </label>
-
-          <label>
-            Timeframe
-            <select
-              value={form.data_source.timeframe}
-              onChange={handleChange("data_source.timeframe")}
-            >
-              {TIMEFRAMES.map((frame) => (
-                <option key={frame} value={frame}>
-                  {frame}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Strategy
-            <select
-              value={form.strategy.id}
-              onChange={handleChange("strategy.id")}
-              required
-              disabled={loadingStrategies || strategies.length === 0}
-            >
-              <option value="">Select a strategy</option>
-              {strategies.map((strategy) => (
-                <option key={strategy.id} value={strategy.id}>
-                  {strategy.name ? `${strategy.name} (${strategy.id})` : strategy.id}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Risk Level
-            <select value={form.risk.level} onChange={handleChange("risk.level")}>
-              {RISK_LEVELS.map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label>
-            Run ID (optional)
-            <input
-              type="text"
-              placeholder="run_custom_id"
-              value={form.run_id}
-              onChange={handleChange("run_id")}
-            />
-          </label>
-
-          <label>
-            Start (UTC, optional)
-            <input
-              type="text"
-              placeholder="2026-02-01T00:00:00Z"
-              value={form.data_source.start_ts}
-              onChange={handleChange("data_source.start_ts")}
-            />
-          </label>
-
-          <label>
-            End (UTC, optional)
-            <input
-              type="text"
-              placeholder="2026-02-02T00:00:00Z"
-              value={form.data_source.end_ts}
-              onChange={handleChange("data_source.end_ts")}
-            />
-          </label>
-
-          <label>
-            Commission (bps)
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.costs.commission_bps}
-              onChange={handleChange("costs.commission_bps")}
-            />
-          </label>
-
-          <label>
-            Slippage (bps)
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={form.costs.slippage_bps}
-              onChange={handleChange("costs.slippage_bps")}
-            />
-          </label>
-        </div>
-
-        {form.strategy.id && (
-          <div style={{ marginTop: "20px" }}>
-            <div className="section-title">
-              <h3>Strategy Parameters</h3>
-              <span className="muted">Defaults are loaded from the plugin schema.</span>
-            </div>
-            {strategyParams.length === 0 ? (
-              <div className="card" style={{ marginTop: "12px" }}>
-                No parameters required for this strategy.
-              </div>
-            ) : (
-              <div className="grid two" style={{ marginTop: "12px" }}>
-                {strategyParams.map((param) => {
-                  const paramType = String(param.type || "").toLowerCase();
-                  const currentValue =
-                    form.strategy.params?.[param.name] ?? param.default ?? "";
-                  const isBool = ["bool", "boolean"].includes(paramType);
-                  const isInt = ["int", "integer"].includes(paramType);
-                  const isNumber = isInt || ["float", "number"].includes(paramType);
-                  const inputProps = {};
-                  if (Number.isFinite(param.min)) {
-                    inputProps.min = param.min;
-                  }
-                  if (Number.isFinite(param.max)) {
-                    inputProps.max = param.max;
-                  }
-                  if (isNumber) {
-                    inputProps.step = isInt ? "1" : "0.01";
-                  }
-                  return (
-                    <label key={param.name}>
-                      {param.name}
-                      {param.description && (
-                        <span className="muted" style={{ display: "block" }}>
-                          {param.description}
-                        </span>
-                      )}
-                      {isBool ? (
-                        <input
-                          type="checkbox"
-                          checked={Boolean(currentValue)}
-                          onChange={handleParamChange(param)}
-                        />
-                      ) : (
-                        <input
-                          type={isNumber ? "number" : "text"}
-                          value={currentValue}
-                          onChange={handleParamChange(param)}
-                          {...inputProps}
-                        />
-                      )}
-                    </label>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {loadingStrategies ? (
-          <div className="card" style={{ marginTop: "16px" }}>
-            Loading strategies...
-          </div>
-        ) : strategies.length === 0 ? (
-          <div className="card" style={{ marginTop: "16px" }}>
-            No validated strategies found in /api/v1/plugins/active. Run plugin validation
-            or fix the plugin registry before creating runs.
-          </div>
-        ) : null}
-
-        <div style={{ display: "flex", gap: "12px", marginTop: "16px" }}>
-          <button type="submit" disabled={!canSubmit}>
-            {submitState === "submitting" ? "Creating..." : "Create Run"}
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button className={stepClass(step, STEP_IMPORT)} onClick={() => jumpToStep(STEP_IMPORT)}>
+            1. Import Data
           </button>
           <button
-            type="button"
-            className="secondary"
-            onClick={() => {
-              setForm(DEFAULT_PAYLOAD);
-              setUploadFile(null);
-            }}
+            className={stepClass(step, STEP_STRATEGY)}
+            onClick={() => jumpToStep(STEP_STRATEGY)}
+            disabled={!canProceedToStrategy}
           >
-            Reset
+            2. Choose Strategy
+          </button>
+          <button
+            className={stepClass(step, STEP_CONFIGURE)}
+            onClick={() => jumpToStep(STEP_CONFIGURE)}
+            disabled={!canProceedToConfigure}
+          >
+            3. Configure
+          </button>
+          <button
+            className={stepClass(step, STEP_RUN)}
+            onClick={() => jumpToStep(STEP_RUN)}
+            disabled={!canCreateRun}
+          >
+            4. Run
           </button>
         </div>
-      </form>
+      </section>
+
+      {error && <ErrorNotice error={error} mode="pro" />}
+      {info && <div className="card fade-up">{info}</div>}
+
+      {loadingInitial ? (
+        <div className="card fade-up">Loading strategies and imports...</div>
+      ) : (
+        <>
+          {step === STEP_IMPORT && (
+            <section className="card fade-up" data-testid="create-run-step-import">
+              <div className="section-title">
+                <h3>Step 1: Import Data</h3>
+                <span className="muted">Upload a CSV file</span>
+              </div>
+              <input
+                ref={hiddenFileInput}
+                type="file"
+                accept=".csv,text/csv"
+                style={{ display: "none" }}
+                onChange={(event) => onFilePicked(event.target?.files?.[0] || null)}
+              />
+              <div
+                className="upload-dropzone"
+                data-active={dragActive ? "true" : "false"}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <div>Drag and drop your CSV here.</div>
+                <div className="muted" style={{ fontSize: "0.85rem", marginTop: "6px" }}>
+                  Required columns: timestamp, open, high, low, close, volume
+                </div>
+                <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => hiddenFileInput.current?.click()}
+                  >
+                    Choose CSV
+                  </button>
+                  <button type="button" onClick={handleImportData} disabled={importing}>
+                    {importing ? "Importing..." : "Import Data"}
+                  </button>
+                </div>
+                <div className="muted" style={{ marginTop: "10px" }}>
+                  {selectedFile ? `Selected file: ${selectedFile.name}` : "No file selected"}
+                </div>
+              </div>
+
+              {selectedDataset && (
+                <div className="card soft" style={{ marginTop: "16px" }}>
+                  <div className="section-title">
+                    <h3>Imported Dataset</h3>
+                    <span className="badge ok">{selectedDataset.content_hash.slice(0, 12)}...</span>
+                  </div>
+                  <div className="grid two">
+                    <div className="kpi">
+                      <span>Filename</span>
+                      <strong>{selectedDataset.filename}</strong>
+                    </div>
+                    <div className="kpi">
+                      <span>Rows</span>
+                      <strong>{selectedDataset.row_count}</strong>
+                    </div>
+                    <div className="kpi">
+                      <span>Columns</span>
+                      <strong>
+                        {selectedDataset.columns.length > 0
+                          ? selectedDataset.columns.join(", ")
+                          : "n/a"}
+                      </strong>
+                    </div>
+                    <div className="kpi">
+                      <span>Time Range</span>
+                      <strong>{formatTimeRange(selectedDataset.inferred_time_range)}</strong>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: "14px" }}>
+                    <button type="button" onClick={() => setStep(STEP_STRATEGY)}>
+                      Continue to Strategy
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {datasets.length > 0 && (
+                <div className="card soft" style={{ marginTop: "16px" }}>
+                  <div className="section-title">
+                    <h3>Or Use Existing Import</h3>
+                    <span className="muted">{datasets.length} datasets</span>
+                  </div>
+                  <div className="grid two">
+                    {datasets.map((dataset) => (
+                      <button
+                        key={dataset.content_hash}
+                        type="button"
+                        className="secondary"
+                        style={{ textAlign: "left" }}
+                        onClick={() => selectDataset(dataset)}
+                      >
+                        <strong>{dataset.content_hash.slice(0, 12)}...</strong>
+                        <div className="muted">{dataset.filename}</div>
+                        <div className="muted">{dataset.row_count} rows</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {step === STEP_STRATEGY && (
+            <section className="card fade-up" data-testid="create-run-step-strategy">
+              <div className="section-title">
+                <h3>Step 2: Choose Strategy</h3>
+                <span className="muted">{strategies.length} available</span>
+              </div>
+              {strategies.length === 0 ? (
+                <div className="banner">No strategies available. Check API strategy catalog.</div>
+              ) : (
+                <div className="grid two">
+                  {strategies.map((strategy) => (
+                    <button
+                      key={strategy.id}
+                      type="button"
+                      className={
+                        strategyId === strategy.id ? "selector-card selected" : "selector-card"
+                      }
+                      style={{ textAlign: "left" }}
+                      onClick={() => {
+                        setStrategyId(strategy.id);
+                        setError(null);
+                        setInfo(`Selected strategy: ${strategy.display_name}`);
+                      }}
+                    >
+                      <strong>{strategy.display_name}</strong>
+                      <div className="muted">{strategy.id}</div>
+                      <div className="muted" style={{ marginTop: "8px" }}>
+                        {strategy.description || "No description"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
+                <button type="button" className="secondary" onClick={() => setStep(STEP_IMPORT)}>
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep(STEP_CONFIGURE)}
+                  disabled={!canProceedToConfigure}
+                >
+                  Continue to Configure
+                </button>
+              </div>
+            </section>
+          )}
+
+          {step === STEP_CONFIGURE && (
+            <section className="card fade-up" data-testid="create-run-step-configure">
+              <div className="section-title">
+                <h3>Step 3: Configure</h3>
+                <span className="muted">{selectedStrategy?.display_name || "No strategy selected"}</span>
+              </div>
+
+              <div className="grid two">
+                <label>
+                  Risk Level
+                  <select
+                    value={riskLevel}
+                    onChange={(event) => setRiskLevel(Number(event.target.value))}
+                  >
+                    {RISK_LEVEL_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label} ({option.value})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div style={{ marginTop: "16px" }}>
+                <div className="section-title">
+                  <h3>Strategy Parameters</h3>
+                  <span className="muted">Rendered from strategy schema</span>
+                </div>
+                {strategyParameters.length === 0 ? (
+                  <div className="card soft">This strategy has no configurable parameters.</div>
+                ) : (
+                  <div className="grid two">
+                    {strategyParameters.map((parameter) => {
+                      const value = parameterValues[parameter.name];
+                      const schema = parameter.schema;
+                      const type = parameter.type;
+                      const enumValues = Array.isArray(schema.enum) ? schema.enum : [];
+
+                      if (PARAM_BOOLEAN_TYPES.has(type)) {
+                        return (
+                          <label key={parameter.name}>
+                            {parameter.name}
+                            <input
+                              type="checkbox"
+                              checked={Boolean(value)}
+                              onChange={(event) =>
+                                setParameterValues((current) => ({
+                                  ...current,
+                                  [parameter.name]: event.target.checked,
+                                }))
+                              }
+                            />
+                          </label>
+                        );
+                      }
+
+                      if (enumValues.length > 0) {
+                        return (
+                          <label key={parameter.name}>
+                            {parameter.name}
+                            <select
+                              value={value ?? ""}
+                              onChange={(event) =>
+                                setParameterValues((current) => ({
+                                  ...current,
+                                  [parameter.name]: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Select value</option>
+                              {enumValues.map((option) => (
+                                <option key={option} value={option}>
+                                  {option}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        );
+                      }
+
+                      const isInteger = PARAM_INTEGER_TYPES.has(type);
+                      const isNumber = isInteger || PARAM_NUMBER_TYPES.has(type);
+                      return (
+                        <label key={parameter.name}>
+                          {parameter.name}
+                          <input
+                            type={isNumber ? "number" : "text"}
+                            step={isInteger ? "1" : "0.01"}
+                            min={Number.isFinite(schema.minimum) ? schema.minimum : undefined}
+                            max={Number.isFinite(schema.maximum) ? schema.maximum : undefined}
+                            value={value ?? ""}
+                            onChange={(event) =>
+                              setParameterValues((current) => ({
+                                ...current,
+                                [parameter.name]: event.target.value,
+                              }))
+                            }
+                          />
+                          {schema.description && (
+                            <span className="muted" style={{ fontSize: "0.8rem" }}>
+                              {schema.description}
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
+                <button type="button" className="secondary" onClick={() => setStep(STEP_STRATEGY)}>
+                  Back
+                </button>
+                <button type="button" onClick={() => setStep(STEP_RUN)}>
+                  Continue to Run
+                </button>
+              </div>
+            </section>
+          )}
+
+          {step === STEP_RUN && (
+            <section className="card fade-up" data-testid="create-run-step-run">
+              <div className="section-title">
+                <h3>Step 4: Create Run</h3>
+                <span className="muted">Start deterministic simulation</span>
+              </div>
+              <div className="grid two">
+                <div className="kpi">
+                  <span>Dataset</span>
+                  <strong>{datasetId || "n/a"}</strong>
+                </div>
+                <div className="kpi">
+                  <span>Strategy</span>
+                  <strong>{strategyId || "n/a"}</strong>
+                </div>
+                <div className="kpi">
+                  <span>Risk Level</span>
+                  <strong>{riskLevel}</strong>
+                </div>
+              </div>
+              <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setStep(STEP_CONFIGURE)}
+                  disabled={creatingRun}
+                >
+                  Back
+                </button>
+                <button type="button" onClick={handleCreateRun} disabled={creatingRun || !canCreateRun}>
+                  {creatingRun ? "Creating..." : "Create Run"}
+                </button>
+              </div>
+            </section>
+          )}
+        </>
+      )}
     </main>
   );
 }
