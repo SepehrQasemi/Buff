@@ -72,3 +72,11 @@ S7 roadmap for a deterministic, single-user Personal Research Engine built on S6
 - No scope expansion into SaaS, cloud-only, or live trading features.
 - No duplication of operational command authority outside runbook sources.
 - No erosion of deterministic/reproducible guarantees.
+
+## See also
+- [S7 Personal Research Engine Spec](../stages/S7_PERSONAL_RESEARCH_ENGINE_SPEC.md)
+- [Research Architecture](./RESEARCH_ARCHITECTURE.md)
+- [Experiment Engine Spec](./EXPERIMENT_ENGINE_SPEC.md)
+- [Analysis Layer Spec](./ANALYSIS_LAYER_SPEC.md)
+- [Research Data Model](./RESEARCH_DATA_MODEL.md)
+- [Chat Research Assistant Spec](./CHAT_RESEARCH_ASSISTANT_SPEC.md)

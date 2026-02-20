@@ -41,3 +41,11 @@ Optional context:
 - Assistant must not bypass runtime validation boundaries.
 - Assistant is analysis-only and not an execution controller.
 - S6 SIM_ONLY and fail-closed guarantees remain authoritative.
+
+## See also
+- [S7 Personal Research Engine Spec](../stages/S7_PERSONAL_RESEARCH_ENGINE_SPEC.md)
+- [Research Architecture](./RESEARCH_ARCHITECTURE.md)
+- [Experiment Engine Spec](./EXPERIMENT_ENGINE_SPEC.md)
+- [Analysis Layer Spec](./ANALYSIS_LAYER_SPEC.md)
+- [Research Data Model](./RESEARCH_DATA_MODEL.md)
+- [Research Roadmap](./RESEARCH_ROADMAP.md)

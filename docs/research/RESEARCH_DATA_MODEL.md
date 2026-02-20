@@ -86,3 +86,11 @@ Define a file-compatible, implementation-agnostic data model for S7 personal res
 - Unknown critical fields fail closed unless explicitly version-allowed.
 - `run_id` link targets must reference existing run artifacts.
 - Tag and note scopes must reference valid target IDs.
+
+## See also
+- [S7 Personal Research Engine Spec](../stages/S7_PERSONAL_RESEARCH_ENGINE_SPEC.md)
+- [Research Architecture](./RESEARCH_ARCHITECTURE.md)
+- [Experiment Engine Spec](./EXPERIMENT_ENGINE_SPEC.md)
+- [Analysis Layer Spec](./ANALYSIS_LAYER_SPEC.md)
+- [Chat Research Assistant Spec](./CHAT_RESEARCH_ASSISTANT_SPEC.md)
+- [Research Roadmap](./RESEARCH_ROADMAP.md)

@@ -1,4 +1,4 @@
-﻿# CHATBOT_SPEC — AI Assistant (Guide + Reviewer)
+# CHATBOT_SPEC â€” AI Assistant (Guide + Reviewer)
 
 ## Purpose
 The chatbot helps users:
@@ -124,8 +124,8 @@ Chatbot must not:
 - recommend live deployment actions
 - circumvent validation gates
 
-## “Exact Steps” Requirement
-When user asks “I want to add X” the chatbot must respond with:
+## â€œExact Stepsâ€ Requirement
+When user asks â€œI want to add Xâ€ the chatbot must respond with:
 1) exact files to create
 2) exact fields to fill
 3) exact commands to run

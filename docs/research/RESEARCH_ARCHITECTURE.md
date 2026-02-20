@@ -69,3 +69,11 @@ Flow view:
 - No broker adapters.
 - No multi-tenant SaaS assumptions.
 - No cloud dependency requirement for core S7 behavior.
+
+## See also
+- [S7 Personal Research Engine Spec](../stages/S7_PERSONAL_RESEARCH_ENGINE_SPEC.md)
+- [Experiment Engine Spec](./EXPERIMENT_ENGINE_SPEC.md)
+- [Analysis Layer Spec](./ANALYSIS_LAYER_SPEC.md)
+- [Research Data Model](./RESEARCH_DATA_MODEL.md)
+- [Chat Research Assistant Spec](./CHAT_RESEARCH_ASSISTANT_SPEC.md)
+- [Research Roadmap](./RESEARCH_ROADMAP.md)

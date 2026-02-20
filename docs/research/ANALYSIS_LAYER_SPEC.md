@@ -57,3 +57,11 @@ Extension rules:
 - Missing source artifacts must fail closed with explicit error codes.
 - Ranking must use deterministic tie-break logic.
 - S6 guarantees remain intact: SIM_ONLY, no broker/live path, fail-closed contracts.
+
+## See also
+- [S7 Personal Research Engine Spec](../stages/S7_PERSONAL_RESEARCH_ENGINE_SPEC.md)
+- [Research Architecture](./RESEARCH_ARCHITECTURE.md)
+- [Experiment Engine Spec](./EXPERIMENT_ENGINE_SPEC.md)
+- [Research Data Model](./RESEARCH_DATA_MODEL.md)
+- [Chat Research Assistant Spec](./CHAT_RESEARCH_ASSISTANT_SPEC.md)
+- [Research Roadmap](./RESEARCH_ROADMAP.md)

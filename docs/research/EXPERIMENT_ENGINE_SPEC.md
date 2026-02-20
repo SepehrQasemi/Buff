@@ -117,3 +117,11 @@ Failure handling:
   - same ranking order given identical artifact inputs
 - Registry writes are append/update deterministic with stable field ordering.
 - No external mutable dependency is allowed in ranking or candidate generation logic.
+
+## See also
+- [S7 Personal Research Engine Spec](../stages/S7_PERSONAL_RESEARCH_ENGINE_SPEC.md)
+- [Research Architecture](./RESEARCH_ARCHITECTURE.md)
+- [Analysis Layer Spec](./ANALYSIS_LAYER_SPEC.md)
+- [Research Data Model](./RESEARCH_DATA_MODEL.md)
+- [Chat Research Assistant Spec](./CHAT_RESEARCH_ASSISTANT_SPEC.md)
+- [Research Roadmap](./RESEARCH_ROADMAP.md)
