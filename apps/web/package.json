@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "lint:fix": "eslint . --fix",
-    "test:product-flow": "node scripts/product-flow.test.mjs"
+    "test:product-flow": "node scripts/product-flow.test.mjs",
+    "test:journey": "node scripts/user-journey.spec.mjs"
   },
   "dependencies": {
     "next": "^16.1.6",
@@ -22,6 +23,7 @@
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
-    "globals": "^17.3.0"
+    "globals": "^17.3.0",
+    "playwright": "^1.58.2"
   }
 }
