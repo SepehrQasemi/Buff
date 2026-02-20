@@ -27,6 +27,7 @@ from .paths import (
     user_runs_root,
     validate_user_id,
 )
+from .runs_root_probe import check_runs_root_writable
 from .registry import compute_inputs_hash, lock_registry, upsert_registry_entry
 
 ENGINE_VERSION = "phase6-1.0.0"
@@ -184,7 +185,23 @@ def create_run(
     base_runs_root = _resolve_runs_root()
     owner_root = user_root(base_runs_root, owner_user_id)
     runs_root = user_runs_root(base_runs_root, owner_user_id)
-    runs_root.mkdir(parents=True, exist_ok=True)
+    try:
+        runs_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise RunBuilderError(
+            "RUNS_ROOT_NOT_WRITABLE",
+            "RUNS_ROOT is not writable",
+            503,
+            {"path": str(runs_root), "error": str(exc)},
+        ) from exc
+    writable, error = _check_runs_root_writable(runs_root)
+    if not writable:
+        raise RunBuilderError(
+            "RUNS_ROOT_NOT_WRITABLE",
+            "RUNS_ROOT is not writable",
+            503,
+            {"path": str(runs_root), "error": error or "permission denied"},
+        )
 
     run_dir = resolve_user_run_dir(base_runs_root, owner_user_id, run_id).resolve()
     if not is_within_root(run_dir, runs_root):
@@ -299,14 +316,6 @@ def _resolve_runs_root() -> Path:
             503,
             {"path": str(runs_root)},
         )
-    writable, error = _check_runs_root_writable(runs_root)
-    if not writable:
-        raise RunBuilderError(
-            "RUNS_ROOT_NOT_WRITABLE",
-            "RUNS_ROOT is not writable",
-            503,
-            {"path": str(runs_root), "error": error or "permission denied"},
-        )
     return runs_root
 
 
@@ -325,13 +334,7 @@ def _resolve_owner_user_id(user_id: str | None) -> str:
 
 
 def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
-    probe = runs_root / f".buff_write_check_{os.getpid()}"
-    try:
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
-    except OSError as exc:
-        return False, str(exc)
-    return True, None
+    return check_runs_root_writable(runs_root)
 
 
 def _normalize_request(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
