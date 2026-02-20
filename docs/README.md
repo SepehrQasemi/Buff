@@ -11,6 +11,8 @@
 - [Multi-User Isolation Layer (S2)](./MULTI_USER.md)
 - [S3 Controlled Execution Simulation Spec](./stages/S3_CONTROLLED_EXECUTION_SIMULATION_SPEC.md)
 - [Platform Observability & Productization Spec](./stages/PLATFORM_OBSERVABILITY_AND_PRODUCTIZATION_SPEC.md)
+- [S7 Personal Research Engine Spec](./stages/S7_PERSONAL_RESEARCH_ENGINE_SPEC.md)
+- [S7 Research Architecture (Entrypoint)](./research/RESEARCH_ARCHITECTURE.md)
 
 ## Runbook Anchors
 
