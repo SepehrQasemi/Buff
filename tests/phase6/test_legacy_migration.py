@@ -50,7 +50,7 @@ def test_ready_degrades_when_legacy_exists_without_default_user(monkeypatch, tmp
     assert payload["checks"]["legacy_migration"]["code"] == "LEGACY_MIGRATION_REQUIRED"
 
 
-def test_ready_migrates_legacy_runs_with_default_user(monkeypatch, tmp_path) -> None:
+def test_admin_migrates_legacy_runs_with_default_user(monkeypatch, tmp_path) -> None:
     runs_root = tmp_path / "runs"
     runs_root.mkdir()
     _write_legacy_run(runs_root, "run-legacy")
@@ -61,8 +61,21 @@ def test_ready_migrates_legacy_runs_with_default_user(monkeypatch, tmp_path) -> 
     ready = client.get("/api/v1/ready")
     assert ready.status_code == 200
     payload = ready.json()
-    assert payload["status"] == "ready"
-    assert payload["checks"]["legacy_migration"]["migrated_runs"] == 1
+    assert payload["status"] == "degraded"
+    assert payload["checks"]["legacy_migration"]["code"] == "LEGACY_MIGRATION_REQUIRED"
+    assert payload["checks"]["legacy_migration"]["legacy_runs"] == 1
+    assert (runs_root / "run-legacy").exists()
+
+    migrate = client.post("/api/v1/admin/migrate")
+    assert migrate.status_code == 200
+    migrate_payload = migrate.json()
+    assert migrate_payload["status"] == "ok"
+    assert migrate_payload["migrated_runs"] == 1
+    assert migrate_payload["migrated_run_ids"] == ["run-legacy"]
+
+    ready_after = client.get("/api/v1/ready")
+    assert ready_after.status_code == 200
+    assert ready_after.json()["status"] == "ready"
 
     migrated_manifest = (
         runs_root / "users" / "test-user" / "runs" / "run-legacy" / "manifest.json"

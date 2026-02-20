@@ -93,6 +93,10 @@ def test_runs_root_misconfig_contract_across_run_endpoints(
             lambda _path: (False, "blocked"),
         )
         monkeypatch.setattr(
+            "apps.api.main._check_runs_root_writable_read_only",
+            lambda _path: (False, "blocked"),
+        )
+        monkeypatch.setattr(
             "apps.api.phase6.run_builder._check_runs_root_writable",
             lambda _path: (False, "blocked"),
         )
