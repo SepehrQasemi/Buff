@@ -23,6 +23,12 @@ const DEFAULT_TRADES_PAGE_SIZE = 250;
 const MAX_TRADES_PAGE_SIZE = 500;
 const TRANSIENT_RETRY_DELAYS_MS = [250, 500, 1000];
 const TRANSIENT_RETRY_MESSAGE = "Temporary filesystem probe failure, retrying...";
+const TERMINAL_RUN_STATES = new Set(["COMPLETED", "FAILED", "CORRUPTED", "OK"]);
+
+const isArtifactLifecycleReady = (state) => {
+  const normalized = String(state || "").toUpperCase();
+  return normalized === "RUNNING" || TERMINAL_RUN_STATES.has(normalized);
+};
 
 const isTransientFilesystemFailure = (result) => {
   if (!result || result.ok || result.aborted || result.status !== 503) {
@@ -79,7 +85,8 @@ const requestWithTransientRetry = async ({ request, signal, onRetry }) => {
   }
 };
 
-export default function useWorkspace(runId) {
+export default function useWorkspace(runId, options = {}) {
+  const requestedLifecycleState = String(options?.lifecycleState || "").toUpperCase();
   const [run, setRun] = useState(null);
   const [runError, setRunError] = useState(null);
   const [summary, setSummary] = useState(null);
@@ -150,6 +157,12 @@ export default function useWorkspace(runId) {
     () => normalizeTradesPage(tradesPage),
     [tradesPage]
   );
+  const artifactsReady = useMemo(() => {
+    if (requestedLifecycleState) {
+      return isArtifactLifecycleReady(requestedLifecycleState);
+    }
+    return isArtifactLifecycleReady(run?.status);
+  }, [requestedLifecycleState, run?.status]);
 
   useEffect(() => {
     if (effectiveTradesPageSize !== tradesPageSize) {
@@ -249,6 +262,10 @@ export default function useWorkspace(runId) {
     if (!runId) {
       return;
     }
+    if (!artifactsReady) {
+      setSummaryLoading(false);
+      return;
+    }
     const requestId = summaryRequestId.current + 1;
     summaryRequestId.current = requestId;
     if (summaryAbortRef.current) {
@@ -289,10 +306,14 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, reloadToken]);
+  }, [artifactsReady, runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
+      return;
+    }
+    if (!artifactsReady) {
+      setOhlcvLoading(false);
       return;
     }
     const currentId = ohlcvRequestId.current + 1;
@@ -379,10 +400,13 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, symbol, timeframe, range, reloadToken, availableTimeframes]);
+  }, [artifactsReady, runId, symbol, timeframe, range, reloadToken, availableTimeframes]);
 
   useEffect(() => {
     if (!runId) {
+      return;
+    }
+    if (!artifactsReady) {
       return;
     }
     const requestId = markersRequestId.current + 1;
@@ -422,7 +446,7 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, range, reloadToken]);
+  }, [artifactsReady, runId, range, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
@@ -451,6 +475,9 @@ export default function useWorkspace(runId) {
 
   useEffect(() => {
     if (!runId) {
+      return;
+    }
+    if (!artifactsReady) {
       return;
     }
     const requestId = tradesRequestId.current + 1;
@@ -490,10 +517,13 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, reloadToken, effectiveTradesPage, effectiveTradesPageSize]);
+  }, [artifactsReady, runId, reloadToken, effectiveTradesPage, effectiveTradesPageSize]);
 
   useEffect(() => {
     if (!runId) {
+      return;
+    }
+    if (!artifactsReady) {
       return;
     }
     const requestId = metricsRequestId.current + 1;
@@ -529,10 +559,13 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, reloadToken]);
+  }, [artifactsReady, runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
+      return;
+    }
+    if (!artifactsReady) {
       return;
     }
     const requestId = timelineRequestId.current + 1;
@@ -573,10 +606,13 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, reloadToken]);
+  }, [artifactsReady, runId, reloadToken]);
 
   useEffect(() => {
     if (!runId) {
+      return;
+    }
+    if (!artifactsReady) {
       return;
     }
     const requestId = pluginsRequestId.current + 1;
@@ -632,7 +668,7 @@ export default function useWorkspace(runId) {
     return () => {
       controller.abort();
     };
-  }, [runId, reloadToken]);
+  }, [artifactsReady, runId, reloadToken]);
 
   const reload = () => {
     invalidateCache({ runId });
@@ -672,6 +708,7 @@ export default function useWorkspace(runId) {
     range,
     setRange,
     availableTimeframes,
+    artifactsReady,
     reload,
   };
 }
