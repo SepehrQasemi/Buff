@@ -377,6 +377,15 @@ def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
     return check_runs_root_writable(runs_root)
 
 
+def _check_runs_root_writable_read_only(runs_root: Path) -> tuple[bool, str | None]:
+    try:
+        if not os.access(runs_root, os.W_OK | os.X_OK):
+            return False, "permission denied"
+    except OSError as exc:
+        return False, str(exc)
+    return True, None
+
+
 def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
     base_runs_root = get_runs_root()
     if base_runs_root is None:
@@ -411,6 +420,40 @@ def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
             {"path": str(base_runs_root), "error": str(exc)},
         )
     writable, error = _check_runs_root_writable(runs_root)
+    if not writable:
+        return error_response(
+            503,
+            "RUNS_ROOT_NOT_WRITABLE",
+            "RUNS_ROOT is not writable",
+            {"path": str(base_runs_root), "error": error or "permission denied"},
+        )
+    return base_runs_root, {"status": "ok", "path": str(base_runs_root), "writable": True}
+
+
+def _runs_root_readiness_read_only() -> tuple[Path, dict[str, object]] | JSONResponse:
+    base_runs_root = get_runs_root()
+    if base_runs_root is None:
+        return error_response(
+            503,
+            "RUNS_ROOT_UNSET",
+            "RUNS_ROOT is not set",
+            {"env": RUNS_ROOT_ENV},
+        )
+    if not base_runs_root.exists():
+        return error_response(
+            503,
+            "RUNS_ROOT_MISSING",
+            "RUNS_ROOT does not exist",
+            {"path": str(base_runs_root)},
+        )
+    if not base_runs_root.is_dir():
+        return error_response(
+            503,
+            "RUNS_ROOT_INVALID",
+            "RUNS_ROOT is not a directory",
+            {"path": str(base_runs_root)},
+        )
+    writable, error = _check_runs_root_writable_read_only(base_runs_root)
     if not writable:
         return error_response(
             503,
@@ -471,6 +514,65 @@ def _runs_root_readiness_check() -> tuple[dict[str, object], Path | None]:
             None,
         )
     writable, error = _check_runs_root_writable(runs_root)
+    if not writable:
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_NOT_WRITABLE",
+                "message": "RUNS_ROOT is not writable",
+                "details": {"path": str(base_runs_root), "error": error or "permission denied"},
+            },
+            None,
+        )
+    return (
+        {
+            "name": "runs_root",
+            "ok": True,
+            "code": "OK",
+            "message": "RUNS_ROOT ready",
+            "details": {"path": str(base_runs_root), "writable": True},
+        },
+        base_runs_root,
+    )
+
+
+def _runs_root_readiness_check_read_only() -> tuple[dict[str, object], Path | None]:
+    base_runs_root = get_runs_root()
+    if base_runs_root is None:
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_UNSET",
+                "message": "RUNS_ROOT is not set",
+                "details": {"env": RUNS_ROOT_ENV},
+            },
+            None,
+        )
+    if not base_runs_root.exists():
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_MISSING",
+                "message": "RUNS_ROOT does not exist",
+                "details": {"path": str(base_runs_root)},
+            },
+            None,
+        )
+    if not base_runs_root.is_dir():
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_INVALID",
+                "message": "RUNS_ROOT is not a directory",
+                "details": {"path": str(base_runs_root)},
+            },
+            None,
+        )
+    writable, error = _check_runs_root_writable_read_only(base_runs_root)
     if not writable:
         return (
             {
@@ -765,7 +867,7 @@ def _resolve_registry_run_dir(
 ) -> tuple[dict[str, object], Path] | JSONResponse:
     if _is_invalid_component(run_id):
         return _invalid_run_id_response(run_id)
-    registry_result = _load_registry_with_lock(user_root_path)
+    registry_result = _load_registry_read_only(user_root_path)
     if isinstance(registry_result, JSONResponse):
         return registry_result
     entry = _find_registry_entry(registry_result, run_id)
@@ -787,7 +889,7 @@ def _resolve_run_dir_for_read(
     if isinstance(user_ctx, JSONResponse):
         return user_ctx
 
-    readiness = _runs_root_readiness()
+    readiness = _runs_root_readiness_read_only()
     if isinstance(readiness, JSONResponse):
         if _demo_mode_enabled():
             run_path = resolve_run_dir(run_id, get_artifacts_root())
@@ -796,7 +898,6 @@ def _resolve_run_dir_for_read(
     base_runs_root, _ = readiness
     user_root_path = user_root(base_runs_root, user_ctx.user_id)
     runs_root = user_runs_root(base_runs_root, user_ctx.user_id)
-    runs_root.mkdir(parents=True, exist_ok=True)
     resolved = _resolve_registry_run_dir(
         user_root_path,
         runs_root,
@@ -892,7 +993,7 @@ def health() -> dict[str, str]:
 
 @router.get("/health/ready")
 def health_ready() -> dict[str, object]:
-    runs_root_check, base_runs_root = _runs_root_readiness_check()
+    runs_root_check, base_runs_root = _runs_root_readiness_check_read_only()
     checks: list[dict[str, object]] = [runs_root_check]
     if base_runs_root is not None:
         checks.extend(_readiness_registry_and_integrity_checks(base_runs_root))
@@ -901,57 +1002,79 @@ def health_ready() -> dict[str, object]:
 
 @router.get("/ready", response_model=None)
 def ready() -> object:
-    readiness = _runs_root_readiness()
+    readiness = _runs_root_readiness_read_only()
     if isinstance(readiness, JSONResponse):
         return readiness
     base_runs_root, runs_check = readiness
 
     migration_check: dict[str, object] = {"status": "ok", "legacy_runs": 0}
+    status = "ready"
     if has_legacy_runs(base_runs_root):
+        legacy_ids = [path.name for path in list_legacy_run_dirs(base_runs_root)]
         default_user = (os.getenv(DEFAULT_USER_ENV) or "").strip()
-        if not default_user:
-            legacy_ids = [path.name for path in list_legacy_run_dirs(base_runs_root)]
-            migration_check = {
-                "status": "degraded",
-                "code": "LEGACY_MIGRATION_REQUIRED",
-                "legacy_runs": len(legacy_ids),
-                "legacy_run_ids": legacy_ids,
-                "message": f"Set {DEFAULT_USER_ENV} to migrate legacy runs",
-            }
-            return {
-                "status": "degraded",
-                "api_version": API_VERSION,
-                "checks": {"runs_root": runs_check, "legacy_migration": migration_check},
-            }
-        try:
-            migrated = migrate_legacy_runs(base_runs_root, default_user)
-        except Exception as exc:
-            migration_check = {
-                "status": "degraded",
-                "code": "LEGACY_MIGRATION_REQUIRED",
-                "message": str(exc),
-            }
-            return {
-                "status": "degraded",
-                "api_version": API_VERSION,
-                "checks": {"runs_root": runs_check, "legacy_migration": migration_check},
-            }
         migration_check = {
-            "status": "ok",
-            "legacy_runs": 0,
-            "migrated_runs": migrated.get("count", 0),
-            "user_id": migrated.get("user_id"),
+            "status": "degraded",
+            "code": "LEGACY_MIGRATION_REQUIRED",
+            "legacy_runs": len(legacy_ids),
+            "legacy_run_ids": legacy_ids,
+            "default_user": default_user or None,
+            "message": "Call POST /api/v1/admin/migrate to migrate legacy runs",
         }
+        status = "degraded"
 
     users_dir = base_runs_root / "users"
-    users_dir.mkdir(parents=True, exist_ok=True)
-    user_dirs = [path for path in users_dir.iterdir() if path.is_dir()]
+    user_dirs = (
+        [path for path in users_dir.iterdir() if path.is_dir()]
+        if users_dir.exists() and users_dir.is_dir()
+        else []
+    )
     checks = {
         "runs_root": runs_check,
         "registry": {"status": "ok", "users": len(user_dirs)},
         "legacy_migration": migration_check,
     }
-    return {"status": "ready", "api_version": API_VERSION, "checks": checks}
+    return {"status": status, "api_version": API_VERSION, "checks": checks}
+
+
+@router.post("/admin/migrate")
+def admin_migrate_legacy_runs() -> object:
+    readiness = _runs_root_readiness()
+    if isinstance(readiness, JSONResponse):
+        return readiness
+    base_runs_root, _ = readiness
+    default_user = (os.getenv(DEFAULT_USER_ENV) or "").strip()
+    if not default_user:
+        return error_response(
+            400,
+            "RUN_CONFIG_INVALID",
+            f"{DEFAULT_USER_ENV} is required for migration",
+            {"env": DEFAULT_USER_ENV},
+        )
+    legacy_ids = [path.name for path in list_legacy_run_dirs(base_runs_root)]
+    if not legacy_ids:
+        return {
+            "status": "ok",
+            "user_id": default_user,
+            "legacy_runs": 0,
+            "migrated_runs": 0,
+            "migrated_run_ids": [],
+        }
+    try:
+        migrated = migrate_legacy_runs(base_runs_root, default_user)
+    except Exception as exc:
+        return error_response(
+            500,
+            "LEGACY_MIGRATION_FAILED",
+            "Legacy migration failed",
+            {"error": str(exc)},
+        )
+    return {
+        "status": "ok",
+        "user_id": migrated.get("user_id"),
+        "legacy_runs": 0,
+        "migrated_runs": migrated.get("count", 0),
+        "migrated_run_ids": migrated.get("migrated_run_ids", []),
+    }
 
 
 @router.get("/strategies")
@@ -1067,7 +1190,7 @@ def _resolve_observability_scope(
     user_ctx = _resolve_user_context(request)
     if isinstance(user_ctx, JSONResponse):
         return user_ctx
-    readiness = _runs_root_readiness()
+    readiness = _runs_root_readiness_read_only()
     if isinstance(readiness, JSONResponse):
         return readiness
     base_runs_root, _ = readiness
@@ -2418,6 +2541,18 @@ def _load_registry_with_lock(user_root_path: Path) -> dict[str, object] | JSONRe
         return error_response(503, "REGISTRY_LOCK_TIMEOUT", "Registry lock timeout")
     except Exception:
         return error_response(500, "REGISTRY_WRITE_FAILED", "Registry write failed")
+
+
+def _load_registry_read_only(user_root_path: Path) -> dict[str, object] | JSONResponse:
+    payload, registry_error = _read_registry_payload_read_only(user_root_path)
+    if isinstance(registry_error, str) and registry_error:
+        return error_response(
+            503,
+            "REGISTRY_UNREADABLE",
+            "Registry unreadable",
+            {"index_path": str((user_root_path / "index.json").resolve()), "error": registry_error},
+        )
+    return payload
 
 
 def _find_registry_entry(registry: dict[str, object], run_id: str) -> dict[str, object] | None:

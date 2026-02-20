@@ -31,6 +31,18 @@ def _run_dir(runs_root: Path, run_id: str) -> Path:
     return runs_root / "users" / TEST_USER / "runs" / run_id
 
 
+def _snapshot_tree(root: Path) -> dict[str, tuple[bool, int, int]]:
+    entries = [root, *root.rglob("*")]
+    snapshot: dict[str, tuple[bool, int, int]] = {}
+    for entry in entries:
+        if not entry.exists():
+            continue
+        relative = "." if entry == root else entry.relative_to(root).as_posix()
+        stats = entry.stat()
+        snapshot[relative] = (entry.is_dir(), stats.st_mtime_ns, stats.st_size)
+    return snapshot
+
+
 def test_observability_routes_are_read_only() -> None:
     routes = {
         route.path: set(route.methods or set())
@@ -43,6 +55,7 @@ def test_observability_routes_are_read_only() -> None:
         "/api/v1/observability/runs",
         "/api/v1/observability/runs/{run_id}",
         "/api/v1/observability/registry",
+        "/api/v1/runs/{run_id}/metrics",
     }
     for path in required_paths:
         assert path in routes
@@ -131,3 +144,32 @@ def test_observability_payloads_and_corruption_detection(monkeypatch, tmp_path: 
     assert "registry_integrity_status" in registry_payload
     assert "plugin_load_status" in registry_payload
     assert "failed_plugins" in registry_payload
+
+
+def test_observability_gets_do_not_mutate_runs_root(monkeypatch, tmp_path: Path) -> None:
+    runs_root = tmp_path / "runs"
+    runs_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("RUNS_ROOT", str(runs_root))
+    monkeypatch.setenv("BUFF_DEFAULT_USER", TEST_USER)
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+
+    client = TestClient(app)
+    create = client.post("/api/v1/runs", json=_payload())
+    assert create.status_code in {200, 201}
+    run_id = create.json()["run_id"]
+
+    before = _snapshot_tree(runs_root)
+
+    paths = (
+        "/api/v1/health/ready",
+        "/api/v1/observability/runs",
+        f"/api/v1/observability/runs/{run_id}",
+        "/api/v1/observability/registry",
+        f"/api/v1/runs/{run_id}/metrics",
+    )
+    for path in paths:
+        response = client.get(path)
+        assert response.status_code == 200
+
+    after = _snapshot_tree(runs_root)
+    assert after == before

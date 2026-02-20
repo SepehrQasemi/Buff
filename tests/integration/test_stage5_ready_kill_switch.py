@@ -79,7 +79,7 @@ def test_ready_endpoint_not_writable(monkeypatch, tmp_path):
     runs_root.mkdir()
     monkeypatch.setenv("RUNS_ROOT", str(runs_root))
     monkeypatch.setattr(
-        "apps.api.main._check_runs_root_writable",
+        "apps.api.main._check_runs_root_writable_read_only",
         lambda _path: (False, "blocked"),
     )
     client = TestClient(app)
