@@ -5,6 +5,7 @@ import ErrorNotice from "../../components/ErrorNotice";
 import { exportRunReport, getChatModes, getRunStatus, postChat } from "../../lib/api";
 import { MISSING_RUN_ID_MESSAGE } from "../../lib/errors";
 import { buildClientError, mapApiErrorDetails } from "../../lib/errorMapping";
+import { evaluateRiskPanelState } from "../../lib/workspaceState";
 import useWorkspace from "../../lib/useWorkspace";
 
 const formatNumber = (value, digits = 2) => {
@@ -139,6 +140,7 @@ export default function ChartWorkspace() {
     run,
     runError,
     summary,
+    summaryLoading,
     summaryError,
     ohlcv,
     ohlcvLoading,
@@ -159,6 +161,7 @@ export default function ChartWorkspace() {
     failedPlugins,
     pluginsError,
     networkError,
+    transientRetryNotice,
     symbol,
     setSymbol,
     timeframe,
@@ -513,7 +516,17 @@ export default function ChartWorkspace() {
     setChatLoading(false);
   };
 
-  const risk = summary?.risk || {};
+  const riskPanelState = useMemo(
+    () =>
+      evaluateRiskPanelState({
+        summary,
+        summaryLoading,
+        summaryError,
+      }),
+    [summary, summaryLoading, summaryError]
+  );
+  const risk = riskPanelState.risk;
+  const riskStatusLabel = riskPanelState.statusLabel;
   const provenance = summary?.provenance || {};
   const provenanceStrategy =
     provenance?.strategy && typeof provenance.strategy === "object"
@@ -688,6 +701,11 @@ export default function ChartWorkspace() {
         </div>
       )}
       {networkError && <ErrorNotice error={networkError} onRetry={reload} mode={errorMode} />}
+      {transientRetryNotice && (
+        <div className="banner info">
+          <strong>{transientRetryNotice}</strong>
+        </div>
+      )}
       {pluginsError && <ErrorNotice error={pluginsError} onRetry={reload} mode={errorMode} />}
       {runError && <ErrorNotice error={runError} onRetry={reload} mode={errorMode} />}
       {summaryError && <ErrorNotice error={summaryError} onRetry={reload} mode={errorMode} />}
@@ -963,15 +981,52 @@ export default function ChartWorkspace() {
 
                 <div className="panel-card">
                   <h3>Risk Status</h3>
-                  {risk.status !== "ok" && (
+                  {riskPanelState.mode === "summary_unavailable" && (
+                    <div className="banner info" style={{ marginBottom: "10px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: "10px",
+                        }}
+                      >
+                        <div>
+                          <strong>Summary unavailable.</strong>
+                          <div className="muted">
+                            {summaryLoading
+                              ? "Loading summary artifacts."
+                              : "Retry to refresh risk status."}
+                          </div>
+                        </div>
+                        <button className="secondary" onClick={reload}>
+                          Retry
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {riskPanelState.mode === "unknown" && (
+                    <div className="banner info" style={{ marginBottom: "10px" }}>
+                      <strong>Risk status is UNKNOWN.</strong>
+                      <div className="muted">
+                        Summary loaded, but risk status is missing from artifacts.
+                      </div>
+                    </div>
+                  )}
+                  {riskPanelState.mode === "warning" && (
                     <div className="inline-warning">
-                      Risk artifacts missing or incomplete. UI is fail-closed.
+                      Risk artifacts missing or incomplete (status: {riskStatusLabel}). UI is
+                      fail-closed.
                     </div>
                   )}
                   <div className="kv-grid">
                     <div>
                       <span>Risk Level</span>
                       <strong>{riskLevel}</strong>
+                    </div>
+                    <div>
+                      <span>Status</span>
+                      <strong>{riskStatusLabel}</strong>
                     </div>
                     <div>
                       <span>State</span>
