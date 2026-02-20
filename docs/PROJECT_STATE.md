@@ -1,4 +1,4 @@
-CURRENT_STAGE=S5_EXECUTION_SAFETY_BOUNDARIES
+CURRENT_STAGE=S6_PLATFORM_OBSERVABILITY_LAYER
 OPEN_PRS_TO_DECIDE=0
 LAST_STAGE_RELEVANT_PR=240
 LAST_STAGE_RELEVANT_SHA=558e427c0b0902d8c6dbd9aed532186a3d5f6a4d
@@ -33,7 +33,7 @@ No other document determines current stage.
 ## Machine-Readable Snapshot
 
 
-CURRENT_STAGE=S5_EXECUTION_SAFETY_BOUNDARIES
+CURRENT_STAGE=S6_PLATFORM_OBSERVABILITY_LAYER
 OPEN_PRS_TO_DECIDE=0
 LAST_STAGE_RELEVANT_PR=240
 LAST_STAGE_RELEVANT_SHA=558e427c0b0902d8c6dbd9aed532186a3d5f6a4d
@@ -43,30 +43,24 @@ OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 ---
 
 ## Current Stage
-S5_EXECUTION_SAFETY_BOUNDARIES
+S6_PLATFORM_OBSERVABILITY_LAYER
 
 ## Stage Description
-Fail-closed, artifact-driven, deterministic analysis system with execution safety boundaries.
-SIM_ONLY execution is enforced in runtime manifests and capabilities.
-Execution overrides (`execution_mode`, `live`, `broker`) are rejected fail-closed.
-Runtime guardrails preserve network ingest isolation and deterministic behavior.
+Read-only platform observability and health surface over deterministic run artifacts.
+Health and observability endpoints provide diagnostics without mutating runtime state.
+Legacy migration is explicit via a non-observability admin endpoint.
 No broker integration.
-No live state mutation.
+No live execution path.
 
 ## Current Objective
-Harden execution safety boundaries by enforcing SIM_ONLY behavior, rejecting execution overrides, preserving runtime/network guardrails, and keeping strict verification gates green.
+Enforce read-only observability behavior by keeping health endpoints read-only, keeping observability routes read-only, routing legacy migration through explicit admin POST, and maintaining no-write enforcement tests.
 
 ## Definition of Done
-- All normative constraints centralized
-- No broken links
-- Single-source operational command strings: runnable command blocks and inline runnable commands appear only in `docs/05_RUNBOOK_DEV_WORKFLOW.md`.
-  Other docs may mention gate names but must link to the runbook.
-- SIM_ONLY execution mode is written to run manifests and capabilities.
-- Execution override fields (`execution_mode`, `live`, `broker`) are rejected fail-closed with stable API errors.
-- Runtime guardrails keep network ingest isolation and deterministic behavior intact.
-- `release_gate --strict --timeout-seconds 900` PASS on `main`.
-- CI green on current `main` tip SHA for active workflows (historical runs from decommissioned workflows may remain in history)
-- release_gate PASS
+- All observability routes are GET-only and read-only.
+- No filesystem mutation occurs on observability/health GET request paths.
+- Dedicated no-write tests cover `GET /api/v1/health/ready`, `GET /api/v1/observability/*`, and `GET /api/v1/runs/{run_id}/metrics`.
+- `python -m tools.release_gate --strict --timeout-seconds 900` PASS on `main`.
+- CI green on current `main` tip SHA for active workflows.
 
 ## Active Constraints
 - Execution is out of scope
@@ -76,7 +70,12 @@ Harden execution safety boundaries by enforcing SIM_ONLY behavior, rejecting exe
 - Canonical contract authority enforced
 
 ## Next Stage Candidate
-S6_PLATFORM_OBSERVABILITY_LAYER
+Future Layer - External Integration Layer
+
+## Evidence Note (S6 Stage Flip)
+- Runtime hardening PR: #264 https://github.com/Buff-Trading-AI/Buff/pull/264
+- No-write enforcement tests: `tools/test_s6_observability_surface.py`
+- Main SHA validated for strict gate: `cadccad38c3748212dd94dd80378a51d53be61e9` (`python -m tools.release_gate --strict --timeout-seconds 900` PASS)
 
 ## S3 Acceptance Evidence
 - S3 runtime acceptance validated on `main` at `3e36db11a5706006bb464f046d2b1ef531f4182f` with deterministic run/replay behavior.
