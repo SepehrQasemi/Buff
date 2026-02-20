@@ -17,10 +17,8 @@ Key properties:
 - Artifacts: `reports/fundamental_risk_latest.json`, `reports/fundamental_risk_timeline.json`
 
 ## CLI
-Example:
-```
-python -m src.risk_fundamental.cli --rules knowledge/fundamental_risk_rules.yaml --fixture tests/fixtures/fundamental_snapshots.json --at 2026-01-01T00:00:00Z
-```
+Use the centralized fundamental risk CLI command from the runbook for reproducible checks.
+See [Runbook: Fundamental Risk CLI](./05_RUNBOOK_DEV_WORKFLOW.md#fundamental-risk-cli).
 
 ## Notes
 - Snapshot providers are interface-only; the offline provider reads fixtures.

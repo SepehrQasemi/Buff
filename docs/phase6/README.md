@@ -31,14 +31,8 @@ Non-goals:
 ## Stage-5 Demo
 
 Run the read-only demo using the built-in artifacts pack:
-
-```bash
-./scripts/dev-demo.sh
-```
-
-```powershell
-.\scripts\dev-demo.ps1
-```
+Use the centralized Phase-6 demo commands from the runbook.
+See [Runbook: Stage-5 Demo](../05_RUNBOOK_DEV_WORKFLOW.md#stage-5-demo).
 
 Open `http://localhost:3000/runs/stage5_demo`.
 
@@ -60,4 +54,3 @@ Phase-6 specific checks are cataloged in:
 - [CONTRACTS.md](CONTRACTS.md): Run builder, data, storage, and API contracts.
 
 Status reference: [Current Status](../04_ROADMAP_AND_DELIVERY_CHECKLIST.md#current-status).
-

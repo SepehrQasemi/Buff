@@ -7,9 +7,8 @@ For derived timeframes, see `docs/data_timeframes.md`. The multi-timeframe runne
 
 ## Run
 
-```bash
-python -m src.data.ingest --symbols BTCUSDT ETHUSDT --since 2024-01-01T00:00:00Z --end 2024-01-03T00:00:00Z --out data --report .tmp_report/data_quality.json
-```
+Use the canonical ingest command from the runbook to generate deterministic 1m data artifacts.
+See [Runbook: Data Pipeline Operations](./05_RUNBOOK_DEV_WORKFLOW.md#data-pipeline-operations).
 
 ## Artifacts
 

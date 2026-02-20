@@ -47,26 +47,20 @@ strict-full | full canonical bytes (metadata preserved) | depends on risk_mode |
 ## CLI usage
 
 Record a decision payload (canonical JSON + hashes):
-
-```
-python -m src.audit.record_decision --input tests/fixtures/decision_payload.json --out artifacts/decisions
-```
+Use the centralized record command in the runbook.
+See [Runbook: Record Decision Payload](./05_RUNBOOK_DEV_WORKFLOW.md#record-decision-payload).
 
 Create a snapshot:
-
-```
-python -m src.audit.make_snapshot --input tests/fixtures/snapshot_payload.json --out artifacts/snapshots
-```
+Use the centralized snapshot command in the runbook.
+See [Runbook: Create Snapshot](./05_RUNBOOK_DEV_WORKFLOW.md#create-snapshot).
 
 `--out` is a directory; the snapshot file is written inside it.
 
 The command prints the created snapshot path (single line) to stdout.
 
 Replay a decision:
-
-```
-python -m src.audit.replay --decision <decision_path.json> --snapshot <snapshot_path.json> --strict
-```
+Use the centralized replay command in the runbook.
+See [Runbook: Replay Decision](./05_RUNBOOK_DEV_WORKFLOW.md#replay-decision).
 
 Expected outputs:
 

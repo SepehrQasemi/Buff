@@ -1,4 +1,4 @@
-STATUS: DISABLED - self-hosted/Clouding backup CI is not used. Files retained for future re-enable.
+﻿STATUS: DISABLED - self-hosted/Clouding backup CI is not used. Files retained for future re-enable.
 Sanity: CI verified on 2026-02-03.
 Do not use unless explicitly re-enabled.
 
@@ -34,7 +34,7 @@ Do not use unless explicitly re-enabled.
 - **Archive/unarchive fails**
   - Verify `SERVER_ID` is correct in GitHub Secrets.
   - Check Clouding service status and API availability.
-- **Cancelled runs don�t trigger backup**
+- **Cancelled runs don’t trigger backup**
   - By design, cancelled runs require PR label `use-backup-ci` to avoid wasted server cycles.
   - Failures still trigger backup automatically.
 
@@ -55,14 +55,6 @@ Archived reference only. Do not use unless explicitly re-enabled.
 Archived reference only. Do not use unless explicitly re-enabled.
 These scripts help validate Clouding connectivity without touching CI workflows:
 
-```bash
-export CLOUDING_APIKEY="..."
-./scripts/clouding_list_servers.sh
-```
+Use the archived Clouding operator command strings from the centralized runbook section.
+See [Runbook: CI Backup Operations](./05_RUNBOOK_DEV_WORKFLOW.md#ci-backup-operations).
 
-```bash
-export CLOUDING_APIKEY="..."
-export SERVER_ID="..."
-./scripts/clouding_power.sh unarchive
-./scripts/clouding_power.sh archive
-```

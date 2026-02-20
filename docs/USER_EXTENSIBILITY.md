@@ -129,9 +129,8 @@ These must match the contracts:
 
 ## Validation (Fail-Closed)
 Run the validator to generate artifacts:
-```
-python -m src.plugins.validate --out artifacts/plugin_validation
-```
+Use the centralized validation command in the runbook.
+See [Runbook: Phase6 Plugin Validation](./05_RUNBOOK_DEV_WORKFLOW.md#phase6-plugin-validation).
 Validation writes:
 ```
 artifacts/plugin_validation/<type>/<id>.json

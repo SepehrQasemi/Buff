@@ -20,15 +20,12 @@ Required artifacts:
 - `workspaces/<run_id>/selector_trace.json`
 - `reports/risk_timeline.json`
 
-Command (replace `RUN_ID`):
-```bash
-python -c "from pathlib import Path; from chatbot import Chatbot, ChatbotConfig; run_id='RUN_ID'; cfg=ChatbotConfig(root_dir=Path('.'), trades_path=Path(f'workspaces/{run_id}/trades.parquet'), selector_trace_path=Path(f'workspaces/{run_id}/selector_trace.json'), risk_timeline_path=Path('reports/risk_timeline.json')); Path('reports/daily_summary.md').write_text(Chatbot(cfg).respond('daily summary'), encoding='utf-8')"
-```
+Use the canonical daily-summary command from the runbook and replace `RUN_ID` there.
+See [Runbook: Chatbot Operations](./05_RUNBOOK_DEV_WORKFLOW.md#chatbot-operations).
 
 ## Non-capabilities
 - No order placement, broker execution, or control-plane actions.
 - No mutation of artifacts; all responses are read-only.
 - No summaries when required artifacts are missing (returns "unknown").
 - No invention or extrapolation beyond provided artifacts.
-
 
