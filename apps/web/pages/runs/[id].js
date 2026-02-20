@@ -122,11 +122,32 @@ const runStateBadgeKind = (state) => {
   return "info";
 };
 
+const lifecycleSummary = (state) => {
+  const normalized = String(state || "").toUpperCase();
+  if (!normalized) {
+    return "Waiting for lifecycle status...";
+  }
+  if (normalized === "CREATED") {
+    return "Run created. Waiting for runtime initialization.";
+  }
+  if (normalized === "VALIDATED") {
+    return "Validation complete. Waiting for runtime start.";
+  }
+  if (normalized === "RUNNING") {
+    return "Run is active. Loading artifact surfaces.";
+  }
+  if (TERMINAL_RUN_STATES.has(normalized)) {
+    return "Run reached terminal state. Artifact surfaces are available.";
+  }
+  return `Lifecycle state: ${normalized}.`;
+};
+
 export default function ChartWorkspace() {
   const router = useRouter();
   const { id } = router.query;
   const runId = Array.isArray(id) ? id[0] : id;
   const isReady = router.isReady;
+  const [lifecycleState, setLifecycleState] = useState("");
   const missingRunError =
     isReady && !runId
       ? buildClientError({
@@ -169,8 +190,9 @@ export default function ChartWorkspace() {
     range,
     setRange,
     availableTimeframes,
+    artifactsReady,
     reload,
-  } = useWorkspace(runId);
+  } = useWorkspace(runId, { lifecycleState });
 
   const [activeTab, setActiveTab] = useState("strategy");
   const [selectedTrade, setSelectedTrade] = useState(null);
@@ -220,6 +242,16 @@ export default function ChartWorkspace() {
 
   useEffect(() => {
     if (!runId) {
+      setLifecycleState("");
+      return;
+    }
+    if (!lifecycleState && run?.status) {
+      setLifecycleState(String(run.status).toUpperCase());
+    }
+  }, [lifecycleState, run?.status, runId]);
+
+  useEffect(() => {
+    if (!runId) {
       return;
     }
     setChatContext((current) =>
@@ -262,13 +294,20 @@ export default function ChartWorkspace() {
     if (!runId) {
       setLiveStatus(null);
       setLiveStatusError(null);
+      setLifecycleState("");
       return undefined;
     }
     let active = true;
     let timerId = null;
+    let inFlight = false;
 
     const poll = async () => {
+      if (!active || inFlight) {
+        return;
+      }
+      inFlight = true;
       const result = await getRunStatus(runId, { bypassCache: true });
+      inFlight = false;
       if (!active) {
         return;
       }
@@ -281,6 +320,9 @@ export default function ChartWorkspace() {
       setLiveStatus(statusPayload);
       setLiveStatusError(null);
       const state = String(statusPayload?.state || "").toUpperCase();
+      if (state) {
+        setLifecycleState(state);
+      }
       if (!TERMINAL_RUN_STATES.has(state)) {
         timerId = setTimeout(poll, 2500);
       }
@@ -289,6 +331,7 @@ export default function ChartWorkspace() {
     poll();
     return () => {
       active = false;
+      inFlight = false;
       if (timerId) {
         clearTimeout(timerId);
       }
@@ -541,7 +584,9 @@ export default function ChartWorkspace() {
   const riskConfigHash = provenance.risk_config_hash || "n/a";
   const runCreatedAt = provenance.run_created_at || run?.created_at || "n/a";
   const stageToken = provenance.stage_token || summary?.stage_token || "n/a";
-  const liveState = String(liveStatus?.state || run?.status || "UNKNOWN").toUpperCase();
+  const liveState = String(
+    liveStatus?.state || lifecycleState || run?.status || "UNKNOWN"
+  ).toUpperCase();
   const livePercent = Number.isFinite(liveStatus?.percent) ? liveStatus.percent : 0;
   const liveLastEvent =
     liveStatus?.last_event && typeof liveStatus.last_event === "object"
@@ -556,6 +601,7 @@ export default function ChartWorkspace() {
   const liveHumanMessage =
     typeof liveEnvelope?.human_message === "string" ? liveEnvelope.human_message : null;
   const liveFailed = liveState === "FAILED" || liveState === "CORRUPTED";
+  const artifactsPending = !artifactsReady;
 
   const updateStrategyParam = (name, value) => {
     setStrategyParams((current) => ({ ...current, [name]: value }));
@@ -694,6 +740,34 @@ export default function ChartWorkspace() {
         </div>
       </header>
 
+      <section className="card fade-up" style={{ marginBottom: "16px" }}>
+        <div className="section-title">
+          <h3>Lifecycle Ribbon</h3>
+          <span className={`badge ${runStateBadgeKind(liveState)}`}>{liveState}</span>
+        </div>
+        <div className="grid two">
+          <div className="kpi">
+            <span>Progress</span>
+            <strong>{livePercent}%</strong>
+          </div>
+          <div className="kpi">
+            <span>Artifact Surfaces</span>
+            <strong>{artifactsPending ? "Locked" : "Ready"}</strong>
+          </div>
+          <div className="kpi">
+            <span>Last Event</span>
+            <strong>{liveLastEvent?.stage || "n/a"}</strong>
+          </div>
+          <div className="kpi">
+            <span>Last Event Time</span>
+            <strong>{liveLastEvent?.timestamp || "n/a"}</strong>
+          </div>
+        </div>
+        <div className="muted" style={{ marginTop: "8px" }}>
+          {lifecycleSummary(liveState)}
+        </div>
+      </section>
+
       {missingRunError && <ErrorNotice error={missingRunError} mode={errorMode} />}
       {demoMode && (
         <div className="banner info">
@@ -799,7 +873,11 @@ export default function ChartWorkspace() {
           <div className="chart-toolbar">
             <label>
               Symbol
-              <select value={symbol} onChange={(event) => setSymbol(event.target.value)}>
+              <select
+                value={symbol}
+                onChange={(event) => setSymbol(event.target.value)}
+                disabled={artifactsPending}
+              >
                 {(Array.isArray(run?.symbols) ? run.symbols : [symbol || ""])
                   .filter(Boolean)
                   .map((item) => (
@@ -814,6 +892,7 @@ export default function ChartWorkspace() {
               <select
                 value={timeframe}
                 onChange={(event) => setTimeframe(event.target.value)}
+                disabled={artifactsPending}
               >
                 {availableTimeframes.map((item) => (
                   <option key={item} value={item}>
@@ -828,6 +907,7 @@ export default function ChartWorkspace() {
                 type="text"
                 placeholder="2026-02-01T00:00:00Z"
                 value={rangeDraft.start_ts}
+                disabled={artifactsPending}
                 onChange={(event) =>
                   setRangeDraft((current) => ({ ...current, start_ts: event.target.value }))
                 }
@@ -839,17 +919,47 @@ export default function ChartWorkspace() {
                 type="text"
                 placeholder="2026-02-02T00:00:00Z"
                 value={rangeDraft.end_ts}
+                disabled={artifactsPending}
                 onChange={(event) =>
                   setRangeDraft((current) => ({ ...current, end_ts: event.target.value }))
                 }
               />
             </label>
-            <button className="secondary" onClick={applyRange}>
+            <button className="secondary" onClick={applyRange} disabled={artifactsPending}>
               Apply Range
             </button>
           </div>
 
-          {ohlcvLoading ? (
+          {artifactsPending ? (
+            <div className="chart-empty" style={{ height: 420 }}>
+              <p>Run is initializing. Chart artifacts load once lifecycle is RUNNING or terminal.</p>
+              <div style={{ display: "grid", gap: "10px", width: "100%", maxWidth: "520px" }}>
+                <div
+                  style={{
+                    height: "12px",
+                    borderRadius: "999px",
+                    background: "rgba(27, 32, 36, 0.12)",
+                  }}
+                />
+                <div
+                  style={{
+                    height: "12px",
+                    width: "88%",
+                    borderRadius: "999px",
+                    background: "rgba(27, 32, 36, 0.1)",
+                  }}
+                />
+                <div
+                  style={{
+                    height: "12px",
+                    width: "72%",
+                    borderRadius: "999px",
+                    background: "rgba(27, 32, 36, 0.08)",
+                  }}
+                />
+              </div>
+            </div>
+          ) : ohlcvLoading ? (
             <div className="chart-empty" style={{ height: 420 }}>
               <p>Loading OHLCV artifacts...</p>
             </div>
@@ -861,13 +971,15 @@ export default function ChartWorkspace() {
             <div>
               <span>Data range:</span>
               <strong>
-                {ohlcv?.start_ts ? ohlcv.start_ts : "n/a"}
-                {" -> "}
-                {ohlcv?.end_ts ? ` ${ohlcv.end_ts}` : ""}
+                {artifactsPending
+                  ? "waiting for lifecycle unlock"
+                  : `${ohlcv?.start_ts ? ohlcv.start_ts : "n/a"} ->${
+                      ohlcv?.end_ts ? ` ${ohlcv.end_ts}` : ""
+                    }`}
               </strong>
             </div>
             <div>
-              <span>Bars:</span> <strong>{ohlcv?.count ?? 0}</strong>
+              <span>Bars:</span> <strong>{artifactsPending ? "n/a" : ohlcv?.count ?? 0}</strong>
             </div>
           </div>
         </section>
@@ -886,6 +998,43 @@ export default function ChartWorkspace() {
           </div>
 
           <div className="tab-content">
+            {artifactsPending ? (
+              <div className="panel-stack">
+                <div className="panel-card">
+                  <h3>Artifacts Initializing</h3>
+                  <p className="muted">
+                    Summary, trades, metrics, timeline, and diagnostics are deferred until the
+                    run lifecycle reaches RUNNING or a terminal state.
+                  </p>
+                  <div style={{ display: "grid", gap: "10px", marginTop: "14px" }}>
+                    <div
+                      style={{
+                        height: "12px",
+                        borderRadius: "999px",
+                        background: "rgba(27, 32, 36, 0.12)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        height: "12px",
+                        width: "90%",
+                        borderRadius: "999px",
+                        background: "rgba(27, 32, 36, 0.1)",
+                      }}
+                    />
+                    <div
+                      style={{
+                        height: "12px",
+                        width: "80%",
+                        borderRadius: "999px",
+                        background: "rgba(27, 32, 36, 0.08)",
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
             {activeTab === "strategy" && (
               <div className="panel-stack">
                 <div className="panel-card">
@@ -1890,6 +2039,8 @@ export default function ChartWorkspace() {
                   )}
                 </div>
               </div>
+            )}
+              </>
             )}
           </div>
         </aside>

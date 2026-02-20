@@ -5,6 +5,7 @@ import ErrorNotice from "../../components/ErrorNotice";
 import {
   createProductRun,
   getDataImports,
+  getRunStatus,
   getStrategies,
   importData,
 } from "../../lib/api";
@@ -14,6 +15,19 @@ const STEP_IMPORT = 1;
 const STEP_STRATEGY = 2;
 const STEP_CONFIGURE = 3;
 const STEP_RUN = 4;
+const INIT_POLL_DELAY_MS = 1200;
+const INIT_RETRY_DELAY_MS = 1800;
+
+const initializationBadgeKind = (state) => {
+  const normalized = String(state || "").toUpperCase();
+  if (normalized === "FAILED" || normalized === "CORRUPTED") {
+    return "invalid";
+  }
+  if (normalized === "RUNNING" || normalized === "COMPLETED" || normalized === "OK") {
+    return "ok";
+  }
+  return "info";
+};
 
 const RISK_LEVEL_OPTIONS = [
   { value: 1, label: "Conservative" },
@@ -235,6 +249,14 @@ export default function RunsNewPage() {
   const [parameterValues, setParameterValues] = useState({});
   const [riskLevel, setRiskLevel] = useState(3);
   const [creatingRun, setCreatingRun] = useState(false);
+  const [createdRunId, setCreatedRunId] = useState("");
+  const [initializingRun, setInitializingRun] = useState(false);
+  const [initializationStatus, setInitializationStatus] = useState({
+    state: "CREATED",
+    percent: 0,
+    lastEvent: null,
+  });
+  const [initializationError, setInitializationError] = useState(null);
 
   const selectedStrategy = useMemo(
     () => strategies.find((strategy) => strategy.id === strategyId) || null,
@@ -305,6 +327,73 @@ export default function RunsNewPage() {
     }
     setParameterValues(defaults);
   }, [selectedStrategy]);
+
+  useEffect(() => {
+    if (!createdRunId || !initializingRun) {
+      return undefined;
+    }
+    let active = true;
+    let timerId = null;
+    let inFlight = false;
+
+    const schedule = (delayMs) => {
+      if (!active) {
+        return;
+      }
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+      timerId = setTimeout(poll, delayMs);
+    };
+
+    const poll = async () => {
+      if (!active || inFlight) {
+        return;
+      }
+      inFlight = true;
+      const result = await getRunStatus(createdRunId, { bypassCache: true });
+      inFlight = false;
+      if (!active) {
+        return;
+      }
+
+      if (!result.ok) {
+        if (!result.status || result.status !== 404) {
+          setInitializationError(
+            mapApiErrorDetails(result, "Waiting for run lifecycle update")
+          );
+        }
+        schedule(INIT_RETRY_DELAY_MS);
+        return;
+      }
+
+      setInitializationError(null);
+      const payload = result.data && typeof result.data === "object" ? result.data : {};
+      const state = String(payload.state || "CREATED").toUpperCase();
+      const percent = Number.isFinite(payload.percent) ? payload.percent : 0;
+      const lastEvent =
+        payload.last_event && typeof payload.last_event === "object"
+          ? payload.last_event
+          : null;
+      setInitializationStatus({ state, percent, lastEvent });
+      if (state !== "CREATED") {
+        setInitializingRun(false);
+        setInfo(`Run created: ${createdRunId}. State is ${state}. Redirecting...`);
+        router.push(`/runs/${createdRunId}`);
+        return;
+      }
+
+      schedule(INIT_POLL_DELAY_MS);
+    };
+
+    poll();
+    return () => {
+      active = false;
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
+  }, [createdRunId, initializingRun, router]);
 
   const canProceedToStrategy = Boolean(datasetId);
   const canProceedToConfigure = canProceedToStrategy && Boolean(strategyId);
@@ -395,6 +484,14 @@ export default function RunsNewPage() {
     }
 
     setCreatingRun(true);
+    setInitializingRun(false);
+    setInitializationError(null);
+    setCreatedRunId("");
+    setInitializationStatus({
+      state: "CREATED",
+      percent: 0,
+      lastEvent: null,
+    });
     setError(null);
     setInfo("Creating run...");
     const result = await createProductRun({
@@ -423,9 +520,11 @@ export default function RunsNewPage() {
       return;
     }
 
+    setCreatingRun(false);
+    setCreatedRunId(runId);
+    setInitializingRun(true);
     setStep(STEP_RUN);
-    setInfo(`Run created: ${runId}. Redirecting...`);
-    router.push(`/runs/${runId}`);
+    setInfo(`Run created: ${runId}. Initializing...`);
   };
 
   const handleDrop = (event) => {
@@ -808,18 +907,54 @@ export default function RunsNewPage() {
                   <span>Risk Level</span>
                   <strong>{riskLevel}</strong>
                 </div>
+                <div className="kpi">
+                  <span>Run ID</span>
+                  <strong>{createdRunId || "pending"}</strong>
+                </div>
               </div>
+              {initializingRun && (
+                <div className="card soft" style={{ marginTop: "14px" }}>
+                  <div className="section-title">
+                    <h3>Run Initializing</h3>
+                    <span className={`badge ${initializationBadgeKind(initializationStatus.state)}`}>
+                      {initializationStatus.state}
+                    </span>
+                  </div>
+                  <div className="grid two">
+                    <div className="kpi">
+                      <span>Progress</span>
+                      <strong>{initializationStatus.percent}%</strong>
+                    </div>
+                    <div className="kpi">
+                      <span>Last Event</span>
+                      <strong>{initializationStatus.lastEvent?.stage || "n/a"}</strong>
+                    </div>
+                  </div>
+                  <div className="muted" style={{ marginTop: "8px" }}>
+                    Waiting for lifecycle transition before opening the workspace.
+                  </div>
+                </div>
+              )}
+              {initializationError && (
+                <div style={{ marginTop: "14px" }}>
+                  <ErrorNotice error={initializationError} compact />
+                </div>
+              )}
               <div style={{ marginTop: "16px", display: "flex", gap: "10px" }}>
                 <button
                   type="button"
                   className="secondary"
                   onClick={() => setStep(STEP_CONFIGURE)}
-                  disabled={creatingRun}
+                  disabled={creatingRun || initializingRun}
                 >
                   Back
                 </button>
-                <button type="button" onClick={handleCreateRun} disabled={creatingRun || !canCreateRun}>
-                  {creatingRun ? "Creating..." : "Create Run"}
+                <button
+                  type="button"
+                  onClick={handleCreateRun}
+                  disabled={creatingRun || initializingRun || !canCreateRun}
+                >
+                  {creatingRun ? "Creating..." : initializingRun ? "Initializing..." : "Create Run"}
                 </button>
               </div>
             </section>

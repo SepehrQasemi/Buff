@@ -15,11 +15,11 @@ if (missing.length) {
     "Fix A (recommended): run `python scripts/verify_phase1.py --with-services --real-smoke`",
     "Fix B: set the variables manually:",
     "PowerShell:",
-    '  $env:API_BASE_URL=\"http://127.0.0.1:8000\"',
-    '  $env:UI_BASE_URL=\"http://127.0.0.1:3000\"',
+    '  $env:API_BASE_URL="http://127.0.0.1:8000"',
+    '  $env:UI_BASE_URL="http://127.0.0.1:3000"',
     "Bash:",
-    '  export API_BASE_URL=\"http://127.0.0.1:8000\"',
-    '  export UI_BASE_URL=\"http://127.0.0.1:3000\"',
+    '  export API_BASE_URL="http://127.0.0.1:8000"',
+    '  export UI_BASE_URL="http://127.0.0.1:3000"',
   ];
   console.error(lines.join("\n"));
   process.exit(2);
