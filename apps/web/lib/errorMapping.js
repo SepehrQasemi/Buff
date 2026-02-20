@@ -1,7 +1,11 @@
 import { API_UNREACHABLE_MESSAGE, extractErrorInfo } from "./errors.js";
 
-const DOCS_FIRST_RUN = "/docs/FIRST_RUN.md#troubleshooting";
-const DOCS_CSV = "/docs/FIRST_RUN.md#csv-requirements";
+const HELP_FIRST_RUN = "/help#first-run/FIRST_RUN.md#troubleshooting";
+const HELP_RUNS_ROOT = "/help#runs-root";
+const HELP_DATASET_MISSING = "/help#dataset-missing/FIRST_RUN.md#csv-requirements";
+const HELP_RUN_STUCK = "/help#run-stuck";
+const HELP_BACKEND_VERIFY = "/help#backend-verify";
+const HELP_LOGS_REPORT = "/help#logs-report";
 
 const ARTIFACT_MISSING = {
   decision_records_missing: "decision_records.jsonl",
@@ -121,7 +125,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: "RUNS_ROOT is not set",
       summary: `Set ${envName} to a writable folder and restart the API.`,
       actions: [`Set ${envName} and restart the API.`],
-      help: { label: "First run guide", href: DOCS_FIRST_RUN },
+      help: { label: "First run checklist", href: HELP_FIRST_RUN },
       }),
       envelope
     );
@@ -140,7 +144,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: "RUNS_ROOT is not ready",
       summary: message || "RUNS_ROOT is missing or not writable.",
       actions: ["Fix RUNS_ROOT permissions or choose another folder.", "Restart the API."],
-      help: { label: "First run guide", href: DOCS_FIRST_RUN },
+      help: { label: "Fix RUNS_ROOT", href: HELP_RUNS_ROOT },
       }),
       envelope
     );
@@ -190,7 +194,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
         "Ensure columns: timestamp, open, high, low, close, volume.",
         "Use 1m data with strictly increasing timestamps.",
       ],
-      help: { label: "CSV requirements", href: DOCS_CSV },
+      help: { label: "Dataset troubleshooting", href: HELP_DATASET_MISSING },
       }),
       envelope
     );
@@ -205,6 +209,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: "CSV source file not found",
       summary: message || "The CSV path could not be resolved on the API host.",
       actions: ["Upload the CSV file or update data_source.path."],
+      help: { label: "Dataset troubleshooting", href: HELP_DATASET_MISSING },
       }),
       envelope
     );
@@ -219,6 +224,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: "Run not found",
       summary: message || "The requested run does not exist.",
       actions: ["Check the run id and RUNS_ROOT.", "Create a new run if needed."],
+      help: { label: "Run stuck troubleshooting", href: HELP_RUN_STUCK },
       }),
       envelope
     );
@@ -233,6 +239,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: "Run artifacts missing",
       summary: message || "Run artifacts are missing or corrupted.",
       actions: ["Recreate the run to regenerate artifacts."],
+      help: { label: "Logs and report bundle", href: HELP_LOGS_REPORT },
       }),
       envelope
     );
@@ -248,6 +255,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: "Artifact missing",
       summary: `${artifact} is missing.`,
       actions: ["Recreate the run or restore the missing artifact."],
+      help: { label: "Logs and report bundle", href: HELP_LOGS_REPORT },
       }),
       envelope
     );
@@ -263,6 +271,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: "Artifact invalid",
       summary: `${artifact} is corrupted or unreadable.`,
       actions: ["Recreate the run to regenerate artifacts."],
+      help: { label: "Logs and report bundle", href: HELP_LOGS_REPORT },
       }),
       envelope
     );
@@ -276,6 +285,7 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: baseTitle,
       summary: baseSummary,
       actions: ["Check the API logs for details."],
+      help: { label: "Logs and report bundle", href: HELP_LOGS_REPORT },
     }),
     envelope
   );
@@ -290,7 +300,7 @@ const mapApiErrorDetails = (result, fallback) => {
       title: "API unreachable",
       summary: result.error || API_UNREACHABLE_MESSAGE,
       actions: ["Start the API and retry the request."],
-      help: { label: "First run guide", href: DOCS_FIRST_RUN },
+      help: { label: "Verify backend health", href: HELP_BACKEND_VERIFY },
       code: "API_UNREACHABLE",
     });
   }
