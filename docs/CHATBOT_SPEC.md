@@ -1,4 +1,4 @@
-# CHATBOT_SPEC ó AI Assistant (Guide + Reviewer)
+Ôªø# CHATBOT_SPEC ‚Äî AI Assistant (Guide + Reviewer)
 
 ## Purpose
 The chatbot helps users:
@@ -95,6 +95,28 @@ Given an error message or validation output:
 - propose specific edits
 - propose commands to re-run validation and tests
 
+## S7 Research Assistant Mode
+Purpose:
+- Provide artifact-grounded research analysis for single-user experiment workflows.
+
+Mode boundaries:
+- Chat is NOT an execution layer.
+- Chat analyzes artifacts only.
+- Chat must not mutate runs, experiments, or runtime state.
+- Chat must preserve deterministic interpretation rules and must not invent missing inputs.
+
+Research inputs:
+- `metrics.json`
+- `trades.jsonl`
+- `timeline.json`
+- experiment metadata and ranking artifacts when present
+
+Research outputs:
+- run-to-run comparison summaries grounded in provided artifacts
+- drawdown and trade-pattern diagnostics with explicit evidence references
+- next-parameter-test suggestions framed as hypotheses, not guarantees
+- uncertainty notices when required artifacts are missing or invalid
+
 ## Non-negotiable Safety Rules
 Chatbot must not:
 - instruct users to disable hard risk caps
@@ -102,9 +124,10 @@ Chatbot must not:
 - recommend live deployment actions
 - circumvent validation gates
 
-## ìExact Stepsî Requirement
-When user asks ìI want to add Xî the chatbot must respond with:
+## ‚ÄúExact Steps‚Äù Requirement
+When user asks ‚ÄúI want to add X‚Äù the chatbot must respond with:
 1) exact files to create
 2) exact fields to fill
 3) exact commands to run
 4) what success looks like in UI
+

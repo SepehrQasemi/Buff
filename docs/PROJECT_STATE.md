@@ -70,7 +70,15 @@ Enforce read-only observability behavior by keeping health endpoints read-only, 
 - Canonical contract authority enforced
 
 ## Next Stage Candidate
-Future Layer - External Integration Layer
+S7_PERSONAL_RESEARCH_ENGINE
+
+## S7 Preview (Candidate)
+- Objective:
+  Extend Buff from a single-run artifact viewer into a personal quant research lab built on deterministic experiment workflows and artifact-backed analysis.
+- Non-goals:
+  No live trading path, no broker integration, no multi-user SaaS scope, and no cloud deployment requirements.
+- Value Target Persona:
+  Solo quant researcher who needs repeatable experiment execution, ranked comparisons, and artifact-grounded insight workflows on local infrastructure.
 
 ## Evidence Note (S6 Stage Flip)
 - Runtime hardening PR: #264 https://github.com/Buff-Trading-AI/Buff/pull/264
