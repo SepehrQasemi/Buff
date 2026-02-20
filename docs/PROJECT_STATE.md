@@ -100,6 +100,15 @@ CI_WORKFLOWS=https://github.com/Buff-Trading-AI/Buff/actions/runs/22183407044; h
 - Runtime evidence: SIM_ONLY invariant preserved; observability surfaces are GET-only; no network execution surface added.
 - Risk note: plugin validation runtime timeout was deliberately increased from 2s to 4s to reduce flakes under load, while keeping fail-closed behavior.
 
+## PRODUCTIZATION STATUS SNAPSHOT (Post S5)
+- Docker named volume default for RUNS_ROOT: not merged on `main` in this snapshot; compose default remains `${RUNS_ROOT_HOST:-./.runs_compose}:/runs`.
+- UI Create Run Wizard is implemented (`/runs/new`: import data -> choose strategy -> configure -> create run).
+- Observability endpoints are present (`/api/v1/observability/registry`, `/api/v1/observability/runs`, `/api/v1/observability/runs/{run_id}`).
+- Report export is functional (`/api/v1/runs/{run_id}/report/export`).
+- UI Journey Runner is implemented (Playwright-based, `apps/web/scripts/user-journey.spec.mjs`).
+- Known issue: historical Windows bind mount flakiness can surface intermittent `RUNS_ROOT_NOT_WRITABLE` 503 responses.
+- Known issue: NumPy/pyarrow ABI warning appears in API container logs; currently non-blocking but tracked.
+
 ## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
 - Run indexing layer
 - Queryable artifact registry
