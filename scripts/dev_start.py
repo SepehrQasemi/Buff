@@ -16,7 +16,6 @@ from _orchestrator import (  # noqa: E402
     is_port_free,
     kill_process_tree,
     pick_free_port,
-    pick_two_free_ports,
     pidfile_path,
     start_process,
     wait_http_200,
@@ -25,6 +24,8 @@ from _orchestrator import (  # noqa: E402
 )
 
 UI_READY_PATH = "/runs/new"
+DEFAULT_UI_PORT = 3000
+DEV_UI_PORT_ENV = "BUFF_DEV_UI_PORT"
 
 
 def _log(message: str) -> None:
@@ -127,15 +128,27 @@ def _select_ports(api_override: int | None, ui_override: int | None) -> tuple[in
     if ui_override is not None and not is_port_free(ui_override):
         raise RuntimeError(f"UI port {ui_override} is already in use.")
 
-    if api_override is None and ui_override is None:
-        return pick_two_free_ports()
-    if api_override is None:
-        return pick_free_port({ui_override}), ui_override
-    if ui_override is None:
-        return api_override, pick_free_port({api_override})
-    if api_override == ui_override:
+    if api_override is not None and ui_override is not None:
+        if api_override == ui_override:
+            raise RuntimeError("API and UI ports must be distinct.")
+        return api_override, ui_override
+
+    if ui_override is not None:
+        api_port = api_override if api_override is not None else pick_free_port({ui_override})
+        if api_port == ui_override:
+            raise RuntimeError("API and UI ports must be distinct.")
+        return api_port, ui_override
+
+    excluded_for_ui = {api_override} if api_override is not None else set()
+    if DEFAULT_UI_PORT not in excluded_for_ui and is_port_free(DEFAULT_UI_PORT):
+        ui_port = DEFAULT_UI_PORT
+    else:
+        ui_port = pick_free_port(excluded_for_ui)
+
+    api_port = api_override if api_override is not None else pick_free_port({ui_port})
+    if api_port == ui_port:
         raise RuntimeError("API and UI ports must be distinct.")
-    return api_override, ui_override
+    return api_port, ui_port
 
 
 def main() -> int:
@@ -189,6 +202,13 @@ def main() -> int:
             return _handle_port_error("UI", ui_port_raw, exc)
         return _fail(f"ERROR: {message}")
 
+    if ui_override is None and ui_port != DEFAULT_UI_PORT:
+        _log(
+            f"UI port {DEFAULT_UI_PORT} unavailable; using UI port {ui_port}. "
+            "Set UI_PORT to override."
+        )
+    _log(f"Using API_PORT={api_port} UI_PORT={ui_port}. Set API_PORT/UI_PORT to override.")
+
     clear_next_dev_lock(repo_root)
 
     reload_api = not args.no_reload and not args.once
@@ -197,6 +217,7 @@ def main() -> int:
     api_env["RUNS_ROOT"] = str(runs_root)
     api_env["DEMO_MODE"] = "0"
     api_env["API_PORT"] = str(api_port)
+    api_env[DEV_UI_PORT_ENV] = str(ui_port)
     api_cmd = [
         sys.executable,
         "-m",
@@ -210,6 +231,7 @@ def main() -> int:
     if reload_api:
         api_cmd.append("--reload")
     _log(f"Starting API on http://127.0.0.1:{api_port} (RUNS_ROOT={runs_root})")
+    _log(f"API CORS dev origins: http://localhost:{ui_port} and http://127.0.0.1:{ui_port}")
     api_proc = start_process(api_cmd, repo_root, api_env, "start_process")
 
     ui_env = os.environ.copy()
