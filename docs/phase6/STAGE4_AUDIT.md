@@ -44,20 +44,16 @@ UI selection lists + diagnostics (artifact-driven)
 
 ## Reproduce Pass/Fail
 1. Create or edit plugin files under `user_indicators/<id>/` or `user_strategies/<id>/`.
-2. Run validation:
-```
-python -m src.plugins.validate --out artifacts/plugin_validation
-```
+2. Run validation using the centralized runbook command.
+   See [Runbook: Phase6 Plugin Validation](../05_RUNBOOK_DEV_WORKFLOW.md#phase6-plugin-validation).
 3. Inspect artifacts:
 ```
 artifacts/plugin_validation/indicator/<id>.json
 artifacts/plugin_validation/strategy/<id>.json
 artifacts/plugin_validation/index.json
 ```
-4. Run tests:
-```
-python -m pytest -q
-```
+4. Run tests using the centralized runbook command.
+   See [Runbook: Phase6 Plugin Test Check](../05_RUNBOOK_DEV_WORKFLOW.md#phase6-plugin-test-check).
 
 ## What Makes a Plugin Visible
 - A plugin is visible only if its validation artifact has `status: "VALID"`.

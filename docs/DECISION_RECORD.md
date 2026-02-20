@@ -134,9 +134,8 @@ Empty string strategy_id is not valid without a strategy reference.
 
 ### CLI migration helper
 
-```
-python -m src.audit.migrate_records --in tests/fixtures/legacy_records --out artifacts/migrated
-```
+Use the centralized migration helper command from the runbook when converting legacy records.
+See [Runbook: Decision Record Migration Helper](./05_RUNBOOK_DEV_WORKFLOW.md#decision-record-migration-helper).
 
 Migration rules (structural only):
 - Add `selection.selected` + `selection.status` based on presence of `selection.strategy_id`.

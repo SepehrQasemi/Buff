@@ -9,6 +9,11 @@ Canonical operational guide for core local run, verification, and recovery flows
 - [One-command Local Run (Compose)](#one-command-local-run-compose)
 - [Export Report Workflow](#export-report-workflow)
 - [Long-Run Harness](#long-run-harness)
+- [Chatbot Operations](#chatbot-operations)
+- [CI Backup Operations](#ci-backup-operations)
+- [Data Pipeline Operations](#data-pipeline-operations)
+- [Replay Operations](#replay-operations)
+- [Phase6 Doc Ops](#phase6-doc-ops)
 - [Troubleshooting Matrix](#troubleshooting-matrix)
 - [Pre-PR Checklist](#pre-pr-checklist)
 - [References](#references)
@@ -116,6 +121,103 @@ python -m src.audit.report_decisions --run-dir runs/longrun_001 --out runs/longr
 Acceptance:
 - `summary.json` exists.
 - Replay verification counters for mismatched/hash_mismatch/errors are all `0`.
+
+## Chatbot Operations
+### Generate Daily Summary
+Use this command to generate `reports/daily_summary.md` from chatbot reporting artifacts (replace `RUN_ID`):
+
+```bash
+python -c "from pathlib import Path; from chatbot import Chatbot, ChatbotConfig; run_id='RUN_ID'; cfg=ChatbotConfig(root_dir=Path('.'), trades_path=Path(f'workspaces/{run_id}/trades.parquet'), selector_trace_path=Path(f'workspaces/{run_id}/selector_trace.json'), risk_timeline_path=Path('reports/risk_timeline.json')); Path('reports/daily_summary.md').write_text(Chatbot(cfg).respond('daily summary'), encoding='utf-8')"
+```
+
+## CI Backup Operations
+### Clouding Connectivity Check
+Archived operator flow for listing Clouding servers:
+
+```bash
+export CLOUDING_APIKEY="..."
+./scripts/clouding_list_servers.sh
+```
+
+### Clouding Power Cycle Check
+Archived operator flow for unarchive/archive power actions:
+
+```bash
+export CLOUDING_APIKEY="..."
+export SERVER_ID="..."
+./scripts/clouding_power.sh unarchive
+./scripts/clouding_power.sh archive
+```
+
+## Data Pipeline Operations
+### Canonical 1m Ingest
+Build canonical deterministic 1m OHLCV artifacts and a quality report:
+
+```bash
+python -m src.data.ingest --symbols BTCUSDT ETHUSDT --since 2024-01-01T00:00:00Z --end 2024-01-03T00:00:00Z --out data --report .tmp_report/data_quality.json
+```
+
+### Fundamental Risk CLI
+Run the offline-first fundamental risk evaluator against fixture snapshots:
+
+```bash
+python -m src.risk_fundamental.cli --rules knowledge/fundamental_risk_rules.yaml --fixture tests/fixtures/fundamental_snapshots.json --at 2026-01-01T00:00:00Z
+```
+
+## Replay Operations
+### Record Decision Payload
+Record canonical decision artifacts and hashes:
+
+```bash
+python -m src.audit.record_decision --input tests/fixtures/decision_payload.json --out artifacts/decisions
+```
+
+### Create Snapshot
+Create snapshot artifacts used by replay:
+
+```bash
+python -m src.audit.make_snapshot --input tests/fixtures/snapshot_payload.json --out artifacts/snapshots
+```
+
+### Replay Decision
+Replay a decision in strict-core mode:
+
+```bash
+python -m src.audit.replay --decision <decision_path.json> --snapshot <snapshot_path.json> --strict
+```
+
+### Decision Record Migration Helper
+Run structural migration for legacy decision records:
+
+```bash
+python -m src.audit.migrate_records --in tests/fixtures/legacy_records --out artifacts/migrated
+```
+
+## Phase6 Doc Ops
+### Stage-5 Demo
+Run the read-only Phase-6 demo with the built-in artifacts pack:
+
+```bash
+./scripts/dev-demo.sh
+```
+
+```powershell
+.\scripts\dev-demo.ps1
+```
+
+### Phase6 Plugin Validation
+Generate plugin validation artifacts:
+
+```bash
+python -m src.plugins.validate --out artifacts/plugin_validation
+```
+
+### Phase6 Plugin Test Check
+Run plugin-focused test checks:
+
+```bash
+python -m pytest -q
+```
 
 ## Troubleshooting Matrix
 | Symptom | Likely Cause | Recovery |
