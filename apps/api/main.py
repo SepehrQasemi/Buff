@@ -67,6 +67,7 @@ from .phase6.registry import (
     migrate_legacy_runs,
     reconcile_registry,
 )
+from .phase6.runs_root_probe import check_runs_root_writable
 from .phase6.run_builder import (
     RunBuilderError,
     create_run,
@@ -367,38 +368,47 @@ def _artifact_digests(run_dir: Path) -> list[dict[str, object]]:
     return files
 
 
+def _default_scoped_runs_root(base_runs_root: Path) -> Path:
+    default_user = (os.getenv(DEFAULT_USER_ENV) or "").strip() or "local-dev"
+    return user_runs_root(base_runs_root, default_user)
+
+
 def _check_runs_root_writable(runs_root: Path) -> tuple[bool, str | None]:
-    probe = runs_root / f".buff_write_check_{os.getpid()}"
-    try:
-        probe.write_text("ok", encoding="utf-8")
-        probe.unlink()
-    except OSError as exc:
-        return False, str(exc)
-    return True, None
+    return check_runs_root_writable(runs_root)
 
 
 def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
-    runs_root = get_runs_root()
-    if runs_root is None:
+    base_runs_root = get_runs_root()
+    if base_runs_root is None:
         return error_response(
             503,
             "RUNS_ROOT_UNSET",
             "RUNS_ROOT is not set",
             {"env": RUNS_ROOT_ENV},
         )
-    if not runs_root.exists():
+    if not base_runs_root.exists():
         return error_response(
             503,
             "RUNS_ROOT_MISSING",
             "RUNS_ROOT does not exist",
-            {"path": str(runs_root)},
+            {"path": str(base_runs_root)},
         )
-    if not runs_root.is_dir():
+    if not base_runs_root.is_dir():
         return error_response(
             503,
             "RUNS_ROOT_INVALID",
             "RUNS_ROOT is not a directory",
-            {"path": str(runs_root)},
+            {"path": str(base_runs_root)},
+        )
+    runs_root = _default_scoped_runs_root(base_runs_root)
+    try:
+        runs_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return error_response(
+            503,
+            "RUNS_ROOT_NOT_WRITABLE",
+            "RUNS_ROOT is not writable",
+            {"path": str(base_runs_root), "error": str(exc)},
         )
     writable, error = _check_runs_root_writable(runs_root)
     if not writable:
@@ -406,14 +416,14 @@ def _runs_root_readiness() -> tuple[Path, dict[str, object]] | JSONResponse:
             503,
             "RUNS_ROOT_NOT_WRITABLE",
             "RUNS_ROOT is not writable",
-            {"path": str(runs_root), "error": error or "permission denied"},
+            {"path": str(base_runs_root), "error": error or "permission denied"},
         )
-    return runs_root, {"status": "ok", "path": str(runs_root), "writable": True}
+    return base_runs_root, {"status": "ok", "path": str(base_runs_root), "writable": True}
 
 
 def _runs_root_readiness_check() -> tuple[dict[str, object], Path | None]:
-    runs_root = get_runs_root()
-    if runs_root is None:
+    base_runs_root = get_runs_root()
+    if base_runs_root is None:
         return (
             {
                 "name": "runs_root",
@@ -424,25 +434,39 @@ def _runs_root_readiness_check() -> tuple[dict[str, object], Path | None]:
             },
             None,
         )
-    if not runs_root.exists():
+    if not base_runs_root.exists():
         return (
             {
                 "name": "runs_root",
                 "ok": False,
                 "code": "RUNS_ROOT_MISSING",
                 "message": "RUNS_ROOT does not exist",
-                "details": {"path": str(runs_root)},
+                "details": {"path": str(base_runs_root)},
             },
             None,
         )
-    if not runs_root.is_dir():
+    if not base_runs_root.is_dir():
         return (
             {
                 "name": "runs_root",
                 "ok": False,
                 "code": "RUNS_ROOT_INVALID",
                 "message": "RUNS_ROOT is not a directory",
-                "details": {"path": str(runs_root)},
+                "details": {"path": str(base_runs_root)},
+            },
+            None,
+        )
+    runs_root = _default_scoped_runs_root(base_runs_root)
+    try:
+        runs_root.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return (
+            {
+                "name": "runs_root",
+                "ok": False,
+                "code": "RUNS_ROOT_NOT_WRITABLE",
+                "message": "RUNS_ROOT is not writable",
+                "details": {"path": str(base_runs_root), "error": str(exc)},
             },
             None,
         )
@@ -454,7 +478,7 @@ def _runs_root_readiness_check() -> tuple[dict[str, object], Path | None]:
                 "ok": False,
                 "code": "RUNS_ROOT_NOT_WRITABLE",
                 "message": "RUNS_ROOT is not writable",
-                "details": {"path": str(runs_root), "error": error or "permission denied"},
+                "details": {"path": str(base_runs_root), "error": error or "permission denied"},
             },
             None,
         )
@@ -464,9 +488,9 @@ def _runs_root_readiness_check() -> tuple[dict[str, object], Path | None]:
             "ok": True,
             "code": "OK",
             "message": "RUNS_ROOT ready",
-            "details": {"path": str(runs_root), "writable": True},
+            "details": {"path": str(base_runs_root), "writable": True},
         },
-        runs_root,
+        base_runs_root,
     )
 
 

@@ -11,7 +11,7 @@ services:
       PYTHONHASHSEED: "0"
       TZ: UTC
     volumes:
-      - ${RUNS_ROOT_HOST:-./.runs_compose}:/runs
+      - runs_data:/runs
     ports:
       - "8000:8000"
     healthcheck:
@@ -40,3 +40,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
+volumes:
+  runs_data:

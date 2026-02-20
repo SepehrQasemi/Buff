@@ -74,6 +74,8 @@ src/buff.egg-info/
 # Local UI/build artifacts
 apps/web/.next/
 apps/web/node_modules/
+playwright-report/
+test-results/
 reports/
 diff.txt
 cached_diff.txt

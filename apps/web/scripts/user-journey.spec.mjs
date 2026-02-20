@@ -19,6 +19,13 @@ const FIXTURE_PATH =
 const FATAL_BANNERS = ["RUNS_ROOT is not ready", "RUNS_ROOT is not writable"];
 const TERMINAL_STATES = new Set(["COMPLETED", "FAILED", "CORRUPTED", "OK"]);
 const MAX_FAILURE_BODY = 500;
+const INFRA_ERROR_CODES = new Set([
+  "RUNS_ROOT_UNSET",
+  "RUNS_ROOT_MISSING",
+  "RUNS_ROOT_INVALID",
+  "RUNS_ROOT_NOT_WRITABLE",
+  "REGISTRY_LOCK_TIMEOUT",
+]);
 
 const nowIso = () => new Date().toISOString();
 const timestampToken = () => nowIso().replace(/[-:.]/g, "").replace(/\.\d{3}Z$/, "Z");
@@ -196,6 +203,89 @@ const ensureDir = async (target) => {
   await fsp.mkdir(target, { recursive: true });
 };
 
+const readJsonFile = async (filePath, fallback) => {
+  try {
+    const payload = await fsp.readFile(filePath, "utf8");
+    return JSON.parse(payload);
+  } catch {
+    return fallback;
+  }
+};
+
+const extractErrorCode = (entry) => {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const bodySnippet = String(entry.body_snippet || "");
+  if (!bodySnippet) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(bodySnippet);
+    const envelopeCode = parsed?.error_envelope?.error_code;
+    if (typeof envelopeCode === "string" && envelopeCode.trim()) {
+      return envelopeCode.trim();
+    }
+    const code = parsed?.code;
+    if (typeof code === "string" && code.trim()) {
+      return code.trim();
+    }
+  } catch {
+    const envelopeMatch = bodySnippet.match(/"error_code"\s*:\s*"([^"]+)"/i);
+    if (envelopeMatch?.[1]) {
+      return envelopeMatch[1].trim();
+    }
+    const codeMatch = bodySnippet.match(/"code"\s*:\s*"([^"]+)"/i);
+    if (codeMatch?.[1]) {
+      return codeMatch[1].trim();
+    }
+  }
+  return null;
+};
+
+const evaluateJourneyGate = async (artifactsDir) => {
+  const reportPath = path.join(artifactsDir, "report.json");
+  const failuresPath = path.join(artifactsDir, "network-failures.json");
+
+  const report = await readJsonFile(reportPath, {});
+  const failedRequests = await readJsonFile(failuresPath, []);
+  const failures = Array.isArray(failedRequests) ? failedRequests : [];
+
+  const consoleErrorCount = Number(report.console_error_count || 0);
+  const failedRequestCount = Number(report.failed_request_count || 0);
+
+  const allCodes = new Set();
+  const infraCodes = new Set();
+  for (const entry of failures) {
+    const code = extractErrorCode(entry);
+    if (!code) {
+      continue;
+    }
+    allCodes.add(code);
+    if (INFRA_ERROR_CODES.has(code)) {
+      infraCodes.add(code);
+    }
+  }
+
+  const shouldFail =
+    consoleErrorCount > 0 || failedRequestCount > 0 || infraCodes.size > 0;
+
+  const failingEndpoints = failures.slice(0, 5).map((entry) => ({
+    method: entry?.method || "UNKNOWN",
+    url: entry?.url || "",
+    status: entry?.status ?? "requestfailed",
+  }));
+
+  return {
+    shouldFail,
+    consoleErrorCount,
+    failedRequestCount,
+    allErrorCodes: Array.from(allCodes).sort(),
+    infraErrorCodes: Array.from(infraCodes).sort(),
+    failingEndpoints,
+  };
+};
+
 const writeReportArtifacts = async (artifactsDir, report) => {
   await ensureDir(artifactsDir);
   const reportPath = path.join(artifactsDir, "report.json");
@@ -278,6 +368,10 @@ const main = async () => {
     });
 
     page.on("requestfailed", (request) => {
+      const failure = request.failure()?.errorText || "request failed";
+      if (failure === "net::ERR_ABORTED") {
+        return;
+      }
       report.failed_requests.push({
         timestamp: nowIso(),
         source: "requestfailed",
@@ -285,7 +379,7 @@ const main = async () => {
         url: request.url(),
         status: null,
         body_snippet: "",
-        failure: request.failure()?.errorText || "request failed",
+        failure,
       });
     });
 
@@ -462,6 +556,46 @@ const main = async () => {
     report.page_error_count = report.page_errors.length;
     report.failed_request_count = report.failed_requests.length;
     await writeReportArtifacts(artifactsDir, report);
+    const gateResult = await evaluateJourneyGate(artifactsDir);
+    if (gateResult.shouldFail) {
+      report.pass = false;
+      if (!report.failing_step) {
+        report.failing_step = "Journey gate validation";
+      }
+      report.error = [
+        `journey gate failed: console_error_count=${gateResult.consoleErrorCount}`,
+        `failed_request_count=${gateResult.failedRequestCount}`,
+        `error_codes=${gateResult.allErrorCodes.join(",") || "none"}`,
+      ].join("; ");
+      await writeReportArtifacts(artifactsDir, report);
+      console.log(summaryLine("journey_gate", "FAIL"));
+      console.log(
+        summaryLine(
+          "journey_gate_counts",
+          `console_error_count=${gateResult.consoleErrorCount}, failed_request_count=${gateResult.failedRequestCount}`
+        )
+      );
+      console.log(
+        summaryLine(
+          "journey_gate_error_codes",
+          gateResult.allErrorCodes.join(",") || "none"
+        )
+      );
+      console.log(
+        summaryLine(
+          "journey_gate_infra_error_codes",
+          gateResult.infraErrorCodes.join(",") || "none"
+        )
+      );
+      for (const endpoint of gateResult.failingEndpoints) {
+        console.log(
+          summaryLine(
+            "journey_gate_endpoint",
+            `${endpoint.method} ${endpoint.url} ${endpoint.status}`
+          )
+        );
+      }
+    }
     if (context) {
       await context.close().catch(() => {});
     }
@@ -476,8 +610,10 @@ const main = async () => {
     console.log(summaryLine("console_error_count", report.console_error_count));
     console.log(summaryLine("failed_request_count", report.failed_request_count));
     console.log(summaryLine("artifacts", artifactsDir));
-    if (!report.pass && report.error) {
-      console.log(summaryLine("error", asTextSnippet(report.error, 1000)));
+    if (!report.pass) {
+      if (report.error) {
+        console.log(summaryLine("error", asTextSnippet(report.error, 1000)));
+      }
       process.exitCode = 1;
     }
   }
