@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import os
 import re
@@ -36,6 +37,57 @@ _CAPABILITIES = ["SIMULATION", "DATA_READONLY"]
 
 RUN_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{2,63}$")
 
+_BUILTIN_STRATEGIES: tuple[dict[str, Any], ...] = (
+    {
+        "id": "hold",
+        "display_name": "Hold Baseline",
+        "description": "Deterministic buy-and-hold baseline simulation.",
+        "param_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": False,
+        },
+        "default_params": {},
+        "tags": ["baseline", "deterministic"],
+    },
+    {
+        "id": "ma_cross",
+        "display_name": "MA Crossover",
+        "description": "Deterministic moving-average crossover simulation.",
+        "param_schema": {
+            "type": "object",
+            "properties": {
+                "fast_period": {"type": "integer", "minimum": 1, "default": 10},
+                "slow_period": {"type": "integer", "minimum": 2, "default": 20},
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+        "default_params": {
+            "fast_period": 10,
+            "slow_period": 20,
+        },
+        "tags": ["trend", "moving-average", "deterministic"],
+    },
+    {
+        "id": "demo_threshold",
+        "display_name": "Threshold Demo",
+        "description": "Deterministic threshold demo strategy for local smoke runs.",
+        "param_schema": {
+            "type": "object",
+            "properties": {
+                "threshold": {"type": "number", "minimum": 0.0, "maximum": 10.0, "default": 0.0}
+            },
+            "required": [],
+            "additionalProperties": False,
+        },
+        "default_params": {"threshold": 0.0},
+        "tags": ["demo", "deterministic"],
+    },
+)
+_BUILTIN_STRATEGY_IDS = {spec["id"] for spec in _BUILTIN_STRATEGIES}
+
 
 @dataclass
 class RunBuilderError(Exception):
@@ -50,6 +102,65 @@ class RunBuilderError(Exception):
             "message": self.message,
             "details": self.details or {},
         }
+
+
+def list_builtin_strategies() -> list[dict[str, Any]]:
+    return [copy.deepcopy(item) for item in _BUILTIN_STRATEGIES]
+
+
+def inspect_csv_path(
+    path: str, *, start_ts: str | None = None, end_ts: str | None = None
+) -> dict[str, Any]:
+    data_source: dict[str, Any] = {"type": "csv", "path": path}
+    if start_ts is not None:
+        data_source["start_ts"] = start_ts
+    if end_ts is not None:
+        data_source["end_ts"] = end_ts
+    df, data_meta = _load_and_validate_csv(data_source)
+    return {
+        "row_count": int(len(df)),
+        "columns": ["timestamp", "open", "high", "low", "close", "volume"],
+        "inferred_time_range": {
+            "start_ts": data_meta.get("start_ts"),
+            "end_ts": data_meta.get("end_ts"),
+        },
+    }
+
+
+def normalize_strategy_request(strategy: dict[str, Any]) -> tuple[str, dict[str, Any]]:
+    strategy_id = str(strategy.get("id") or "").strip()
+    if not strategy_id:
+        raise RunBuilderError("STRATEGY_INVALID", "strategy.id is required", 400)
+    if strategy_id not in _BUILTIN_STRATEGY_IDS:
+        raise RunBuilderError("STRATEGY_INVALID", "strategy.id is invalid", 400)
+
+    params = strategy.get("params")
+    if params is None:
+        params = {}
+    if not isinstance(params, dict):
+        raise RunBuilderError("STRATEGY_INVALID", "strategy.params must be an object", 400)
+
+    params = {str(key): value for key, value in params.items()}
+    if strategy_id == "ma_cross":
+        try:
+            fast = int(params.get("fast_period", 10))
+            slow = int(params.get("slow_period", 20))
+        except (TypeError, ValueError) as exc:
+            raise RunBuilderError("STRATEGY_INVALID", "ma_cross params invalid", 400) from exc
+        if fast <= 0 or slow <= 0 or fast >= slow:
+            raise RunBuilderError("STRATEGY_INVALID", "ma_cross params invalid", 400)
+        return strategy_id, {"fast_period": fast, "slow_period": slow}
+
+    if strategy_id == "demo_threshold":
+        try:
+            threshold = float(params.get("threshold", 0.0))
+        except (TypeError, ValueError) as exc:
+            raise RunBuilderError("STRATEGY_INVALID", "demo_threshold params invalid", 400) from exc
+        if threshold < 0 or threshold > 10:
+            raise RunBuilderError("STRATEGY_INVALID", "demo_threshold params invalid", 400)
+        return strategy_id, {"threshold": threshold}
+
+    return strategy_id, {}
 
 
 def create_run(
@@ -288,39 +399,7 @@ def _normalize_request(payload: dict[str, Any]) -> tuple[dict[str, Any], dict[st
     strategy = payload.get("strategy")
     if not isinstance(strategy, dict):
         raise RunBuilderError("RUN_CONFIG_INVALID", "strategy is required", 400)
-
-    strategy_id = str(strategy.get("id") or "").strip()
-    if not strategy_id:
-        raise RunBuilderError("STRATEGY_INVALID", "strategy.id is required", 400)
-    if strategy_id not in {"hold", "ma_cross", "demo_threshold"}:
-        raise RunBuilderError("STRATEGY_INVALID", "strategy.id is invalid", 400)
-
-    params = strategy.get("params")
-    if params is None:
-        params = {}
-    if not isinstance(params, dict):
-        raise RunBuilderError("STRATEGY_INVALID", "strategy.params must be an object", 400)
-
-    params = {str(key): value for key, value in params.items()}
-    if strategy_id == "ma_cross":
-        try:
-            fast = int(params.get("fast_period", 10))
-            slow = int(params.get("slow_period", 20))
-        except (TypeError, ValueError) as exc:
-            raise RunBuilderError("STRATEGY_INVALID", "ma_cross params invalid", 400) from exc
-        if fast <= 0 or slow <= 0 or fast >= slow:
-            raise RunBuilderError("STRATEGY_INVALID", "ma_cross params invalid", 400)
-        params = {"fast_period": fast, "slow_period": slow}
-    elif strategy_id == "demo_threshold":
-        try:
-            threshold = float(params.get("threshold", 0.0))
-        except (TypeError, ValueError) as exc:
-            raise RunBuilderError("STRATEGY_INVALID", "demo_threshold params invalid", 400) from exc
-        if threshold < 0 or threshold > 10:
-            raise RunBuilderError("STRATEGY_INVALID", "demo_threshold params invalid", 400)
-        params = {"threshold": threshold}
-    else:
-        params = {}
+    strategy_id, params = normalize_strategy_request(strategy)
 
     risk = payload.get("risk")
     if not isinstance(risk, dict):

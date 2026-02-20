@@ -75,6 +75,10 @@ def user_uploads_root(base_runs_root: Path, user_id: str) -> Path:
     return user_root(base_runs_root, user_id) / "inputs"
 
 
+def user_imports_root(base_runs_root: Path, user_id: str) -> Path:
+    return user_root(base_runs_root, user_id) / "imports"
+
+
 def run_dir(base_runs_root: Path, user_id: str, run_id: str) -> Path:
     normalized_run = validate_run_id(run_id)
     return user_runs_root(base_runs_root, user_id) / normalized_run

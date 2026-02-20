@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import uuid
 import zipfile
 from email.parser import BytesParser
@@ -45,12 +46,14 @@ from .artifacts import (
 from .chat import router as chat_router
 from .errors import build_error_envelope, build_error_payload, raise_api_error
 from .plugins import get_validation_summary, list_active_plugins, list_failed_plugins
+from .phase6.canonical import write_canonical_json
 from .phase6.http import error_response
 from .phase6.paths import (
     RUNS_ROOT_ENV,
     get_runs_root,
     is_valid_component,
     is_within_root,
+    user_imports_root,
     user_root,
     user_runs_root,
     user_uploads_root,
@@ -63,7 +66,13 @@ from .phase6.registry import (
     migrate_legacy_runs,
     reconcile_registry,
 )
-from .phase6.run_builder import RunBuilderError, create_run
+from .phase6.run_builder import (
+    RunBuilderError,
+    create_run,
+    inspect_csv_path,
+    list_builtin_strategies,
+    normalize_strategy_request,
+)
 from .security.user_context import UserContext, UserContextError, resolve_user_context
 from .timeutils import coerce_ts_param
 
@@ -73,6 +82,10 @@ DEMO_MODE_ENV = "DEMO_MODE"
 DEFAULT_USER_ENV = "BUFF_DEFAULT_USER"
 API_VERSION = "1"
 STAGE_TOKEN = "S5_EXECUTION_SAFETY_BOUNDARIES"
+DATASET_MAX_BYTES = 10 * 1024 * 1024
+DATASET_ID_PATTERN = re.compile(r"^[a-f0-9]{64}$")
+DATASET_DEFAULT_SYMBOL = "LOCAL"
+DATASET_DEFAULT_TIMEFRAME = "1m"
 
 
 def _kill_switch_enabled() -> bool:
@@ -915,6 +928,79 @@ def ready() -> object:
     return {"status": "ready", "api_version": API_VERSION, "checks": checks}
 
 
+@router.get("/strategies")
+def strategies() -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for strategy in list_builtin_strategies():
+        rows.append(
+            {
+                "id": strategy.get("id"),
+                "display_name": strategy.get("display_name"),
+                "description": strategy.get("description"),
+                "param_schema": strategy.get("param_schema"),
+                "default_params": strategy.get("default_params"),
+                "tags": strategy.get("tags"),
+            }
+        )
+    rows.sort(key=lambda item: str(item.get("id") or ""))
+    return rows
+
+
+@router.get("/data/imports")
+def list_data_imports(request: Request) -> object:
+    scope = _resolve_user_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, base_runs_root, _, _, _ = scope
+    datasets = _list_datasets(base_runs_root, user_ctx.user_id)
+    return {
+        "datasets": datasets,
+        "total": len(datasets),
+        "timestamp": _utc_now_iso(),
+        "stage_token": STAGE_TOKEN,
+    }
+
+
+@router.post("/data/import")
+async def import_data(request: Request) -> JSONResponse:
+    scope = _resolve_user_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, base_runs_root, _, _, _ = scope
+
+    content_type = request.headers.get("content-type", "")
+    if not content_type.lower().startswith("multipart/form-data"):
+        return error_response(
+            400,
+            "RUN_CONFIG_INVALID",
+            "multipart/form-data file upload is required",
+        )
+    try:
+        body = await request.body()
+        parts = _parse_multipart_form(body, content_type)
+    except Exception:
+        return error_response(400, "RUN_CONFIG_INVALID", "Invalid multipart payload")
+
+    file_part = parts.get("file")
+    if not file_part or not isinstance(file_part.get("data"), (bytes, bytearray)):
+        return error_response(400, "RUN_CONFIG_INVALID", "file is required")
+    filename = str(file_part.get("filename") or "dataset.csv")
+
+    try:
+        dataset_id, manifest = _store_dataset_import(
+            base_runs_root=base_runs_root,
+            user_id=user_ctx.user_id,
+            filename=filename,
+            upload_bytes=bytes(file_part["data"]),
+        )
+    except RunBuilderError as exc:
+        return error_response(exc.status_code, exc.code, exc.message, exc.details)
+    except Exception:
+        return error_response(500, "INTERNAL", "Internal error")
+
+    return JSONResponse(status_code=201, content={"dataset_id": dataset_id, "manifest": manifest})
+
+
 @router.get("/runs")
 def list_runs(request: Request) -> object:
     user_ctx = _resolve_user_context(request)
@@ -1259,6 +1345,230 @@ def _store_uploaded_csv(upload_bytes: bytes, uploads_parent: Path) -> str:
     return final_path.relative_to(repo_root).as_posix()
 
 
+def _repo_relative_path(path: Path) -> str:
+    repo_root = Path.cwd().resolve()
+    resolved = path.resolve()
+    if not is_within_root(resolved, repo_root):
+        raise RunBuilderError(
+            "RUN_CONFIG_INVALID",
+            "RUNS_ROOT must be within repo for local imports",
+            400,
+            {"path": str(resolved)},
+        )
+    return resolved.relative_to(repo_root).as_posix()
+
+
+def _ensure_repo_dataset_cache(content_hash: str, upload_bytes: bytes) -> str:
+    repo_root = Path.cwd().resolve()
+    cache_root = (repo_root / ".runs_import_cache").resolve()
+    if not is_within_root(cache_root, repo_root):
+        raise RunBuilderError(
+            "RUN_CONFIG_INVALID",
+            "Import cache path is invalid",
+            400,
+            {"path": str(cache_root)},
+        )
+    cache_root.mkdir(parents=True, exist_ok=True)
+    cached_path = (cache_root / f"{content_hash}.csv").resolve()
+    if not is_within_root(cached_path, cache_root):
+        raise RunBuilderError(
+            "RUN_CONFIG_INVALID",
+            "Import cache path is invalid",
+            400,
+            {"path": str(cached_path)},
+        )
+    if not cached_path.exists():
+        try:
+            cached_path.write_bytes(upload_bytes)
+        except OSError as exc:
+            raise RunBuilderError(
+                "ARTIFACTS_WRITE_FAILED",
+                f"Failed to write import cache: {exc}",
+                500,
+            ) from exc
+    return cached_path.relative_to(repo_root).as_posix()
+
+
+def _dataset_paths(
+    *,
+    base_runs_root: Path,
+    user_id: str,
+    dataset_id: str,
+) -> tuple[Path, Path, Path]:
+    imports_root = user_imports_root(base_runs_root, user_id)
+    dataset_dir = (imports_root / dataset_id).resolve()
+    if not is_within_root(dataset_dir, imports_root.resolve()):
+        raise RunBuilderError("RUN_CONFIG_INVALID", "dataset_id is invalid", 400)
+    dataset_path = (dataset_dir / "dataset.csv").resolve()
+    manifest_path = (dataset_dir / "manifest.json").resolve()
+    return dataset_dir, dataset_path, manifest_path
+
+
+def _normalize_dataset_id(raw: object) -> str:
+    dataset_id = str(raw or "").strip().lower()
+    if not DATASET_ID_PATTERN.match(dataset_id):
+        raise RunBuilderError("RUN_CONFIG_INVALID", "dataset_id is invalid", 400)
+    return dataset_id
+
+
+def _read_dataset_manifest(path: Path) -> dict[str, object]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _list_datasets(base_runs_root: Path, user_id: str) -> list[dict[str, object]]:
+    imports_root = user_imports_root(base_runs_root, user_id)
+    if not imports_root.exists() or not imports_root.is_dir():
+        return []
+
+    manifests: list[dict[str, object]] = []
+    for dataset_dir in sorted(imports_root.iterdir(), key=lambda item: item.name):
+        if not dataset_dir.is_dir():
+            continue
+        manifest = _read_dataset_manifest(dataset_dir / "manifest.json")
+        content_hash = str(manifest.get("content_hash") or "").strip().lower()
+        if not DATASET_ID_PATTERN.match(content_hash):
+            continue
+        manifests.append(manifest)
+    manifests.sort(key=lambda item: str(item.get("content_hash") or ""))
+    return manifests
+
+
+def _store_dataset_import(
+    *,
+    base_runs_root: Path,
+    user_id: str,
+    filename: str,
+    upload_bytes: bytes,
+) -> tuple[str, dict[str, object]]:
+    if not upload_bytes:
+        raise RunBuilderError("DATA_INVALID", "Uploaded CSV is empty", 400)
+    if len(upload_bytes) > DATASET_MAX_BYTES:
+        raise RunBuilderError(
+            "DATA_INVALID",
+            "Uploaded CSV is too large",
+            400,
+            {"max_bytes": DATASET_MAX_BYTES},
+        )
+
+    content_hash = hashlib.sha256(upload_bytes).hexdigest()
+    dataset_dir, dataset_path, manifest_path = _dataset_paths(
+        base_runs_root=base_runs_root,
+        user_id=user_id,
+        dataset_id=content_hash,
+    )
+    dataset_dir.mkdir(parents=True, exist_ok=True)
+    wrote_dataset = False
+    if not dataset_path.exists():
+        dataset_path.write_bytes(upload_bytes)
+        wrote_dataset = True
+
+    try:
+        try:
+            source_path = _repo_relative_path(dataset_path)
+        except RunBuilderError:
+            source_path = _ensure_repo_dataset_cache(content_hash, upload_bytes)
+        inspection = inspect_csv_path(source_path)
+    except Exception:
+        if wrote_dataset:
+            try:
+                dataset_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+
+    inferred = inspection.get("inferred_time_range")
+    inferred_time_range = inferred if isinstance(inferred, dict) else {}
+    manifest: dict[str, object] = {
+        "content_hash": content_hash,
+        "filename": filename or "dataset.csv",
+        "row_count": int(inspection.get("row_count") or 0),
+        "columns": inspection.get("columns") if isinstance(inspection.get("columns"), list) else [],
+        "inferred_time_range": inferred_time_range,
+        "source_path": source_path,
+        "storage_path": str(dataset_path),
+        "imported_at": _utc_now_iso(),
+        "stage_token": STAGE_TOKEN,
+    }
+    write_canonical_json(manifest_path, manifest)
+    return content_hash, manifest
+
+
+def _normalize_product_run_payload(
+    payload: dict[str, object],
+    *,
+    base_runs_root: Path,
+    user_id: str,
+) -> tuple[dict[str, object], str]:
+    dataset_id = _normalize_dataset_id(payload.get("dataset_id"))
+    strategy_id = str(payload.get("strategy_id") or "").strip()
+    params = payload.get("params")
+    if params is None:
+        params = {}
+    risk_level = payload.get("risk_level")
+    try:
+        risk_level_int = int(risk_level)
+    except (TypeError, ValueError) as exc:
+        raise RunBuilderError("RISK_INVALID", "risk_level must be an integer", 400) from exc
+    if risk_level_int < 1 or risk_level_int > 5:
+        raise RunBuilderError("RISK_INVALID", "risk_level must be 1..5", 400)
+
+    _, dataset_path, manifest_path = _dataset_paths(
+        base_runs_root=base_runs_root,
+        user_id=user_id,
+        dataset_id=dataset_id,
+    )
+    manifest = _read_dataset_manifest(manifest_path)
+    if not dataset_path.exists() or not manifest:
+        raise RunBuilderError(
+            "DATA_SOURCE_NOT_FOUND",
+            "dataset_id not found",
+            400,
+            {"dataset_id": dataset_id},
+        )
+
+    source_path = manifest.get("source_path")
+    if not isinstance(source_path, str) or not source_path.strip():
+        try:
+            source_path = _repo_relative_path(dataset_path)
+        except RunBuilderError:
+            source_path = _ensure_repo_dataset_cache(dataset_id, dataset_path.read_bytes())
+
+    strategy_payload = {"id": strategy_id, "params": params}
+    normalized_strategy_id, normalized_params = normalize_strategy_request(strategy_payload)
+    normalized = {
+        "schema_version": "1.0.0",
+        "data_source": {
+            "type": "csv",
+            "path": source_path,
+            "symbol": DATASET_DEFAULT_SYMBOL,
+            "timeframe": DATASET_DEFAULT_TIMEFRAME,
+        },
+        "strategy": {"id": normalized_strategy_id, "params": normalized_params},
+        "risk": {"level": risk_level_int},
+        "costs": {"commission_bps": 0.0, "slippage_bps": 0.0},
+    }
+    return normalized, dataset_id
+
+
+def _status_percent(state: str) -> int:
+    normalized = (state or "").strip().upper()
+    if normalized in {"COMPLETED", "OK", "FAILED", "CORRUPTED"}:
+        return 100
+    if normalized == "RUNNING":
+        return 70
+    if normalized == "VALIDATED":
+        return 35
+    if normalized == "CREATED":
+        return 10
+    return 0
+
+
 @router.post("/runs")
 async def create_run_endpoint(request: Request) -> JSONResponse:
     if _kill_switch_enabled():
@@ -1313,13 +1623,112 @@ async def create_run_endpoint(request: Request) -> JSONResponse:
         except Exception:
             return error_response(400, "RUN_CONFIG_INVALID", "Invalid JSON payload")
 
+    is_product_payload = isinstance(payload, dict) and any(
+        key in payload for key in ("dataset_id", "strategy_id", "risk_level")
+    )
+
     try:
+        if is_product_payload:
+            readiness = _runs_root_readiness()
+            if isinstance(readiness, JSONResponse):
+                return readiness
+            base_runs_root, _ = readiness
+            normalized_payload, _ = _normalize_product_run_payload(
+                payload,
+                base_runs_root=base_runs_root,
+                user_id=user_ctx.user_id,
+            )
+            status_code, response = create_run(normalized_payload, user_id=user_ctx.user_id)
+            run_id = str(response.get("run_id") or "").strip()
+            if not run_id:
+                return error_response(500, "INTERNAL", "Internal error")
+
+            runs_root = user_runs_root(base_runs_root, user_ctx.user_id)
+            run_dir = (runs_root / run_id).resolve()
+            manifest = _load_manifest(run_dir)
+            provenance = _manifest_provenance(
+                run_id,
+                manifest,
+                {
+                    "strategy_id": (normalized_payload.get("strategy") or {}).get("id"),
+                    "risk_level": (normalized_payload.get("risk") or {}).get("level"),
+                    "status": response.get("status"),
+                },
+            )
+            return JSONResponse(
+                status_code=status_code,
+                content={
+                    "run_id": run_id,
+                    "status": response.get("status"),
+                    "provenance": provenance,
+                },
+            )
+
         status_code, response = create_run(payload, user_id=user_ctx.user_id)
         return JSONResponse(status_code=status_code, content=response)
     except RunBuilderError as exc:
         return error_response(exc.status_code, exc.code, exc.message, exc.details)
     except Exception:
         return error_response(500, "INTERNAL", "Internal error")
+
+
+@router.get("/runs/{run_id}/status")
+def run_status(run_id: str, request: Request) -> object:
+    scope = _resolve_user_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, _, owner_root, runs_root, _ = scope
+    if _is_invalid_component(run_id):
+        return _invalid_run_id_response(run_id)
+
+    registry_result = _load_registry_with_lock(owner_root)
+    if isinstance(registry_result, JSONResponse):
+        return registry_result
+    entry = _find_registry_entry(registry_result, run_id)
+    if entry is None:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+
+    owner_user_id = str(entry.get("owner_user_id") or "").strip()
+    if owner_user_id and owner_user_id != user_ctx.user_id:
+        return error_response(404, "RUN_NOT_FOUND", "Run not found", {"run_id": run_id})
+
+    run_dir = (runs_root / run_id).resolve()
+    manifest = _load_manifest(run_dir) if run_dir.exists() and run_dir.is_dir() else {}
+    lifecycle = (
+        manifest.get("status_history") if isinstance(manifest.get("status_history"), list) else []
+    )
+    state = str(entry.get("status") or "UNKNOWN")
+    last_stage = str(lifecycle[-1] if lifecycle else state)
+    last_event: dict[str, object] = {
+        "stage": last_stage,
+        "timestamp": manifest.get("created_at") if isinstance(manifest, dict) else None,
+        "detail": f"status={last_stage}",
+    }
+
+    if run_dir.exists() and run_dir.is_dir():
+        timeline_path = find_timeline_path(run_dir)
+        if timeline_path is not None:
+            try:
+                events = load_timeline(timeline_path)
+            except RuntimeError:
+                events = []
+            if events:
+                tail = events[-1] if isinstance(events[-1], dict) else {}
+                last_event = {
+                    "stage": tail.get("stage") or tail.get("title") or last_stage,
+                    "timestamp": tail.get("timestamp") or manifest.get("created_at"),
+                    "detail": tail.get("detail") or tail.get("title") or f"status={last_stage}",
+                }
+
+    payload: dict[str, object] = {
+        "state": state,
+        "percent": _status_percent(state),
+        "last_event": last_event,
+    }
+    envelope = _error_envelope_for_entry(run_id, entry, manifest)
+    if envelope is not None:
+        payload["error_envelope"] = envelope
+    return payload
 
 
 @router.get("/runs/{run_id}/manifest")
