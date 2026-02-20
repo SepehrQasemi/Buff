@@ -4,6 +4,7 @@ import csv
 import io
 import json
 import os
+import re
 from collections import OrderedDict, deque
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,7 @@ _ERRORS_LIMIT = 2000
 _MALFORMED_SAMPLE_LIMIT = 5
 _OHLCV_REQUIRED_COLUMNS = {"open", "high", "low", "close", "volume"}
 _TIMESTAMP_FIELDS = ("timestamp", "timestamp_utc", "ts_utc", "ts", "time", "date")
+_OHLCV_ARTIFACT_PATTERN = re.compile(r"^ohlcv_(?P<timeframe>[^.]+)\.(?:parquet|jsonl)$")
 
 
 class _LRUCache:
@@ -1084,6 +1086,27 @@ def _has_ohlcv_artifact(run_path: Path) -> bool:
     if (run_path / "ohlcv.jsonl").exists():
         return True
     return False
+
+
+def list_ohlcv_available_timeframes(run_path: Path) -> list[str]:
+    if not run_path.exists() or not run_path.is_dir():
+        return []
+
+    discovered: set[str] = set()
+    for candidate in sorted(run_path.iterdir(), key=lambda item: item.name):
+        if not candidate.is_file():
+            continue
+        name = candidate.name
+        if name in {"ohlcv.parquet", "ohlcv.jsonl"}:
+            discovered.add("1m")
+            continue
+        match = _OHLCV_ARTIFACT_PATTERN.match(name)
+        if match is None:
+            continue
+        timeframe = str(match.group("timeframe") or "").strip()
+        if timeframe:
+            discovered.add(timeframe)
+    return sorted(discovered)
 
 
 def resolve_ohlcv_path(run_path: Path, timeframe: str | None) -> Path | None:

@@ -35,6 +35,7 @@ from .artifacts import (
     load_trade_markers_jsonl,
     load_trades,
     load_trades_jsonl,
+    list_ohlcv_available_timeframes,
     resolve_ohlcv_path,
     resolve_ohlcv_jsonl_path,
     resolve_run_dir,
@@ -827,6 +828,7 @@ def _enrich_summary_with_manifest(
     if isinstance(risk, dict):
         summary["risk"] = risk
 
+    summary["ohlcv_available_timeframes"] = list_ohlcv_available_timeframes(run_path)
     summary.setdefault("run_id", run_id)
     return summary
 
