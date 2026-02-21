@@ -6,6 +6,7 @@ import ErrorNotice from "../../components/ErrorNotice";
 import { createExperiment, getStrategies } from "../../lib/api";
 import { buildClientError, mapApiErrorDetails } from "../../lib/errorMapping";
 import { buildRunParameters, getStrategyParameters } from "../../lib/runConfig";
+import { useToast } from "../../lib/toast";
 
 const EXPERIMENT_SCHEMA_VERSION = "1.0.0";
 const RUN_SCHEMA_VERSION = "1.0.0";
@@ -98,6 +99,7 @@ const buildDefaultParams = (strategy) =>
 
 export default function ExperimentsPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const [strategies, setStrategies] = useState([]);
   const [loadingStrategies, setLoadingStrategies] = useState(true);
   const [error, setError] = useState(null);
@@ -277,6 +279,7 @@ export default function ExperimentsPage() {
         textarea.remove();
       }
       setCopiedRecentId(experimentId);
+      toast({ title: "Copied", message: experimentId, kind: "info" });
       setTimeout(() => setCopiedRecentId(""), 1200);
     } catch {
       setCopiedRecentId("");
@@ -286,6 +289,11 @@ export default function ExperimentsPage() {
   const openExistingExperiment = () => {
     const experimentId = normalizeExperimentIdInput(openExperimentId);
     if (!experimentId) {
+      toast({
+        title: "Experiment id required",
+        message: "Enter an experiment id before opening.",
+        kind: "error",
+      });
       setError(
         buildClientError({
           title: "Experiment id required",
@@ -295,6 +303,11 @@ export default function ExperimentsPage() {
       return;
     }
     if (!isValidExperimentId(experimentId)) {
+      toast({
+        title: "Invalid experiment id",
+        message: "Experiment ids must start with 'exp_'.",
+        kind: "error",
+      });
       setError(
         buildClientError({
           title: "Invalid experiment id",
@@ -409,6 +422,11 @@ export default function ExperimentsPage() {
     const experimentId = normalizeExperimentIdInput(result.data?.experiment_id);
     if (experimentId) {
       addRecentExperiment(experimentId);
+      toast({
+        title: "Experiment submitted",
+        message: experimentId,
+        kind: "success",
+      });
     }
     setError(null);
     setCreatedExperiment(result.data);
