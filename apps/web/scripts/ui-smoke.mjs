@@ -52,6 +52,8 @@ const requestText = async (url) => {
 };
 
 const WORKSPACE_MARKER = 'data-testid="chart-workspace"';
+const APP_SHELL_MARKER = 'data-app-shell="true"';
+const APP_SHELL_NAV_LINKS = ['href="/"', 'href="/runs"', 'href="/experiments"', 'href="/help"'];
 
 const waitForMarker = async (url, marker, timeoutMs = 60000) => {
   const start = Date.now();
@@ -84,13 +86,23 @@ const findRun = (runs) => {
 
 const run = async () => {
   try {
+    const homeHtml = await waitForMarker(buildUrl(uiBase, "/"), APP_SHELL_MARKER);
+    APP_SHELL_NAV_LINKS.forEach((marker) => {
+      if (!homeHtml.includes(marker)) {
+        throw new Error(`Missing app shell nav link marker on home page: ${marker}`);
+      }
+    });
+
     const runs = await requestJson(buildUrl(apiBase, "/runs"));
     const target = findRun(runs);
     if (!target) {
       throw new Error("No runs returned from API");
     }
     const runId = target.id;
-    await waitForMarker(buildUrl(uiBase, `/runs/${runId}`), WORKSPACE_MARKER);
+    const workspaceHtml = await waitForMarker(buildUrl(uiBase, `/runs/${runId}`), WORKSPACE_MARKER);
+    if (!workspaceHtml.includes(APP_SHELL_MARKER)) {
+      throw new Error("App shell marker missing on run workspace page");
+    }
     if (target.artifacts?.trades) {
       const markers = await requestJson(buildUrl(apiBase, `/runs/${runId}/trades/markers`));
       if (!Array.isArray(markers.markers) || markers.markers.length === 0) {

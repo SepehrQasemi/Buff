@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import AppShell from "../components/AppShell";
 import { getDataImports, getObservabilityRuns } from "../lib/api";
 
 export default function Home() {
@@ -32,55 +33,57 @@ export default function Home() {
   }, []);
 
   return (
-    <main>
-      <header>
-        <div className="header-title">
-          <h1>Buff Local UI</h1>
-          <span>Import data, create deterministic runs, inspect artifact-backed results.</span>
-        </div>
-        <Link className="badge info" href="/runs">
-          Open Workspace
-        </Link>
-      </header>
-      <div className="card fade-up">
-        {loading ? (
-          <>
-            <h2>Loading local workspace</h2>
-            <p style={{ color: "var(--muted)", marginTop: "8px" }}>
-              Checking runs and imported datasets.
-            </p>
-          </>
-        ) : runCount === 0 ? (
-          <>
-            <h2>Create Your First Run</h2>
-            <p style={{ color: "var(--muted)", marginTop: "8px" }}>
-              Import a CSV, choose a strategy, and run the local simulator.
-            </p>
-            <div style={{ marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <Link href="/runs/new">
-                <button>Create Your First Run</button>
-              </Link>
-              {datasetCount === 0 && (
+    <AppShell>
+      <main>
+        <header>
+          <div className="header-title">
+            <h1>Buff Local UI</h1>
+            <span>Import data, create deterministic runs, inspect artifact-backed results.</span>
+          </div>
+          <Link className="badge info" href="/runs">
+            Open Workspace
+          </Link>
+        </header>
+        <div className="card fade-up">
+          {loading ? (
+            <>
+              <h2>Loading local workspace</h2>
+              <p style={{ color: "var(--muted)", marginTop: "8px" }}>
+                Checking runs and imported datasets.
+              </p>
+            </>
+          ) : runCount === 0 ? (
+            <>
+              <h2>Create Your First Run</h2>
+              <p style={{ color: "var(--muted)", marginTop: "8px" }}>
+                Import a CSV, choose a strategy, and run the local simulator.
+              </p>
+              <div style={{ marginTop: "16px", display: "flex", gap: "10px", flexWrap: "wrap" }}>
                 <Link href="/runs/new">
-                  <button className="secondary">Import Data</button>
+                  <button>Create Your First Run</button>
                 </Link>
-              )}
-            </div>
-          </>
-        ) : (
-          <>
-            <h2>Open Runs</h2>
-            <p style={{ color: "var(--muted)", marginTop: "8px" }}>
-              Inspect trades, metrics, timeline, and exports from server-generated artifacts.
-            </p>
-            <div style={{ marginTop: "16px" }}>
-              <Link href="/runs">
-                <button>Open Runs</button>
-              </Link>
-            </div>
-          </>
-        )}
-      </div>
-    </main>
+                {datasetCount === 0 && (
+                  <Link href="/runs/new">
+                    <button className="secondary">Import Data</button>
+                  </Link>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <h2>Open Runs</h2>
+              <p style={{ color: "var(--muted)", marginTop: "8px" }}>
+                Inspect trades, metrics, timeline, and exports from server-generated artifacts.
+              </p>
+              <div style={{ marginTop: "16px" }}>
+                <Link href="/runs">
+                  <button>Open Runs</button>
+                </Link>
+              </div>
+            </>
+          )}
+        </div>
+      </main>
+    </AppShell>
   );
 }

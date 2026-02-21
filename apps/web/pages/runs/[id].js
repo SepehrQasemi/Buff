@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
+import AppShell from "../../components/AppShell";
 import CandlestickChart from "../../components/workspace/CandlestickChart";
 import ErrorNotice from "../../components/ErrorNotice";
 import { exportRunReport, getChatModes, getRunStatus, postChat } from "../../lib/api";
@@ -706,7 +707,8 @@ export default function ChartWorkspace() {
   };
 
   return (
-    <main className="workspace-shell" data-testid="chart-workspace">
+    <AppShell fullBleed>
+      <main className="workspace-shell" data-testid="chart-workspace">
       <header className="workspace-header">
         <div>
           <div className="workspace-title">Chart Workspace</div>
@@ -2045,6 +2047,7 @@ export default function ChartWorkspace() {
           </div>
         </aside>
       </div>
-    </main>
+      </main>
+    </AppShell>
   );
 }
