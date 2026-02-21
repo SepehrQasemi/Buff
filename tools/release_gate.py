@@ -344,6 +344,42 @@ def main(argv: list[str] | None = None) -> int:
             ],
         )
 
+        _log("release_gate: s7_experiment_artifact_contract")
+        run_step(
+            "s7_experiment_artifact_contract",
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "tools/test_s7_experiment_artifact_contract.py",
+            ],
+        )
+
+        _log("release_gate: s7_experiment_determinism")
+        run_step(
+            "s7_experiment_determinism",
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "tools/test_s7_experiment_determinism.py",
+            ],
+        )
+
+        _log("release_gate: s7_experiment_fail_closed_partial")
+        run_step(
+            "s7_experiment_fail_closed_partial",
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "tools/test_s7_experiment_fail_closed_partial.py",
+            ],
+        )
+
         if args.with_network_smoke:
             _log("release_gate: mvp_smoke (network)")
             proc = run_step("mvp_smoke", _mvp_smoke_command())
