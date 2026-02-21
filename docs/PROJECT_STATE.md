@@ -107,6 +107,11 @@ CI_WORKFLOWS=https://github.com/Buff-Trading-AI/Buff/actions/runs/22183407044; h
 - Runtime evidence: SIM_ONLY invariant preserved; observability surfaces are GET-only; no network execution surface added.
 - Risk note: plugin validation runtime timeout was deliberately increased from 2s to 4s to reduce flakes under load, while keeping fail-closed behavior.
 
+## S7 Acceptance Evidence
+- S7 runtime experiment surface is merged on `main` in PR #270 at SHA `a44ab2418c8b49873b95ec182beed3596132f2f0`.
+- S7 strict release gate checks are merged on `main` in PR #271 at SHA `27180ca94a54c40d5efa5057a33e912e6c5d8787` (merged at `2026-02-21T11:52:56Z`).
+- Strict release gate on `main` includes `s7_experiment_artifact_contract`, `s7_experiment_determinism`, and `s7_experiment_fail_closed_partial`, and is PASS on `main` SHA `27180ca94a54c40d5efa5057a33e912e6c5d8787`.
+
 ## PRODUCTIZATION STATUS SNAPSHOT (Post S5)
 - Docker named volume default for RUNS_ROOT: not merged on `main` in this snapshot; compose default remains `${RUNS_ROOT_HOST:-./.runs_compose}:/runs`.
 - UI Create Run Wizard is implemented (`/runs/new`: import data -> choose strategy -> configure -> create run).
@@ -138,4 +143,4 @@ CI_WORKFLOWS=https://github.com/Buff-Trading-AI/Buff/actions/runs/22183407044; h
 
 ## Last Verified Commit
 
-558e427c0b0902d8c6dbd9aed532186a3d5f6a4d
+27180ca94a54c40d5efa5057a33e912e6c5d8787
