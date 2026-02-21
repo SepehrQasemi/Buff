@@ -51,6 +51,7 @@ Canonical names below are based on runtime responses in `apps/api/main.py` and c
 | `RUN_NOT_FOUND` | `run_not_found` | `404` | Requested run is absent in registry/filesystem | Refresh run list and choose an existing run id |
 | `artifacts_root_missing` | none | `404` | Demo artifacts root is missing/unavailable | Fix `ARTIFACTS_ROOT` path for demo mode |
 | `RUN_CONFIG_INVALID` | none | `400` | Invalid JSON/multipart payload, path rules, or run config fields | Fix request payload/CSV settings and retry |
+| `EXPERIMENT_CANDIDATES_LIMIT_EXCEEDED` | none | `400` | `POST /api/v1/experiments` request includes more candidates than allowed | Reduce candidate count to the documented maximum and retry |
 | `DATA_INVALID` | none | `400` | CSV/data validation failed (timestamps, columns, numeric rules, gaps) | Correct CSV format/content and retry run creation |
 | `STRATEGY_INVALID` | none | `400` | Unknown/invalid strategy configuration | Choose a validated strategy id/params |
 | `RUN_EXISTS` | none | `409` | Same explicit `run_id` already exists with different inputs | Use canonical deterministic id or choose a unique run id |
@@ -73,6 +74,7 @@ Canonical names below are based on runtime responses in `apps/api/main.py` and c
 | `chat_mode_invalid` | none | `400` | Unsupported chat mode requested | Select one of the advertised chat modes |
 | `validation_error` | none | `422` | Request validation failed before handler logic | Correct request shape/path/query fields |
 | `http_error` | none | endpoint-dependent | Wrapped framework HTTP exception fallback | Use HTTP status + code for user guidance and retry/fix flow |
+| `EXPERIMENT_LOCK_TIMEOUT` | none | `503` | `POST /api/v1/experiments` cannot acquire per-experiment lock before timeout | Retry after a short delay; avoid concurrent duplicate submissions |
 | `REGISTRY_LOCK_TIMEOUT` | none | `503` | Registry lock could not be obtained | Retry after short delay |
 | `REGISTRY_WRITE_FAILED` | none | `500` | Registry reconciliation/write failure | Check service logs and storage health before retry |
 
