@@ -28,6 +28,8 @@ _RECOVERY_HINTS = {
     "RUN_NOT_FOUND": "Verify the run_id and ensure it exists under RUNS_ROOT.",
     "RUN_CORRUPTED": "Recreate the run to regenerate missing artifacts.",
     "RUN_CONFIG_INVALID": "Fix the run request payload and retry.",
+    "EXPERIMENT_CANDIDATES_LIMIT_EXCEEDED": "Reduce candidates to the allowed maximum and retry.",
+    "EXPERIMENT_LOCK_TIMEOUT": "Retry after the experiment lock is released.",
     "RUN_ID_INVALID": "Use a valid run id with letters, numbers, underscores, or hyphens.",
     "REGISTRY_LOCK_TIMEOUT": "Retry after the registry lock is released.",
     "REGISTRY_WRITE_FAILED": "Inspect registry/index.json and retry.",

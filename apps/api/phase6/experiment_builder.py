@@ -4,12 +4,17 @@ import copy
 import json
 import os
 import shutil
+import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .canonical import to_canonical_bytes, write_canonical_json
-from .experiment_contract import ExperimentContractError, normalize_experiment_request
+from .canonical import to_canonical_bytes
+from .experiment_contract import (
+    ExperimentContractError,
+    normalize_experiment_request,
+)
 from .paths import (
     RUNS_ROOT_ENV,
     get_runs_root,
@@ -25,6 +30,9 @@ from .runs_root_probe import check_runs_root_writable
 _EXECUTION_MODE = "SIM_ONLY"
 _CAPABILITIES = ["SIMULATION", "DATA_READONLY"]
 _EXPERIMENT_STATUS = {"COMPLETED", "PARTIAL", "FAILED"}
+_EXPERIMENT_LOCK_TIMEOUT_SECONDS = 0.2
+_EXPERIMENT_LOCK_TTL_SECONDS = 30.0
+_EXPERIMENT_LOCK_POLL_SECONDS = 0.02
 
 
 @dataclass
@@ -40,6 +48,86 @@ class ExperimentBuilderError(Exception):
             "message": self.message,
             "details": self.details or {},
         }
+
+
+@dataclass
+class ExperimentLock:
+    path: Path
+    timeout_seconds: float = _EXPERIMENT_LOCK_TIMEOUT_SECONDS
+    ttl_seconds: float = _EXPERIMENT_LOCK_TTL_SECONDS
+    poll_seconds: float = _EXPERIMENT_LOCK_POLL_SECONDS
+    _acquired: bool = False
+
+    def acquire(self) -> bool:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        deadline = time.monotonic() + max(self.timeout_seconds, 0.0)
+        while True:
+            if self._try_acquire():
+                self._acquired = True
+                return True
+
+            if _lock_is_stale(self.path, self.ttl_seconds):
+                try:
+                    self.path.unlink()
+                except FileNotFoundError:
+                    pass
+                except OSError:
+                    pass
+                continue
+
+            if time.monotonic() >= deadline:
+                return False
+            time.sleep(max(self.poll_seconds, 0.001))
+
+    def _try_acquire(self) -> bool:
+        payload = {
+            "pid": os.getpid(),
+            "acquired_at_unix": time.time(),
+            "ttl_seconds": self.ttl_seconds,
+        }
+        data = json.dumps(payload, sort_keys=True).encode("utf-8") + b"\n"
+        try:
+            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            return False
+        except OSError:
+            return False
+
+        try:
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                try:
+                    os.fsync(handle.fileno())
+                except OSError:
+                    pass
+            _fsync_dir(self.path.parent)
+        except Exception:
+            try:
+                self.path.unlink()
+            except OSError:
+                pass
+            raise
+        return True
+
+    def release(self) -> None:
+        if not self._acquired:
+            return
+        self._acquired = False
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            pass
+
+    def __enter__(self) -> "ExperimentLock":
+        if not self.acquire():
+            raise TimeoutError("EXPERIMENT_LOCK_TIMEOUT")
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.release()
 
 
 def create_experiment(
@@ -82,146 +170,160 @@ def create_experiment(
             {"experiment_id": experiment_id},
         )
 
-    existing_manifest = _load_existing_manifest(experiment_dir)
-    if existing_manifest is not None:
-        existing_digest = str(existing_manifest.get("experiment_digest") or "")
-        if existing_digest == experiment_digest:
-            status = _normalize_status(existing_manifest.get("status"))
-            return 200, _success_response(
+    lock = _experiment_lock(experiments_root, experiment_id)
+    try:
+        with lock:
+            existing_manifest = _load_existing_manifest(experiment_dir)
+            if existing_manifest is not None:
+                existing_digest = str(existing_manifest.get("experiment_digest") or "")
+                if existing_digest == experiment_digest:
+                    status = _normalize_status(existing_manifest.get("status"))
+                    return 200, _success_response(
+                        experiment_id=experiment_id,
+                        experiment_digest=experiment_digest,
+                        status=status,
+                        total_candidates=len(normalized["candidates"]),
+                        succeeded=len(
+                            [
+                                item
+                                for item in existing_manifest.get("candidates", [])
+                                if isinstance(item, dict) and item.get("status") == "COMPLETED"
+                            ]
+                        ),
+                        failed=len(
+                            [
+                                item
+                                for item in existing_manifest.get("candidates", [])
+                                if isinstance(item, dict) and item.get("status") == "FAILED"
+                            ]
+                        ),
+                    )
+                raise ExperimentBuilderError(
+                    "EXPERIMENT_EXISTS",
+                    "experiment_id already exists",
+                    409,
+                    {"experiment_id": experiment_id},
+                )
+
+            candidate_results: list[dict[str, Any]] = []
+            comparison_rows: list[dict[str, Any]] = []
+            for index, candidate in enumerate(normalized["candidates"]):
+                candidate_id = str(candidate.get("candidate_id") or f"cand_{index + 1:03d}")
+                run_config = candidate.get("run_config")
+                if not isinstance(run_config, dict):
+                    raise ExperimentBuilderError(
+                        "EXPERIMENT_CONFIG_INVALID",
+                        "candidate.run_config must be an object",
+                        400,
+                        {"candidate_index": index, "candidate_id": candidate_id},
+                    )
+
+                result: dict[str, Any] = {
+                    "candidate_index": index,
+                    "candidate_id": candidate_id,
+                    "status": "FAILED",
+                    "run_id": None,
+                }
+                label = candidate.get("label")
+                if isinstance(label, str) and label.strip():
+                    result["label"] = label.strip()
+
+                try:
+                    status_code, run_response = create_run(
+                        copy.deepcopy(run_config), user_id=owner_user_id
+                    )
+                    run_id = str(run_response.get("run_id") or "").strip()
+                    if not run_id:
+                        raise ExperimentBuilderError(
+                            "RUN_WRITE_FAILED",
+                            "Run creation returned empty run_id",
+                            500,
+                            {"candidate_index": index, "candidate_id": candidate_id},
+                        )
+                    run_status = _normalize_status(run_response.get("status"))
+                    metrics_payload = _load_run_metrics(runs_root, run_id)
+                    comparison_rows.append(
+                        _build_comparison_row(
+                            candidate_id=candidate_id,
+                            candidate_index=index,
+                            run_id=run_id,
+                            run_status=run_status,
+                            metrics_payload=metrics_payload,
+                        )
+                    )
+                    result.update(
+                        {
+                            "status": "COMPLETED",
+                            "run_id": run_id,
+                            "run_status": run_status,
+                            "run_status_code": status_code,
+                            "inputs_hash": run_response.get("inputs_hash"),
+                        }
+                    )
+                except (RunBuilderError, ExperimentBuilderError) as exc:
+                    result["status"] = "FAILED"
+                    result["error"] = exc.to_payload()
+                except Exception:
+                    result["status"] = "FAILED"
+                    result["error"] = {
+                        "code": "INTERNAL",
+                        "message": "Internal error",
+                        "details": {"candidate_index": index, "candidate_id": candidate_id},
+                    }
+                candidate_results.append(result)
+
+            succeeded = len(
+                [item for item in candidate_results if item.get("status") == "COMPLETED"]
+            )
+            failed = len(candidate_results) - succeeded
+            if failed == 0:
+                overall_status = "COMPLETED"
+            elif succeeded == 0:
+                overall_status = "FAILED"
+            else:
+                overall_status = "PARTIAL"
+
+            experiment_manifest = _build_manifest(
+                owner_user_id=owner_user_id,
                 experiment_id=experiment_id,
                 experiment_digest=experiment_digest,
-                status=status,
-                total_candidates=len(normalized["candidates"]),
-                succeeded=len(
-                    [
-                        item
-                        for item in existing_manifest.get("candidates", [])
-                        if isinstance(item, dict) and item.get("status") == "COMPLETED"
-                    ]
-                ),
-                failed=len(
-                    [
-                        item
-                        for item in existing_manifest.get("candidates", [])
-                        if isinstance(item, dict) and item.get("status") == "FAILED"
-                    ]
-                ),
+                normalized=normalized,
+                candidate_results=candidate_results,
+                overall_status=overall_status,
+                succeeded=succeeded,
+                failed=failed,
             )
+            comparison_summary = _build_comparison_summary(
+                experiment_id=experiment_id,
+                experiment_digest=experiment_digest,
+                overall_status=overall_status,
+                total_candidates=len(candidate_results),
+                succeeded=succeeded,
+                failed=failed,
+                rows=comparison_rows,
+            )
+            _write_experiment_artifacts(
+                experiments_root=experiments_root,
+                experiment_dir=experiment_dir,
+                experiment_manifest=experiment_manifest,
+                comparison_summary=comparison_summary,
+            )
+
+            return 201, _success_response(
+                experiment_id=experiment_id,
+                experiment_digest=experiment_digest,
+                status=overall_status,
+                total_candidates=len(candidate_results),
+                succeeded=succeeded,
+                failed=failed,
+            )
+    except TimeoutError as exc:
         raise ExperimentBuilderError(
-            "EXPERIMENT_EXISTS",
-            "experiment_id already exists",
-            409,
+            "EXPERIMENT_LOCK_TIMEOUT",
+            "Experiment lock timeout",
+            503,
             {"experiment_id": experiment_id},
-        )
-
-    candidate_results: list[dict[str, Any]] = []
-    comparison_rows: list[dict[str, Any]] = []
-    for index, candidate in enumerate(normalized["candidates"]):
-        candidate_id = str(candidate.get("candidate_id") or f"cand_{index + 1:03d}")
-        run_config = candidate.get("run_config")
-        if not isinstance(run_config, dict):
-            raise ExperimentBuilderError(
-                "EXPERIMENT_CONFIG_INVALID",
-                "candidate.run_config must be an object",
-                400,
-                {"candidate_index": index, "candidate_id": candidate_id},
-            )
-
-        result: dict[str, Any] = {
-            "candidate_index": index,
-            "candidate_id": candidate_id,
-            "status": "FAILED",
-            "run_id": None,
-        }
-        label = candidate.get("label")
-        if isinstance(label, str) and label.strip():
-            result["label"] = label.strip()
-
-        try:
-            status_code, run_response = create_run(copy.deepcopy(run_config), user_id=owner_user_id)
-            run_id = str(run_response.get("run_id") or "").strip()
-            if not run_id:
-                raise ExperimentBuilderError(
-                    "RUN_WRITE_FAILED",
-                    "Run creation returned empty run_id",
-                    500,
-                    {"candidate_index": index, "candidate_id": candidate_id},
-                )
-            run_status = _normalize_status(run_response.get("status"))
-            metrics_payload = _load_run_metrics(runs_root, run_id)
-            comparison_rows.append(
-                _build_comparison_row(
-                    candidate_id=candidate_id,
-                    candidate_index=index,
-                    run_id=run_id,
-                    run_status=run_status,
-                    metrics_payload=metrics_payload,
-                )
-            )
-            result.update(
-                {
-                    "status": "COMPLETED",
-                    "run_id": run_id,
-                    "run_status": run_status,
-                    "run_status_code": status_code,
-                    "inputs_hash": run_response.get("inputs_hash"),
-                }
-            )
-        except (RunBuilderError, ExperimentBuilderError) as exc:
-            result["status"] = "FAILED"
-            result["error"] = exc.to_payload()
-        except Exception:
-            result["status"] = "FAILED"
-            result["error"] = {
-                "code": "INTERNAL",
-                "message": "Internal error",
-                "details": {"candidate_index": index, "candidate_id": candidate_id},
-            }
-        candidate_results.append(result)
-
-    succeeded = len([item for item in candidate_results if item.get("status") == "COMPLETED"])
-    failed = len(candidate_results) - succeeded
-    if failed == 0:
-        overall_status = "COMPLETED"
-    elif succeeded == 0:
-        overall_status = "FAILED"
-    else:
-        overall_status = "PARTIAL"
-
-    experiment_manifest = _build_manifest(
-        owner_user_id=owner_user_id,
-        experiment_id=experiment_id,
-        experiment_digest=experiment_digest,
-        normalized=normalized,
-        candidate_results=candidate_results,
-        overall_status=overall_status,
-        succeeded=succeeded,
-        failed=failed,
-    )
-    comparison_summary = _build_comparison_summary(
-        experiment_id=experiment_id,
-        experiment_digest=experiment_digest,
-        overall_status=overall_status,
-        total_candidates=len(candidate_results),
-        succeeded=succeeded,
-        failed=failed,
-        rows=comparison_rows,
-    )
-    _write_experiment_artifacts(
-        experiments_root=experiments_root,
-        experiment_dir=experiment_dir,
-        experiment_manifest=experiment_manifest,
-        comparison_summary=comparison_summary,
-    )
-
-    return 201, _success_response(
-        experiment_id=experiment_id,
-        experiment_digest=experiment_digest,
-        status=overall_status,
-        total_candidates=len(candidate_results),
-        succeeded=succeeded,
-        failed=failed,
-    )
+        ) from exc
 
 
 def _resolve_runs_root() -> Path:
@@ -446,6 +548,81 @@ def _build_comparison_summary(
     }
 
 
+def _experiment_lock(experiments_root: Path, experiment_id: str) -> ExperimentLock:
+    lock_path = experiments_root / ".locks" / f"{experiment_id}.lock"
+    return ExperimentLock(
+        path=lock_path,
+        timeout_seconds=_EXPERIMENT_LOCK_TIMEOUT_SECONDS,
+        ttl_seconds=_EXPERIMENT_LOCK_TTL_SECONDS,
+        poll_seconds=_EXPERIMENT_LOCK_POLL_SECONDS,
+    )
+
+
+def _lock_is_stale(lock_path: Path, ttl_seconds: float) -> bool:
+    try:
+        stats = lock_path.stat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+
+    now = time.time()
+    age_seconds = now - stats.st_mtime
+    if age_seconds > ttl_seconds:
+        return True
+
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if not isinstance(payload, dict):
+        return False
+    acquired_at = payload.get("acquired_at_unix")
+    ttl_value = payload.get("ttl_seconds")
+    try:
+        acquired_at_f = float(acquired_at)
+        ttl_f = float(ttl_value)
+    except (TypeError, ValueError):
+        return False
+    return now > (acquired_at_f + ttl_f)
+
+
+def _fsync_dir(path: Path) -> None:
+    try:
+        fd = os.open(str(path), os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def write_json_atomic(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_name = f".{path.name}.tmp-{os.getpid()}-{uuid.uuid4().hex}"
+    tmp_path = path.parent / tmp_name
+    data = to_canonical_bytes(payload) + b"\n"
+    try:
+        with tmp_path.open("wb") as handle:
+            handle.write(data)
+            handle.flush()
+            try:
+                os.fsync(handle.fileno())
+            except OSError:
+                pass
+        os.replace(tmp_path, path)
+        _fsync_dir(path.parent)
+    except OSError as exc:
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
+        raise ExperimentBuilderError("RUN_WRITE_FAILED", str(exc), 500) from exc
+
+
 def _write_experiment_artifacts(
     *,
     experiments_root: Path,
@@ -457,9 +634,10 @@ def _write_experiment_artifacts(
     _cleanup_temp_dir(temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)
     try:
-        write_canonical_json(temp_dir / "experiment_manifest.json", experiment_manifest)
-        write_canonical_json(temp_dir / "comparison_summary.json", comparison_summary)
+        write_json_atomic(temp_dir / "experiment_manifest.json", experiment_manifest)
+        write_json_atomic(temp_dir / "comparison_summary.json", comparison_summary)
         os.replace(temp_dir, experiment_dir)
+        _fsync_dir(experiment_dir.parent)
     except OSError as exc:
         _cleanup_temp_dir(temp_dir)
         raise ExperimentBuilderError("RUN_WRITE_FAILED", str(exc), 500) from exc

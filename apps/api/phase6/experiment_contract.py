@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 EXPERIMENT_SCHEMA_VERSION = "1.0.0"
+MAX_EXPERIMENT_CANDIDATES = 20
 
 EXPERIMENT_REQUEST_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -17,6 +18,7 @@ EXPERIMENT_REQUEST_SCHEMA: dict[str, Any] = {
         "candidates": {
             "type": "array",
             "minItems": 1,
+            "maxItems": MAX_EXPERIMENT_CANDIDATES,
             "items": {
                 "type": "object",
                 "required": ["run_config"],
@@ -79,6 +81,16 @@ def normalize_experiment_request(payload: dict[str, Any]) -> dict[str, Any]:
             "EXPERIMENT_CONFIG_INVALID",
             "candidates must be a non-empty array",
             400,
+        )
+    if len(raw_candidates) > MAX_EXPERIMENT_CANDIDATES:
+        raise ExperimentContractError(
+            "EXPERIMENT_CANDIDATES_LIMIT_EXCEEDED",
+            "candidates exceeds maximum allowed",
+            400,
+            {
+                "requested_count": len(raw_candidates),
+                "max_allowed": MAX_EXPERIMENT_CANDIDATES,
+            },
         )
 
     normalized_candidates: list[dict[str, Any]] = []
