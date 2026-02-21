@@ -7,9 +7,10 @@ export default function ErrorNotice({ error, onRetry, compact = false, mode = "s
     return null;
   }
 
-  const { title, summary, actions, help, status, code, envelope } = normalized;
+  const { title, summary, actions, help, status, code, envelope, recovery } = normalized;
   const showFix = (actions && actions.length > 0) || help;
-  const showEnvelope = mode === "pro" && envelope && typeof envelope === "object";
+  const showEnvelope =
+    (mode === "simple" || mode === "pro") && envelope && typeof envelope === "object";
 
   return (
     <div
@@ -20,9 +21,21 @@ export default function ErrorNotice({ error, onRetry, compact = false, mode = "s
         padding: compact ? "12px" : undefined,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "12px" }}>
-        <div>
-          <strong>{title || "Request failed"}</strong>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "flex-start",
+          gap: "12px",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "grid", gap: compact ? "4px" : "6px" }}>
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+            <strong>{title || "Request failed"}</strong>
+            {status && <span className="badge info">{`HTTP ${status}`}</span>}
+            {code && <span className="badge info">{code}</span>}
+          </div>
           {summary && <div className="muted">{summary}</div>}
         </div>
         {onRetry && (
@@ -46,11 +59,10 @@ export default function ErrorNotice({ error, onRetry, compact = false, mode = "s
         </div>
       )}
 
-      {(status || code) && (
-        <div className="muted">
-          {code ? `Code: ${code}` : ""}
-          {code && status ? " | " : ""}
-          {status ? `HTTP ${status}` : ""}
+      {recovery && (
+        <div style={{ display: "grid", gap: "4px" }}>
+          <div className="muted">Recovery</div>
+          <div>{recovery}</div>
         </div>
       )}
 

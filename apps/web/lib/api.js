@@ -1,6 +1,7 @@
 const DEFAULT_API_BASE = "http://127.0.0.1:8000";
 const API_VERSION_PATH = "/api/v1";
 const CACHE_MAX_ENTRIES = 50;
+const DEFAULT_BUFF_USER = "phase1_smoke_user";
 
 class LruCache {
   constructor(maxEntries) {
@@ -110,6 +111,38 @@ const buildCacheKey = (path, params) => {
   return `${API_BASE}${normalizedPath}${query ? `?${query}` : ""}`;
 };
 
+const normalizeUserValue = (value) => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const trimmed = value.trim();
+  return trimmed || null;
+};
+
+const resolveBuffUser = () => {
+  if (typeof window !== "undefined") {
+    const runtimeUser = normalizeUserValue(window.__RUNTIME_CONFIG__?.BUFF_USER);
+    if (runtimeUser) {
+      return runtimeUser;
+    }
+    const legacyRuntimeUser = normalizeUserValue(window.__BUFF_USER__);
+    if (legacyRuntimeUser) {
+      return legacyRuntimeUser;
+    }
+  }
+  return (
+    normalizeUserValue(process.env.UI_SMOKE_USER) ||
+    normalizeUserValue(process.env.BUFF_USER) ||
+    normalizeUserValue(process.env.NEXT_PUBLIC_BUFF_USER) ||
+    DEFAULT_BUFF_USER
+  );
+};
+
+const withUserHeader = (headers = {}) => ({
+  ...(headers || {}),
+  "X-Buff-User": resolveBuffUser(),
+});
+
 export const invalidateCache = ({ runId, prefixes } = {}) => {
   const needles = [];
   if (runId) {
@@ -182,6 +215,56 @@ const parseContentDispositionFilename = (value) => {
   return match[1];
 };
 
+const extractCanonicalErrorInfo = (payload) => {
+  if (!payload || typeof payload !== "object") {
+    return { code: null, message: null, details: null, envelope: null };
+  }
+
+  const envelope =
+    payload.error_envelope ||
+    payload.error?.envelope ||
+    payload.error?.error_envelope ||
+    payload.detail?.error_envelope ||
+    payload.details?.error_envelope ||
+    payload.error?.details?.error_envelope ||
+    null;
+
+  if (payload.error && typeof payload.error === "object") {
+    return {
+      code: payload.error.code || null,
+      message: payload.error.message || null,
+      details: payload.error.details || null,
+      envelope,
+    };
+  }
+
+  if (payload.detail && typeof payload.detail === "object") {
+    return {
+      code: payload.detail.code || null,
+      message: payload.detail.message || null,
+      details: payload.detail.details || null,
+      envelope,
+    };
+  }
+
+  return {
+    code: payload.code || null,
+    message: payload.message || null,
+    details: payload.details || null,
+    envelope,
+  };
+};
+
+const withCanonicalErrorInfo = (result) => {
+  if (!result || result.ok || !result.status) {
+    return result;
+  }
+  return {
+    ...result,
+    ...extractCanonicalErrorInfo(result.data),
+  };
+};
+
 export const buildApiUrl = (path, params) => {
   const normalizedPath = String(path || "").replace(/^\/+/, "");
   const url = new URL(normalizedPath, API_BASE);
@@ -193,7 +276,7 @@ export const buildApiUrl = (path, params) => {
 };
 
 const request = async (path, params, options = {}) => {
-  const { signal, cache = false, bypassCache = false } = options;
+  const { signal, cache = false, bypassCache = false, headers } = options;
   const cacheKey = cache ? buildCacheKey(path, params) : null;
 
   if (cache && !bypassCache && cacheKey) {
@@ -206,7 +289,7 @@ const request = async (path, params, options = {}) => {
   const url = buildApiUrl(path, params);
 
   try {
-    const response = await fetch(url, { signal });
+    const response = await fetch(url, { signal, headers });
     const { data, isJson } = await parseResponseData(response);
 
     if (!response.ok) {
@@ -230,12 +313,16 @@ const request = async (path, params, options = {}) => {
   }
 };
 
-const post = async (path, payload) => {
+const post = async (path, payload, options = {}) => {
+  const { headers } = options;
   const url = buildApiUrl(path);
   try {
     const response = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(headers || {}),
+      },
       body: JSON.stringify(payload || {}),
     });
     const { data } = await parseResponseData(response);
@@ -253,11 +340,13 @@ const post = async (path, payload) => {
   }
 };
 
-const postForm = async (path, formData) => {
+const postForm = async (path, formData, options = {}) => {
+  const { headers } = options;
   const url = buildApiUrl(path);
   try {
     const response = await fetch(url, {
       method: "POST",
+      headers,
       body: formData,
     });
     const { data } = await parseResponseData(response);
@@ -275,10 +364,11 @@ const postForm = async (path, formData) => {
   }
 };
 
-const requestBlob = async (path) => {
+const requestBlob = async (path, options = {}) => {
+  const { headers } = options;
   const url = buildApiUrl(path);
   try {
-    const response = await fetch(url);
+    const response = await fetch(url, { headers });
     if (!response.ok) {
       const { data } = await parseResponseData(response);
       return {
@@ -346,6 +436,29 @@ export const importData = (file) => {
 };
 
 export const createProductRun = (payload) => post("/runs", payload);
+
+export const createExperiment = async (payload) =>
+  withCanonicalErrorInfo(
+    await post("/experiments", payload, {
+      headers: withUserHeader(),
+    })
+  );
+
+export const getExperimentManifest = async (experimentId, options = {}) =>
+  withCanonicalErrorInfo(
+    await request(`/experiments/${experimentId}/manifest`, undefined, {
+      ...options,
+      headers: withUserHeader(options.headers),
+    })
+  );
+
+export const getExperimentComparison = async (experimentId, options = {}) =>
+  withCanonicalErrorInfo(
+    await request(`/experiments/${experimentId}/comparison`, undefined, {
+      ...options,
+      headers: withUserHeader(options.headers),
+    })
+  );
 
 export const getRunStatus = (id, options) =>
   request(`/runs/${id}/status`, undefined, options);
