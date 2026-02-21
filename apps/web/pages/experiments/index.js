@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../../components/AppShell";
 import ErrorNotice from "../../components/ErrorNotice";
@@ -10,12 +11,45 @@ const EXPERIMENT_SCHEMA_VERSION = "1.0.0";
 const RUN_SCHEMA_VERSION = "1.0.0";
 const MIN_CANDIDATES = 2;
 const MAX_CANDIDATES = 20;
+const RECENT_EXPERIMENTS_STORAGE_KEY = "buff_recent_experiments";
+const MAX_RECENT_EXPERIMENTS = 10;
+const EXPERIMENT_ID_PATTERN = /^exp_[a-z0-9]+$/;
 
 const PARAM_INTEGER_TYPES = new Set(["integer", "int"]);
 const PARAM_NUMBER_TYPES = new Set(["number", "float"]);
 const PARAM_BOOLEAN_TYPES = new Set(["boolean", "bool"]);
 
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const normalizeExperimentIdInput = (value) => String(value || "").trim().toLowerCase();
+
+const isValidExperimentId = (value) => EXPERIMENT_ID_PATTERN.test(value);
+
+const normalizeRecentExperimentIds = (value) => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const unique = [];
+  value.forEach((item) => {
+    const experimentId = normalizeExperimentIdInput(item);
+    if (!experimentId || !isValidExperimentId(experimentId) || unique.includes(experimentId)) {
+      return;
+    }
+    unique.push(experimentId);
+  });
+  return unique.slice(0, MAX_RECENT_EXPERIMENTS);
+};
+
+const upsertRecentExperimentId = (experimentId, current) => {
+  const normalizedId = normalizeExperimentIdInput(experimentId);
+  if (!normalizedId || !isValidExperimentId(normalizedId)) {
+    return normalizeRecentExperimentIds(current);
+  }
+  return [
+    normalizedId,
+    ...normalizeRecentExperimentIds(current).filter((item) => item !== normalizedId),
+  ].slice(0, MAX_RECENT_EXPERIMENTS);
+};
 
 const normalizeStrategy = (item) => {
   if (!isObject(item)) {
@@ -63,11 +97,15 @@ const buildDefaultParams = (strategy) =>
   }, {});
 
 export default function ExperimentsPage() {
+  const router = useRouter();
   const [strategies, setStrategies] = useState([]);
   const [loadingStrategies, setLoadingStrategies] = useState(true);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [createdExperiment, setCreatedExperiment] = useState(null);
+  const [openExperimentId, setOpenExperimentId] = useState("");
+  const [recentExperiments, setRecentExperiments] = useState([]);
+  const [copiedRecentId, setCopiedRecentId] = useState("");
 
   const [experimentName, setExperimentName] = useState("");
   const [runConfig, setRunConfig] = useState({
@@ -86,6 +124,36 @@ export default function ExperimentsPage() {
     strategies.forEach((strategy) => byId.set(strategy.id, strategy));
     return byId;
   }, [strategies]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(RECENT_EXPERIMENTS_STORAGE_KEY);
+      if (!raw) {
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      setRecentExperiments(normalizeRecentExperimentIds(parsed));
+    } catch {
+      setRecentExperiments([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.setItem(
+        RECENT_EXPERIMENTS_STORAGE_KEY,
+        JSON.stringify(normalizeRecentExperimentIds(recentExperiments))
+      );
+    } catch {
+      // Local storage can be unavailable; keep runtime behavior non-fatal.
+    }
+  }, [recentExperiments]);
 
   useEffect(() => {
     let active = true;
@@ -179,6 +247,66 @@ export default function ExperimentsPage() {
       }
       return current.filter((_, candidateIndex) => candidateIndex !== index);
     });
+  };
+
+  const addRecentExperiment = (experimentId) => {
+    setRecentExperiments((current) => upsertRecentExperimentId(experimentId, current));
+  };
+
+  const removeRecentExperiment = (experimentId) => {
+    setRecentExperiments((current) => current.filter((item) => item !== experimentId));
+  };
+
+  const clearRecentExperiments = () => {
+    setRecentExperiments([]);
+  };
+
+  const copyRecentExperimentId = async (experimentId) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(experimentId);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = experimentId;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        textarea.remove();
+      }
+      setCopiedRecentId(experimentId);
+      setTimeout(() => setCopiedRecentId(""), 1200);
+    } catch {
+      setCopiedRecentId("");
+    }
+  };
+
+  const openExistingExperiment = () => {
+    const experimentId = normalizeExperimentIdInput(openExperimentId);
+    if (!experimentId) {
+      setError(
+        buildClientError({
+          title: "Experiment id required",
+          summary: "Enter an experiment id before opening.",
+        })
+      );
+      return;
+    }
+    if (!isValidExperimentId(experimentId)) {
+      setError(
+        buildClientError({
+          title: "Invalid experiment id",
+          summary: "Experiment ids must start with 'exp_'.",
+          actions: ["Use an id like exp_abcdef123456."],
+        })
+      );
+      return;
+    }
+    setError(null);
+    addRecentExperiment(experimentId);
+    router.push(`/experiments/${experimentId}`);
   };
 
   const submitExperiment = async () => {
@@ -278,6 +406,10 @@ export default function ExperimentsPage() {
       return;
     }
 
+    const experimentId = normalizeExperimentIdInput(result.data?.experiment_id);
+    if (experimentId) {
+      addRecentExperiment(experimentId);
+    }
     setError(null);
     setCreatedExperiment(result.data);
   };
@@ -296,6 +428,78 @@ export default function ExperimentsPage() {
         </header>
 
         {error && <ErrorNotice error={error} mode="pro" />}
+
+        <section className="card fade-up" style={{ marginBottom: "16px" }}>
+          <div className="section-title">
+            <h3>Open Existing Experiment</h3>
+            <span className="badge info">{recentExperiments.length} recent</span>
+          </div>
+          <div className="grid two">
+            <label>
+              Experiment ID
+              <input
+                type="text"
+                value={openExperimentId}
+                onChange={(event) => setOpenExperimentId(event.target.value)}
+                placeholder="exp_abcdef123456"
+              />
+            </label>
+            <div style={{ display: "flex", gap: "10px", alignItems: "flex-end", flexWrap: "wrap" }}>
+              <button type="button" onClick={openExistingExperiment}>
+                Open
+              </button>
+            </div>
+          </div>
+
+          <div style={{ marginTop: "14px" }}>
+            <div className="section-title">
+              <h3>Recent Experiments</h3>
+              {recentExperiments.length > 0 && (
+                <button type="button" className="secondary" onClick={clearRecentExperiments}>
+                  Clear All
+                </button>
+              )}
+            </div>
+            {recentExperiments.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>
+                No recent experiments yet.
+              </p>
+            ) : (
+              <div className="grid" style={{ gap: "8px" }}>
+                {recentExperiments.map((experimentId) => (
+                  <div
+                    key={experimentId}
+                    style={{
+                      display: "flex",
+                      gap: "10px",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <Link href={`/experiments/${experimentId}`}>{experimentId}</Link>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => copyRecentExperimentId(experimentId)}
+                      >
+                        {copiedRecentId === experimentId ? "Copied" : "Copy"}
+                      </button>
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => removeRecentExperiment(experimentId)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
         {createdExperiment && (
           <section className="card fade-up" style={{ marginBottom: "16px" }}>
