@@ -14,6 +14,7 @@ Canonical operational guide for core local run, verification, and recovery flows
 - [Data Pipeline Operations](#data-pipeline-operations)
 - [Replay Operations](#replay-operations)
 - [Phase6 Doc Ops](#phase6-doc-ops)
+- [Experiments (S7)](#experiments-s7)
 - [Troubleshooting Matrix](#troubleshooting-matrix)
 - [Pre-PR Checklist](#pre-pr-checklist)
 - [References](#references)
@@ -218,6 +219,88 @@ Run plugin-focused test checks:
 ```bash
 python -m pytest -q
 ```
+
+## Experiments (S7)
+An experiment orchestrates multiple SIM_ONLY runs and produces experiment artifacts. Comparison output is artifact-driven from run `metrics.json` artifacts, with no UI-side recompute.
+
+### API Endpoints
+- `POST /api/v1/experiments`
+- `GET /api/v1/experiments/{experiment_id}/manifest`
+- `GET /api/v1/experiments/{experiment_id}/comparison`
+
+### Minimal Request Example
+```json
+{
+  "schema_version": "1.0.0",
+  "name": "s7-example",
+  "candidates": [
+    {
+      "candidate_id": "hold_a",
+      "run_config": {
+        "schema_version": "1.0.0",
+        "data_source": {
+          "type": "csv",
+          "path": "<CSV_PATH_A>",
+          "symbol": "BTCUSDT",
+          "timeframe": "1m"
+        },
+        "strategy": {
+          "id": "hold",
+          "params": {}
+        },
+        "risk": {
+          "level": 3
+        },
+        "costs": {
+          "commission_bps": 0.0,
+          "slippage_bps": 0.0
+        }
+      }
+    },
+    {
+      "candidate_id": "cross_b",
+      "run_config": {
+        "schema_version": "1.0.0",
+        "data_source": {
+          "type": "csv",
+          "path": "<CSV_PATH_B>",
+          "symbol": "BTCUSDT",
+          "timeframe": "1m"
+        },
+        "strategy": {
+          "id": "ma_cross",
+          "params": {
+            "fast_period": 2,
+            "slow_period": 3
+          }
+        },
+        "risk": {
+          "level": 3
+        },
+        "costs": {
+          "commission_bps": 0.0,
+          "slippage_bps": 0.0
+        }
+      }
+    }
+  ]
+}
+```
+
+### Status Semantics
+- `COMPLETED`: all candidates succeeded.
+- `PARTIAL`: at least one candidate succeeded and at least one candidate failed.
+- `FAILED`: no candidates succeeded.
+
+### Safety Limits And Concurrency
+- `MAX_EXPERIMENT_CANDIDATES=20`.
+- Avoid duplicate concurrent submissions for identical canonical inputs because they resolve to a deterministic `experiment_id`.
+- Lock timeout is fail-closed; if lock acquisition times out, the request returns a lock-timeout error instead of partial writes.
+
+### Error Codes And Recovery
+- `EXPERIMENT_CANDIDATES_LIMIT_EXCEEDED` (`400`): reduce candidate count and retry.
+- `EXPERIMENT_LOCK_TIMEOUT` (`503`): retry after short delay/backoff and avoid concurrent duplicates.
+- Error registry reference: [03_CONTRACTS_AND_SCHEMAS.md#error-code-registry](./03_CONTRACTS_AND_SCHEMAS.md#error-code-registry).
 
 ## Troubleshooting Matrix
 | Symptom | Likely Cause | Recovery |
