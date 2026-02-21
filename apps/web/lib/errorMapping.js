@@ -6,6 +6,7 @@ const HELP_DATASET_MISSING = "/help#dataset-missing/FIRST_RUN.md#csv-requirement
 const HELP_RUN_STUCK = "/help#run-stuck";
 const HELP_BACKEND_VERIFY = "/help#backend-verify";
 const HELP_LOGS_REPORT = "/help#logs-report";
+const MAX_EXPERIMENT_CANDIDATES = 20;
 
 const ARTIFACT_MISSING = {
   decision_records_missing: "decision_records.jsonl",
@@ -49,6 +50,7 @@ const buildError = ({
   status = null,
   details = null,
   envelope = null,
+  recovery = null,
 }) => ({
   title,
   summary,
@@ -58,6 +60,7 @@ const buildError = ({
   status,
   details,
   envelope,
+  recovery,
   short: summary || title,
 });
 
@@ -103,6 +106,7 @@ const _applyEnvelope = (mapped, envelope) => {
     summary: normalized.human_message || mapped.summary,
     actions: nextActions,
     envelope: normalized,
+    recovery: mapped.recovery || normalized.recovery_hint || null,
     short: normalized.human_message || mapped.short,
   };
 };
@@ -159,6 +163,54 @@ const mapErrorPayload = ({ code, message, details, status, fallback, envelope } 
       title: "Run configuration invalid",
       summary: message || "Check the inputs and try again.",
       actions: ["Verify CSV, symbol, timeframe, and strategy fields."],
+      }),
+      envelope
+    );
+  }
+
+  if (normalizedCode === "EXPERIMENT_CANDIDATES_LIMIT_EXCEEDED") {
+    const requestedCount = Number.isInteger(details?.requested_count)
+      ? details.requested_count
+      : null;
+    const maxAllowed = Number.isInteger(details?.max_allowed)
+      ? details.max_allowed
+      : MAX_EXPERIMENT_CANDIDATES;
+    const summary =
+      requestedCount === null
+        ? `Experiment cap is ${maxAllowed} candidates.`
+        : `Experiment cap is ${maxAllowed} candidates. Requested ${requestedCount}.`;
+    return _applyEnvelope(
+      buildError({
+        code: normalizedCode,
+        status,
+        details,
+        title: "Too many candidates",
+        summary,
+        actions: [
+          "Reduce candidate count and resubmit.",
+          "Split larger comparisons into multiple experiments.",
+        ],
+        recovery: "Reduce candidates to the cap and retry the experiment request.",
+      }),
+      envelope
+    );
+  }
+
+  if (normalizedCode === "EXPERIMENT_LOCK_TIMEOUT") {
+    return _applyEnvelope(
+      buildError({
+        code: normalizedCode,
+        status,
+        details,
+        title: "Experiment already running",
+        summary:
+          "A duplicate experiment with the same deterministic experiment_id is still in progress.",
+        actions: [
+          "Retry after a short delay/backoff.",
+          "Avoid concurrent duplicate submissions for identical experiment inputs.",
+        ],
+        recovery:
+          "Wait briefly, then retry once; avoid sending duplicate concurrent experiment requests.",
       }),
       envelope
     );
