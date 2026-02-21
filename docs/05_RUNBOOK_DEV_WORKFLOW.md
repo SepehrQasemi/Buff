@@ -37,6 +37,17 @@ python -m tools.release_preflight --timeout-seconds 900
 python -m tools.release_gate --strict --timeout-seconds 900
 ```
 
+### Real Smoke User Context
+Phase-1 real-smoke runs in multi-user mode; API requests require `X-Buff-User`. Set `BUFF_DEFAULT_USER` so verification uses a deterministic default user context.
+
+```powershell
+$env:BUFF_DEFAULT_USER='phase1_smoke_user'; python scripts/verify_phase1.py --with-services --real-smoke
+```
+
+```bash
+BUFF_DEFAULT_USER=phase1_smoke_user python scripts/verify_phase1.py --with-services --real-smoke
+```
+
 Contract reference for fail-closed errors and required artifacts:
 - [03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema](./03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema)
 - [03_CONTRACTS_AND_SCHEMAS.md#artifact-contract-matrix](./03_CONTRACTS_AND_SCHEMAS.md#artifact-contract-matrix)
