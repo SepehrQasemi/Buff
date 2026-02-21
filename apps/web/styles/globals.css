@@ -237,6 +237,68 @@ button:disabled {
   cursor: not-allowed;
 }
 
+.toast-host {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: grid;
+  gap: 10px;
+  z-index: 1600;
+  width: min(360px, calc(100vw - 24px));
+}
+
+.toast-card {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: space-between;
+  border: 1px solid var(--border);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.toast-content {
+  display: grid;
+  gap: 4px;
+}
+
+.toast-content strong {
+  font-size: 0.9rem;
+}
+
+.toast-content p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.toast-close {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  line-height: 1;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.toast-info {
+  border-left-color: var(--accent);
+}
+
+.toast-success {
+  border-left-color: var(--ok);
+}
+
+.toast-error {
+  border-left-color: var(--danger);
+}
+
 .step-pill {
   border: 1px solid var(--border);
   background: var(--panel-soft);
@@ -426,6 +488,12 @@ th {
 
   main {
     padding: 24px 16px 48px;
+  }
+
+  .toast-host {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
   }
 }
 
