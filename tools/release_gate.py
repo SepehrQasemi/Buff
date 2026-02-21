@@ -380,6 +380,30 @@ def main(argv: list[str] | None = None) -> int:
             ],
         )
 
+        _log("release_gate: s7_experiment_caps_enforced")
+        run_step(
+            "s7_experiment_caps_enforced",
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "tools/test_s7_experiment_caps_enforced.py",
+            ],
+        )
+
+        _log("release_gate: s7_experiment_lock_enforced")
+        run_step(
+            "s7_experiment_lock_enforced",
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "tools/test_s7_experiment_lock_enforced.py",
+            ],
+        )
+
         if args.with_network_smoke:
             _log("release_gate: mvp_smoke (network)")
             proc = run_step("mvp_smoke", _mvp_smoke_command())
