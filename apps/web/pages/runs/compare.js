@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import AppShell from "../../components/AppShell";
 import CandlestickChart from "../../components/workspace/CandlestickChart";
 import { getMetrics, getOhlcv, getRunSummary, getRuns, getTradeMarkers } from "../../lib/api";
 import { formatApiError } from "../../lib/errors";
@@ -394,7 +395,8 @@ export default function CompareRunsPage() {
     : null;
 
   return (
-    <main>
+    <AppShell>
+      <main>
       <header>
         <div className="header-title">
           <h1>Compare Runs</h1>
@@ -561,7 +563,7 @@ export default function CompareRunsPage() {
         </div>
       )}
 
-      <div className="grid two">
+        <div className="grid two">
         {[
           {
             label: "Run A",
@@ -606,7 +608,8 @@ export default function CompareRunsPage() {
             )}
           </div>
         ))}
-      </div>
-    </main>
+        </div>
+      </main>
+    </AppShell>
   );
 }

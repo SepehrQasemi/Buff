@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
+import AppShell from "../../components/AppShell";
 import ErrorNotice from "../../components/ErrorNotice";
 import { getDataImports, getObservabilityRuns } from "../../lib/api";
 import { mapApiErrorDetails } from "../../lib/errorMapping";
@@ -157,148 +158,150 @@ export default function RunsPage() {
   };
 
   return (
-    <main>
-      <header>
-        <div className="header-title">
-          <h1>Run Explorer</h1>
-          <span>Artifact-backed run lifecycle and observability view.</span>
-        </div>
-        <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-          <span className="badge info">{filteredRuns.length} visible</span>
-          <span className="badge">{selectedRuns.length} selected</span>
-          <button
-            className="secondary"
-            disabled={!compareEnabled}
-            onClick={() => compareEnabled && router.push(compareHref)}
-          >
-            Compare
-          </button>
-        </div>
-      </header>
-
-      {error && <ErrorNotice error={error} onRetry={retryLoad} />}
-
-      <section className="card fade-up" style={{ marginBottom: "16px" }}>
-        <div className="section-title">
-          <h3>Filters</h3>
-          <button className="secondary" onClick={retryLoad}>
-            Refresh
-          </button>
-        </div>
-        <div className="grid three">
-          <label>
-            State
-            <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}>
-              {stateOptions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Strategy
-            <select
-              value={strategyFilter}
-              onChange={(event) => setStrategyFilter(event.target.value)}
-            >
-              {strategyOptions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Risk Level
-            <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)}>
-              {riskOptions.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </section>
-
-      {loading ? (
-        <div className="card fade-up">Loading runs...</div>
-      ) : runs.length === 0 ? (
-        <div className="card fade-up">
-          <h3 style={{ marginBottom: "8px" }}>Create Your First Run</h3>
-          <p className="muted" style={{ marginTop: 0 }}>
-            No runs found yet. Start by importing data and creating a run.
-          </p>
-          <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-            <button onClick={() => router.push("/runs/new")}>Create Your First Run</button>
-            {datasetCount === 0 && (
-              <button className="secondary" onClick={() => router.push("/runs/new")}>
-                Import Data
-              </button>
-            )}
+    <AppShell>
+      <main>
+        <header>
+          <div className="header-title">
+            <h1>Run Explorer</h1>
+            <span>Artifact-backed run lifecycle and observability view.</span>
           </div>
-        </div>
-      ) : filteredRuns.length === 0 ? (
-        <div className="card fade-up">No runs match the selected filters.</div>
-      ) : (
-        <div className="grid two">
-          {filteredRuns.map((run, index) => {
-            const selected = selectedRuns.includes(run.run_id);
-            const badge = statusBadge(run.state);
-            return (
-              <Link
-                key={run.run_id}
-                href={`/runs/${run.run_id}`}
-                className="card fade-up"
-                style={{ animationDelay: `${index * 40}ms` }}
+          <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+            <span className="badge info">{filteredRuns.length} visible</span>
+            <span className="badge">{selectedRuns.length} selected</span>
+            <button
+              className="secondary"
+              disabled={!compareEnabled}
+              onClick={() => compareEnabled && router.push(compareHref)}
+            >
+              Compare
+            </button>
+          </div>
+        </header>
+
+        {error && <ErrorNotice error={error} onRetry={retryLoad} />}
+
+        <section className="card fade-up" style={{ marginBottom: "16px" }}>
+          <div className="section-title">
+            <h3>Filters</h3>
+            <button className="secondary" onClick={retryLoad}>
+              Refresh
+            </button>
+          </div>
+          <div className="grid three">
+            <label>
+              State
+              <select value={stateFilter} onChange={(event) => setStateFilter(event.target.value)}>
+                {stateOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Strategy
+              <select
+                value={strategyFilter}
+                onChange={(event) => setStrategyFilter(event.target.value)}
               >
-                <div className="section-title">
-                  <h3>{run.run_id}</h3>
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    <span className={`badge ${badge.kind}`}>{badge.text}</span>
-                    {run.artifact_status && (
-                      <span className="badge info">{run.artifact_status}</span>
-                    )}
-                    <label
-                      className="muted"
-                      style={{ display: "flex", gap: "6px", alignItems: "center" }}
-                      onClick={(event) => toggleSelection(event, run.run_id)}
-                    >
-                      <input type="checkbox" checked={selected} readOnly />
-                      Compare
-                    </label>
+                {strategyOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Risk Level
+              <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)}>
+                {riskOptions.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
+
+        {loading ? (
+          <div className="card fade-up">Loading runs...</div>
+        ) : runs.length === 0 ? (
+          <div className="card fade-up">
+            <h3 style={{ marginBottom: "8px" }}>Create Your First Run</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              No runs found yet. Start by importing data and creating a run.
+            </p>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button onClick={() => router.push("/runs/new")}>Create Your First Run</button>
+              {datasetCount === 0 && (
+                <button className="secondary" onClick={() => router.push("/runs/new")}>
+                  Import Data
+                </button>
+              )}
+            </div>
+          </div>
+        ) : filteredRuns.length === 0 ? (
+          <div className="card fade-up">No runs match the selected filters.</div>
+        ) : (
+          <div className="grid two">
+            {filteredRuns.map((run, index) => {
+              const selected = selectedRuns.includes(run.run_id);
+              const badge = statusBadge(run.state);
+              return (
+                <Link
+                  key={run.run_id}
+                  href={`/runs/${run.run_id}`}
+                  className="card fade-up"
+                  style={{ animationDelay: `${index * 40}ms` }}
+                >
+                  <div className="section-title">
+                    <h3>{run.run_id}</h3>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                      <span className={`badge ${badge.kind}`}>{badge.text}</span>
+                      {run.artifact_status && (
+                        <span className="badge info">{run.artifact_status}</span>
+                      )}
+                      <label
+                        className="muted"
+                        style={{ display: "flex", gap: "6px", alignItems: "center" }}
+                        onClick={(event) => toggleSelection(event, run.run_id)}
+                      >
+                        <input type="checkbox" checked={selected} readOnly />
+                        Compare
+                      </label>
+                    </div>
                   </div>
-                </div>
-                <div className="grid two" style={{ marginTop: "12px" }}>
-                  <div className="kpi">
-                    <span>Strategy</span>
-                    <strong>{run.strategy_id || "n/a"}</strong>
+                  <div className="grid two" style={{ marginTop: "12px" }}>
+                    <div className="kpi">
+                      <span>Strategy</span>
+                      <strong>{run.strategy_id || "n/a"}</strong>
+                    </div>
+                    <div className="kpi">
+                      <span>Risk Level</span>
+                      <strong>{run.risk_level ?? "n/a"}</strong>
+                    </div>
+                    <div className="kpi">
+                      <span>Created</span>
+                      <strong>{run.created_at || "n/a"}</strong>
+                    </div>
+                    <div className="kpi">
+                      <span>Updated</span>
+                      <strong>{run.updated_at || "n/a"}</strong>
+                    </div>
                   </div>
-                  <div className="kpi">
-                    <span>Risk Level</span>
-                    <strong>{run.risk_level ?? "n/a"}</strong>
+                  <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <span className={`badge ${run.validation_status === "pass" ? "ok" : "invalid"}`}>
+                      Validation {run.validation_status || "unknown"}
+                    </span>
+                    {run.error_code && <span className="badge invalid">{run.error_code}</span>}
                   </div>
-                  <div className="kpi">
-                    <span>Created</span>
-                    <strong>{run.created_at || "n/a"}</strong>
-                  </div>
-                  <div className="kpi">
-                    <span>Updated</span>
-                    <strong>{run.updated_at || "n/a"}</strong>
-                  </div>
-                </div>
-                <div style={{ marginTop: "12px", display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <span className={`badge ${run.validation_status === "pass" ? "ok" : "invalid"}`}>
-                    Validation {run.validation_status || "unknown"}
-                  </span>
-                  {run.error_code && <span className="badge invalid">{run.error_code}</span>}
-                </div>
-              </Link>
-            );
-          })}
-        </div>
-      )}
-    </main>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    </AppShell>
   );
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
+import AppShell from "../../components/AppShell";
 import ErrorNotice from "../../components/ErrorNotice";
 import {
   createProductRun,
@@ -563,7 +564,8 @@ export default function RunsNewPage() {
   };
 
   return (
-    <main>
+    <AppShell>
+      <main>
       <header>
         <div className="header-title">
           <h1>Create Run</h1>
@@ -612,10 +614,10 @@ export default function RunsNewPage() {
       {error && <ErrorNotice error={error} mode="pro" />}
       {info && <div className="card fade-up">{info}</div>}
 
-      {loadingInitial ? (
-        <div className="card fade-up">Loading strategies and imports...</div>
-      ) : (
-        <>
+        {loadingInitial ? (
+          <div className="card fade-up">Loading strategies and imports...</div>
+        ) : (
+          <>
           {step === STEP_IMPORT && (
             <section className="card fade-up" data-testid="create-run-step-import">
               <div className="section-title">
@@ -959,8 +961,9 @@ export default function RunsNewPage() {
               </div>
             </section>
           )}
-        </>
-      )}
-    </main>
+          </>
+        )}
+      </main>
+    </AppShell>
   );
 }

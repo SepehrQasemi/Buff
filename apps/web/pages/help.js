@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { useEffect } from "react";
+import AppShell from "../components/AppShell";
 
 const QUICK_LINKS = [
   { href: "/help#first-run", label: "First Run Checklist" },
@@ -43,7 +44,8 @@ export default function HelpPage() {
   }, []);
 
   return (
-    <main>
+    <AppShell>
+      <main>
       <header>
         <div className="header-title">
           <h1>Troubleshooting Help</h1>
@@ -143,7 +145,7 @@ export default function HelpPage() {
         </p>
       </section>
 
-      <section id="logs-report" className="card fade-up">
+        <section id="logs-report" className="card fade-up">
         <div className="section-title">
           <h3>4) Where to Find Logs / Report Bundle</h3>
         </div>
@@ -153,7 +155,8 @@ export default function HelpPage() {
           <li>Release gate reports are written to `reports/release_gate_report.json` in repo root.</li>
           <li>Capture these details when reporting issues so failures are reproducible.</li>
         </ul>
-      </section>
-    </main>
+        </section>
+      </main>
+    </AppShell>
   );
 }

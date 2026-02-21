@@ -1,5 +1,9 @@
 const apiBaseRaw = process.env.API_BASE_URL;
 const uiBaseRaw = process.env.UI_BASE_URL;
+const smokeUser = process.env.UI_SMOKE_USER || process.env.BUFF_USER || "phase1_smoke_user";
+const apiHeaders = {
+  "X-Buff-User": String(smokeUser),
+};
 
 const missing = [];
 if (!apiBaseRaw) missing.push("API_BASE_URL");
@@ -34,7 +38,9 @@ const uiBase = uiBaseRaw.replace(/\/+$/, "");
 const buildUrl = (base, path) => new URL(String(path || "").replace(/^\/+/, ""), `${base}/`).toString();
 
 const requestJson = async (url) => {
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: apiHeaders,
+  });
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`${url} failed (${response.status}): ${text}`);
@@ -52,6 +58,8 @@ const requestText = async (url) => {
 };
 
 const WORKSPACE_MARKER = 'data-testid="chart-workspace"';
+const APP_SHELL_MARKER = 'data-app-shell="true"';
+const APP_SHELL_NAV_LINKS = ['href="/"', 'href="/runs"', 'href="/experiments"', 'href="/help"'];
 
 const waitForMarker = async (url, marker, timeoutMs = 60000) => {
   const start = Date.now();
@@ -78,19 +86,39 @@ const findRun = (runs) => {
   if (!Array.isArray(runs) || runs.length === 0) {
     return null;
   }
-  const phase1 = runs.find((item) => item.id === "phase1_demo");
-  return phase1 || runs[0];
+  const runKey = (item) =>
+    String(item?.id || item?.run_id || item?.name || "").trim();
+  const phase1 = runs.find((item) => runKey(item) === "phase1_demo");
+  if (phase1) {
+    return phase1;
+  }
+  return [...runs]
+    .filter((item) => runKey(item).length > 0)
+    .sort((left, right) => runKey(left).localeCompare(runKey(right)))[0];
 };
 
 const run = async () => {
   try {
+    const homeHtml = await waitForMarker(buildUrl(uiBase, "/"), APP_SHELL_MARKER);
+    APP_SHELL_NAV_LINKS.forEach((marker) => {
+      if (!homeHtml.includes(marker)) {
+        throw new Error(`Missing app shell nav link marker on home page: ${marker}`);
+      }
+    });
+
     const runs = await requestJson(buildUrl(apiBase, "/runs"));
     const target = findRun(runs);
     if (!target) {
       throw new Error("No runs returned from API");
     }
-    const runId = target.id;
-    await waitForMarker(buildUrl(uiBase, `/runs/${runId}`), WORKSPACE_MARKER);
+    const runId = String(target.id || target.run_id || target.name || "");
+    if (!runId) {
+      throw new Error("Could not resolve run identifier from API response");
+    }
+    const workspaceHtml = await waitForMarker(buildUrl(uiBase, `/runs/${runId}`), WORKSPACE_MARKER);
+    if (!workspaceHtml.includes(APP_SHELL_MARKER)) {
+      throw new Error("App shell marker missing on run workspace page");
+    }
     if (target.artifacts?.trades) {
       const markers = await requestJson(buildUrl(apiBase, `/runs/${runId}/trades/markers`));
       if (!Array.isArray(markers.markers) || markers.markers.length === 0) {
@@ -98,7 +126,9 @@ const run = async () => {
       }
     }
 
-    const missingRun = await fetch(buildUrl(apiBase, "/runs/does-not-exist/summary"));
+    const missingRun = await fetch(buildUrl(apiBase, "/runs/does-not-exist/summary"), {
+      headers: apiHeaders,
+    });
     if (missingRun.ok) {
       throw new Error("Expected non-200 response for missing run summary");
     }
