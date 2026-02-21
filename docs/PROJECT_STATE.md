@@ -70,7 +70,8 @@ Run deterministic experiment workflows and artifact-backed multi-run analysis fo
 - Canonical contract authority enforced
 
 ## Next Stage Candidate
-Future Layer - External Integration Layer
+TBD
+Next stage token not yet defined; see `docs/06_SYSTEM_EVOLUTION_ROADMAP.md` Future Layer section.
 
 ## S7 Preview (Candidate)
 - Objective:
