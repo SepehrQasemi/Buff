@@ -91,6 +91,8 @@ const formatComparisonValue = (value, numeric) => {
   return NUMBER_DECIMAL_FORMATTER.format(numericValue);
 };
 
+const COLUMNS_STORAGE_KEY_PREFIX = "buff_exp_columns_v1";
+
 export default function ExperimentDetailPage() {
   const router = useRouter();
   const experimentId = normalizeExperimentId(router.query.experiment_id);
@@ -107,6 +109,13 @@ export default function ExperimentDetailPage() {
     direction: "asc",
   });
   const [manifestCopied, setManifestCopied] = useState(false);
+  const [columnsPanelOpen, setColumnsPanelOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState([]);
+
+  const columnsStorageKey = useMemo(
+    () => `${COLUMNS_STORAGE_KEY_PREFIX}:${experimentId || "unknown"}`,
+    [experimentId]
+  );
 
   useEffect(() => {
     setManifestCopied(false);
@@ -189,6 +198,105 @@ export default function ExperimentDetailPage() {
     });
     return result;
   }, [comparisonColumns, comparisonRows]);
+  const displayedColumns = useMemo(
+    () => comparisonColumns.filter((column) => visibleColumns.includes(column)),
+    [comparisonColumns, visibleColumns]
+  );
+  const visibleComparisonColumns = useMemo(() => {
+    if (!comparisonColumns.length) {
+      return [];
+    }
+    return displayedColumns.length ? displayedColumns : comparisonColumns;
+  }, [comparisonColumns, displayedColumns]);
+
+  useEffect(() => {
+    if (!comparisonColumns.length) {
+      setVisibleColumns([]);
+      return;
+    }
+    if (typeof window === "undefined") {
+      setVisibleColumns(comparisonColumns);
+      return;
+    }
+    try {
+      const raw = window.localStorage.getItem(columnsStorageKey);
+      if (!raw) {
+        setVisibleColumns(comparisonColumns);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const preferred = Array.isArray(parsed)
+        ? parsed
+            .map((item) => String(item || ""))
+            .filter((column) => comparisonColumns.includes(column))
+        : [];
+      setVisibleColumns(preferred.length ? preferred : comparisonColumns);
+    } catch {
+      setVisibleColumns(comparisonColumns);
+    }
+  }, [columnsStorageKey, comparisonColumns]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !comparisonColumns.length) {
+      return;
+    }
+    try {
+      const normalized = visibleComparisonColumns.length
+        ? visibleComparisonColumns
+        : comparisonColumns;
+      window.localStorage.setItem(columnsStorageKey, JSON.stringify(normalized));
+    } catch {
+      // Local storage can be unavailable; keep behavior non-fatal.
+    }
+  }, [columnsStorageKey, comparisonColumns, visibleComparisonColumns]);
+
+  useEffect(() => {
+    if (!comparisonColumns.length) {
+      return;
+    }
+    const availableColumns = visibleComparisonColumns;
+    if (availableColumns.includes(sortConfig.column)) {
+      return;
+    }
+    setSortConfig((current) => ({
+      ...current,
+      column: availableColumns[0],
+      direction: "asc",
+    }));
+  }, [comparisonColumns, sortConfig.column, visibleComparisonColumns]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const onKeyDown = (event) => {
+      if (
+        event.defaultPrevented ||
+        event.key.toLowerCase() !== "c" ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
+      ) {
+        return;
+      }
+      const target = event.target;
+      const tagName = target?.tagName ? String(target.tagName).toLowerCase() : "";
+      const isEditing =
+        target?.isContentEditable ||
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select";
+      if (isEditing) {
+        return;
+      }
+      event.preventDefault();
+      setColumnsPanelOpen((current) => !current);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   const successfulCandidates = useMemo(() => {
     const rowsByCandidateId = new Map(
@@ -311,6 +419,24 @@ export default function ExperimentDetailPage() {
       }
       return { column, direction: "asc" };
     });
+  };
+
+  const toggleColumnVisibility = (column) => {
+    setVisibleColumns((current) => {
+      const normalizedCurrent = comparisonColumns.filter((item) => current.includes(item));
+      const base = normalizedCurrent.length ? normalizedCurrent : comparisonColumns;
+      if (base.includes(column)) {
+        if (base.length <= 1) {
+          return base;
+        }
+        return base.filter((item) => item !== column);
+      }
+      return comparisonColumns.filter((item) => base.includes(item) || item === column);
+    });
+  };
+
+  const showAllColumns = () => {
+    setVisibleColumns(comparisonColumns);
   };
 
   const copyManifest = async () => {
@@ -564,10 +690,50 @@ export default function ExperimentDetailPage() {
                 {activeTab === "tester" && (
                   <div className="panel-stack">
                     <div className="panel-card">
-                      <h3>Comparison Summary</h3>
+                      <div className="section-title">
+                        <h3>Comparison Summary</h3>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => setColumnsPanelOpen((current) => !current)}
+                          disabled={!comparisonColumns.length}
+                        >
+                          {columnsPanelOpen ? "Hide Columns" : "Columns"}
+                        </button>
+                      </div>
                       <p className="muted">
                         Values are rendered directly from comparison artifact columns/rows.
                       </p>
+                      {columnsPanelOpen && comparisonColumns.length > 0 && (
+                        <div className="columns-panel">
+                          <div className="section-title" style={{ marginBottom: "10px" }}>
+                            <p>
+                              {visibleComparisonColumns.length}/{comparisonColumns.length} visible
+                            </p>
+                            <button type="button" className="secondary" onClick={showAllColumns}>
+                              Show All
+                            </button>
+                          </div>
+                          <div className="columns-grid">
+                            {comparisonColumns.map((column) => {
+                              const checked = visibleComparisonColumns.includes(column);
+                              const disableUncheck =
+                                checked && visibleComparisonColumns.length <= 1;
+                              return (
+                                <label key={column} className="column-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleColumnVisibility(column)}
+                                    disabled={disableUncheck}
+                                  />
+                                  <span>{column}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {comparisonColumns.length === 0 ? (
@@ -582,7 +748,7 @@ export default function ExperimentDetailPage() {
                           <table className="comparison-table">
                             <thead>
                               <tr>
-                                {comparisonColumns.map((column) => (
+                                {visibleComparisonColumns.map((column) => (
                                   <th
                                     key={column}
                                     className={
@@ -623,12 +789,28 @@ export default function ExperimentDetailPage() {
                                     onClick={() => selectable && setSelectedRunId(runId)}
                                     style={{ cursor: selectable ? "pointer" : "default" }}
                                   >
-                                    {comparisonColumns.map((column) => {
+                                    {visibleComparisonColumns.map((column) => {
                                       const value = row?.[column];
                                       if (column === "run_id" && runId) {
                                         return (
                                           <td key={column} className="comparison-td-text">
-                                            <Link href={`/runs/${runId}`}>{runId}</Link>
+                                            <span className="comparison-run-cell">
+                                              <Link
+                                                href={`/runs/${runId}`}
+                                                onClick={(event) => event.stopPropagation()}
+                                              >
+                                                {runId}
+                                              </Link>
+                                              <Link
+                                                href={`/runs/${runId}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="comparison-open-run"
+                                                onClick={(event) => event.stopPropagation()}
+                                              >
+                                                Open run
+                                              </Link>
+                                            </span>
                                           </td>
                                         );
                                       }
