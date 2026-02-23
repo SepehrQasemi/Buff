@@ -725,6 +725,36 @@ th {
   background: var(--chart-bg);
 }
 
+.chart-tooltip {
+  position: absolute;
+  z-index: 9;
+  min-width: 170px;
+  max-width: 220px;
+  pointer-events: none;
+  background: rgba(18, 22, 26, 0.92);
+  color: #fff;
+  border-radius: 10px;
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  box-shadow: 0 8px 20px rgba(10, 14, 18, 0.28);
+}
+
+.chart-tooltip-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.chart-tooltip-row {
+  font-family: var(--font-mono);
+}
+
+.chart-tooltip-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.18);
+  margin: 6px 0;
+}
+
 .chart-empty {
   border-radius: 16px;
   border: 1px dashed var(--border);
