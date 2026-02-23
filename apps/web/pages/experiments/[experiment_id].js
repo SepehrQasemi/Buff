@@ -683,7 +683,13 @@ export default function ExperimentDetailPage() {
                       <p>Loading baseline OHLCV artifacts...</p>
                     </div>
                   ) : (
-                    <CandlestickChart data={candles} markerSets={chartMarkerSets} height={420} />
+                    <CandlestickChart
+                      data={candles}
+                      markerSets={chartMarkerSets}
+                      enableDrawTools={Boolean(selectedRunId)}
+                      drawingScopeKey={selectedRunId || ""}
+                      height={420}
+                    />
                   )}
                 </>
               )}
