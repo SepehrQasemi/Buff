@@ -995,7 +995,13 @@ export default function ChartWorkspace() {
               <p>Loading OHLCV artifacts...</p>
             </div>
           ) : (
-            <CandlestickChart data={candles} markerSets={chartMarkerSets} height={420} />
+            <CandlestickChart
+              data={candles}
+              markerSets={chartMarkerSets}
+              enableDrawTools
+              drawingScopeKey={runId || ""}
+              height={420}
+            />
           )}
 
           <div className="chart-status">
