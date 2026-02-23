@@ -460,6 +460,14 @@ export const getExperimentComparison = async (experimentId, options = {}) =>
     })
   );
 
+export const getExperimentsIndex = async (options = {}) =>
+  withCanonicalErrorInfo(
+    await request("/experiments", undefined, {
+      ...options,
+      headers: withUserHeader(options.headers),
+    })
+  );
+
 export const getRunStatus = (id, options) =>
   request(`/runs/${id}/status`, undefined, options);
 

@@ -3,7 +3,7 @@ import { useRouter } from "next/router";
 import { useEffect, useMemo, useState } from "react";
 import AppShell from "../../components/AppShell";
 import ErrorNotice from "../../components/ErrorNotice";
-import { createExperiment, getStrategies } from "../../lib/api";
+import { createExperiment, getExperimentsIndex, getStrategies } from "../../lib/api";
 import { buildClientError, mapApiErrorDetails } from "../../lib/errorMapping";
 import { buildRunParameters, getStrategyParameters } from "../../lib/runConfig";
 import { useToast } from "../../lib/toast";
@@ -97,6 +97,38 @@ const buildDefaultParams = (strategy) =>
     return acc;
   }, {});
 
+const normalizeIndexEntry = (item) => {
+  if (!isObject(item)) {
+    return null;
+  }
+  const experimentId = normalizeExperimentIdInput(item.experiment_id);
+  if (!experimentId) {
+    return null;
+  }
+  const status = String(item.status || "BROKEN").trim().toUpperCase() || "BROKEN";
+  const toCount = (value) => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      return Math.max(0, Math.trunc(value));
+    }
+    if (typeof value === "string") {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isFinite(parsed)) {
+        return Math.max(0, parsed);
+      }
+    }
+    return 0;
+  };
+  const createdAt = item.created_at === null || item.created_at === undefined ? null : String(item.created_at);
+  return {
+    experiment_id: experimentId,
+    status,
+    created_at: createdAt,
+    succeeded_count: toCount(item.succeeded_count),
+    failed_count: toCount(item.failed_count),
+    total_candidates: toCount(item.total_candidates),
+  };
+};
+
 const experimentStatusBadgeClass = (status) => {
   const normalized = String(status || "").toUpperCase();
   if (normalized === "COMPLETED" || normalized === "OK") {
@@ -105,7 +137,7 @@ const experimentStatusBadgeClass = (status) => {
   if (normalized === "PARTIAL") {
     return "status-partial";
   }
-  if (normalized === "FAILED") {
+  if (normalized === "FAILED" || normalized === "BROKEN") {
     return "status-failed";
   }
   return "info";
@@ -122,6 +154,9 @@ export default function ExperimentsPage() {
   const [openExperimentId, setOpenExperimentId] = useState("");
   const [recentExperiments, setRecentExperiments] = useState([]);
   const [copiedRecentId, setCopiedRecentId] = useState("");
+  const [experimentsIndex, setExperimentsIndex] = useState([]);
+  const [loadingExperimentsIndex, setLoadingExperimentsIndex] = useState(true);
+  const [experimentsIndexError, setExperimentsIndexError] = useState(null);
 
   const [experimentName, setExperimentName] = useState("");
   const [runConfig, setRunConfig] = useState({
@@ -200,6 +235,33 @@ export default function ExperimentsPage() {
         setError(null);
       }
       setLoadingStrategies(false);
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      setLoadingExperimentsIndex(true);
+      const result = await getExperimentsIndex();
+      if (!active) {
+        return;
+      }
+      if (!result.ok) {
+        setExperimentsIndex([]);
+        setExperimentsIndexError(mapApiErrorDetails(result, "Failed to load experiments index"));
+        setLoadingExperimentsIndex(false);
+        return;
+      }
+      const normalized = Array.isArray(result.data)
+        ? result.data.map(normalizeIndexEntry).filter(Boolean)
+        : [];
+      setExperimentsIndex(normalized);
+      setExperimentsIndexError(null);
+      setLoadingExperimentsIndex(false);
     };
     load();
     return () => {
@@ -531,6 +593,60 @@ export default function ExperimentsPage() {
               </div>
             )}
           </div>
+        </section>
+
+        <section className="card fade-up" style={{ marginBottom: "16px" }}>
+          <div className="section-title">
+            <h3>Experiments (latest)</h3>
+            <span className="badge info">{experimentsIndex.length}</span>
+          </div>
+          {experimentsIndexError && <ErrorNotice error={experimentsIndexError} compact mode="pro" />}
+          {loadingExperimentsIndex ? (
+            <div className="skeleton-stack" aria-label="Loading experiments index">
+              <div className="skeleton-line" />
+              <div className="skeleton-line medium" />
+              <div className="skeleton-line short" />
+            </div>
+          ) : experimentsIndex.length === 0 ? (
+            <div className="empty-state">
+              <p>No experiment artifacts found for this user.</p>
+            </div>
+          ) : (
+            <div className="table-wrap" style={{ maxHeight: "280px" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Experiment</th>
+                    <th>Status</th>
+                    <th>Succeeded</th>
+                    <th>Failed</th>
+                    <th>Total</th>
+                    <th>Created</th>
+                    <th>Open</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {experimentsIndex.map((item) => (
+                    <tr key={item.experiment_id}>
+                      <td>{item.experiment_id}</td>
+                      <td>
+                        <span className={`badge ${experimentStatusBadgeClass(item.status)}`}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td>{item.succeeded_count}</td>
+                      <td>{item.failed_count}</td>
+                      <td>{item.total_candidates}</td>
+                      <td>{item.created_at || "n/a"}</td>
+                      <td>
+                        <Link href={`/experiments/${item.experiment_id}`}>Open</Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         {createdExperiment && (
