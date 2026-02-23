@@ -52,6 +52,38 @@ const compareValues = (left, right) => {
   return String(left ?? "").localeCompare(String(right ?? ""));
 };
 
+const NUMBER_FORMATTER = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 4,
+});
+
+const isNumericValue = (value) => {
+  if (value === null || value === undefined || value === "") {
+    return false;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value);
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized.length > 0 && Number.isFinite(Number(normalized));
+  }
+  return false;
+};
+
+const formatComparisonValue = (value, numeric) => {
+  if (value === null || value === undefined || value === "") {
+    return "n/a";
+  }
+  if (!numeric) {
+    return String(value);
+  }
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return String(value);
+  }
+  return NUMBER_FORMATTER.format(numericValue);
+};
+
 export default function ExperimentDetailPage() {
   const router = useRouter();
   const experimentId = normalizeExperimentId(router.query.experiment_id);
@@ -135,6 +167,21 @@ export default function ExperimentDetailPage() {
     () => (Array.isArray(comparison?.columns) ? comparison.columns : []),
     [comparison]
   );
+  const numericColumns = useMemo(() => {
+    const result = new Set();
+    comparisonColumns.forEach((column) => {
+      const values = comparisonRows
+        .map((row) => row?.[column])
+        .filter((value) => value !== null && value !== undefined && value !== "");
+      if (values.length === 0) {
+        return;
+      }
+      if (values.every(isNumericValue)) {
+        result.add(column);
+      }
+    });
+    return result;
+  }, [comparisonColumns, comparisonRows]);
 
   const successfulCandidates = useMemo(() => {
     const rowsByCandidateId = new Map(
@@ -523,23 +570,33 @@ export default function ExperimentDetailPage() {
                     ) : (
                       <div className="panel-card">
                         <div className="table-wrap" style={{ maxHeight: "420px" }}>
-                          <table>
+                          <table className="comparison-table">
                             <thead>
                               <tr>
                                 {comparisonColumns.map((column) => (
-                                  <th key={column}>
+                                  <th
+                                    key={column}
+                                    className={
+                                      numericColumns.has(column)
+                                        ? "comparison-th-numeric"
+                                        : "comparison-th-text"
+                                    }
+                                  >
                                     <button
                                       type="button"
-                                      className="secondary"
-                                      style={{ padding: 0, border: "none", background: "transparent" }}
+                                      className={`comparison-sort-button ${
+                                        sortConfig.column === column ? "is-active" : ""
+                                      }`}
                                       onClick={() => toggleSort(column)}
                                     >
-                                      {column}
-                                      {sortConfig.column === column
-                                        ? sortConfig.direction === "asc"
-                                          ? " ▲"
-                                          : " ▼"
-                                        : ""}
+                                      <span>{column}</span>
+                                      <span className="comparison-sort-indicator" aria-hidden="true">
+                                        {sortConfig.column === column
+                                          ? sortConfig.direction === "asc"
+                                            ? "\u25B2"
+                                            : "\u25BC"
+                                          : ""}
+                                      </span>
                                     </button>
                                   </th>
                                 ))}
@@ -561,12 +618,23 @@ export default function ExperimentDetailPage() {
                                       const value = row?.[column];
                                       if (column === "run_id" && runId) {
                                         return (
-                                          <td key={column}>
+                                          <td key={column} className="comparison-td-text">
                                             <Link href={`/runs/${runId}`}>{runId}</Link>
                                           </td>
                                         );
                                       }
-                                      return <td key={column}>{toText(value)}</td>;
+                                      return (
+                                        <td
+                                          key={column}
+                                          className={
+                                            numericColumns.has(column)
+                                              ? "comparison-td-numeric"
+                                              : "comparison-td-text"
+                                          }
+                                        >
+                                          {formatComparisonValue(value, numericColumns.has(column))}
+                                        </td>
+                                      );
                                     })}
                                   </tr>
                                 );

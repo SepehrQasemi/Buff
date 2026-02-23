@@ -713,6 +713,55 @@ th {
   background: var(--card);
 }
 
+.comparison-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.comparison-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--panel);
+}
+
+.comparison-table th,
+.comparison-table td {
+  white-space: nowrap;
+}
+
+.comparison-sort-button {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  width: 100%;
+  font: inherit;
+}
+
+.comparison-sort-button.is-active {
+  color: var(--ink);
+}
+
+.comparison-sort-indicator {
+  min-width: 10px;
+  text-align: center;
+}
+
+.comparison-th-text,
+.comparison-td-text {
+  text-align: left;
+}
+
+.comparison-th-numeric,
+.comparison-td-numeric {
+  text-align: right;
+}
+
 .row-selected {
   background: rgba(15, 107, 95, 0.1);
 }
