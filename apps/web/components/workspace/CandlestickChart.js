@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 const INITIAL_VIEW_BARS = 120;
+const DEFAULT_MARKER_DENSITY_LIMIT = 900;
 const MARKER_PALETTE = [
-  { entry: "var(--accent)", exit: "var(--accent-2)" },
-  { entry: "var(--chart-up)", exit: "var(--chart-down)" },
-  { entry: "rgba(80, 125, 220, 0.9)", exit: "rgba(231, 129, 94, 0.9)" },
+  { entry: "var(--accent)", exit: "var(--accent-2)", event: "var(--accent-2)" },
+  { entry: "var(--chart-up)", exit: "var(--chart-down)", event: "var(--accent-2)" },
+  { entry: "rgba(80, 125, 220, 0.9)", exit: "rgba(231, 129, 94, 0.9)", event: "rgba(209, 147, 47, 0.9)" },
 ];
+
+const SIGNAL_ENTRY_TYPES = new Set(["signal_entry"]);
+const SIGNAL_EXIT_TYPES = new Set(["signal_exit"]);
 
 const toEpochMs = (value) => {
   if (value === null || value === undefined || value === "") {
@@ -76,24 +80,45 @@ const normalizeMarkerSets = (markerSets, markers) => {
     return markerSets;
   }
   if (Array.isArray(markers) && markers.length) {
-    return [{ label: "Run", markers }];
+    return [{ label: "Trades", markers }];
   }
   return [];
 };
 
+const classifyMarkerKind = (markerType, marker) => {
+  const normalizedType = String(markerType || "").toLowerCase();
+  if (normalizedType.startsWith("signal")) {
+    return "signal";
+  }
+  if (marker?.signal_action || marker?.decision_id || marker?.reason_code) {
+    return "signal";
+  }
+  return "trade";
+};
+
 const flattenMarkers = (sets) =>
-  sets.flatMap((set, index) => {
-    const palette = MARKER_PALETTE[index % MARKER_PALETTE.length];
+  sets.flatMap((set, setIndex) => {
+    const palette = MARKER_PALETTE[setIndex % MARKER_PALETTE.length];
     const entryColor = set?.entryColor || palette.entry;
     const exitColor = set?.exitColor || palette.exit;
+    const eventColor = set?.eventColor || palette.event;
     const sourceLabel = String(set?.label || set?.runId || "Run");
-    return (Array.isArray(set?.markers) ? set.markers : []).map((marker) => ({
-      ...marker,
-      __runId: set?.runId ? String(set.runId) : "",
-      __label: sourceLabel,
-      __entryColor: entryColor,
-      __exitColor: exitColor,
-    }));
+    const setMarkers = Array.isArray(set?.markers) ? set.markers : [];
+    return setMarkers.map((marker, markerIndex) => {
+      const markerType = String(marker?.marker_type || "event").toLowerCase();
+      return {
+        ...marker,
+        __runId: set?.runId ? String(set.runId) : "",
+        __label: sourceLabel,
+        __entryColor: entryColor,
+        __exitColor: exitColor,
+        __eventColor: eventColor,
+        __type: markerType,
+        __kind: classifyMarkerKind(markerType, marker),
+        __setIndex: setIndex,
+        __markerIndex: markerIndex,
+      };
+    });
   });
 
 const formatPrice = (value) => {
@@ -110,16 +135,50 @@ const formatTimestamp = (value) => {
   return String(value);
 };
 
-export default function CandlestickChart({ data, markers, markerSets, height = 420 }) {
+const downsampleMarkers = (rows, limit) => {
+  if (!Array.isArray(rows) || rows.length <= limit) {
+    return { rows: Array.isArray(rows) ? rows : [], downsampled: false };
+  }
+  const result = [];
+  const step = rows.length / limit;
+  for (let index = 0; index < limit; index += 1) {
+    const sourceIndex = Math.floor(index * step);
+    const marker = rows[sourceIndex];
+    if (!marker) {
+      continue;
+    }
+    if (result.length > 0 && result[result.length - 1].__uid === marker.__uid) {
+      continue;
+    }
+    result.push(marker);
+  }
+  const last = rows[rows.length - 1];
+  if (last && (result.length === 0 || result[result.length - 1].__uid !== last.__uid)) {
+    result.push(last);
+  }
+  return { rows: result, downsampled: true };
+};
+
+export default function CandlestickChart({
+  data,
+  markers,
+  markerSets,
+  height = 420,
+  overlayControls = true,
+  markerDensityLimit = DEFAULT_MARKER_DENSITY_LIMIT,
+}) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const candleSeriesRef = useRef(null);
   const crosshairHandlerRef = useRef(null);
-  const candlesRef = useRef([]);
+  const hoverRafRef = useRef(0);
+  const pendingHoverRef = useRef(null);
   const candleByTimeRef = useRef(new Map());
   const markerDetailsByTimeRef = useRef(new Map());
   const [containerWidth, setContainerWidth] = useState(0);
   const [hoverInfo, setHoverInfo] = useState(null);
+  const [showTradeMarkers, setShowTradeMarkers] = useState(true);
+  const [showSignalMarkers, setShowSignalMarkers] = useState(true);
 
   const normalizedCandleRows = useMemo(() => {
     const rows = Array.isArray(data) ? data : [];
@@ -159,8 +218,57 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
 
   const normalizedMarkerRows = useMemo(() => {
     const sets = normalizeMarkerSets(markerSets, markers);
-    return flattenMarkers(sets);
+    return flattenMarkers(sets)
+      .map((marker, index) => ({
+        ...marker,
+        __uid: `${marker.__setIndex}:${marker.__markerIndex}:${index}`,
+        __timestampMs: toEpochMs(marker.timestamp),
+      }))
+      .sort((left, right) => {
+        if (left.__timestampMs !== null && right.__timestampMs !== null) {
+          if (left.__timestampMs !== right.__timestampMs) {
+            return left.__timestampMs - right.__timestampMs;
+          }
+        } else if (left.__timestampMs !== null) {
+          return -1;
+        } else if (right.__timestampMs !== null) {
+          return 1;
+        }
+        return left.__uid.localeCompare(right.__uid);
+      });
   }, [markerSets, markers]);
+
+  const markerCounts = useMemo(
+    () =>
+      normalizedMarkerRows.reduce(
+        (acc, marker) => {
+          if (marker.__kind === "signal") {
+            acc.signal += 1;
+          } else {
+            acc.trade += 1;
+          }
+          return acc;
+        },
+        { trade: 0, signal: 0 }
+      ),
+    [normalizedMarkerRows]
+  );
+
+  const filteredMarkerRows = useMemo(
+    () =>
+      normalizedMarkerRows.filter((marker) => {
+        if (marker.__kind === "signal") {
+          return showSignalMarkers;
+        }
+        return showTradeMarkers;
+      }),
+    [normalizedMarkerRows, showSignalMarkers, showTradeMarkers]
+  );
+
+  const sampledMarkers = useMemo(
+    () => downsampleMarkers(filteredMarkerRows, Math.max(100, markerDensityLimit)),
+    [filteredMarkerRows, markerDensityLimit]
+  );
 
   useEffect(() => {
     if (!containerRef.current || typeof window === "undefined") {
@@ -182,16 +290,22 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
     let active = true;
     let cleanup = null;
 
+    const scheduleHover = (nextHover) => {
+      pendingHoverRef.current = nextHover;
+      if (hoverRafRef.current || typeof window === "undefined") {
+        return;
+      }
+      hoverRafRef.current = window.requestAnimationFrame(() => {
+        hoverRafRef.current = 0;
+        setHoverInfo(pendingHoverRef.current);
+      });
+    };
+
     const create = async () => {
       if (!containerRef.current || typeof window === "undefined") {
         return;
       }
-      const {
-        CrosshairMode,
-        ColorType,
-        LineStyle,
-        createChart,
-      } = await import("lightweight-charts");
+      const { CrosshairMode, ColorType, LineStyle, createChart } = await import("lightweight-charts");
       if (!active || !containerRef.current) {
         return;
       }
@@ -259,23 +373,18 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
       });
 
       const crosshairHandler = (param) => {
-        if (
-          !param?.point ||
-          !param?.time ||
-          !param.seriesData ||
-          !candleSeriesRef.current
-        ) {
-          setHoverInfo(null);
+        if (!param?.point || !param?.time || !param.seriesData || !candleSeriesRef.current) {
+          scheduleHover(null);
           return;
         }
         const bar = param.seriesData.get(candleSeriesRef.current);
         if (!bar) {
-          setHoverInfo(null);
+          scheduleHover(null);
           return;
         }
         const candle = candleByTimeRef.current.get(bar.time) || null;
-        const markerDetail = markerDetailsByTimeRef.current.get(bar.time) || null;
-        setHoverInfo({
+        const markerDetails = markerDetailsByTimeRef.current.get(bar.time) || [];
+        scheduleHover({
           x: Math.round(param.point.x),
           y: Math.round(param.point.y),
           time: bar.time,
@@ -284,12 +393,11 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
           high: bar.high,
           low: bar.low,
           close: bar.close,
-          marker: markerDetail,
+          markers: markerDetails.slice(0, 3),
         });
       };
 
       chart.subscribeCrosshairMove(crosshairHandler);
-
       chartRef.current = chart;
       candleSeriesRef.current = candleSeries;
       crosshairHandlerRef.current = crosshairHandler;
@@ -297,6 +405,10 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
       cleanup = () => {
         if (chartRef.current && crosshairHandlerRef.current) {
           chartRef.current.unsubscribeCrosshairMove(crosshairHandlerRef.current);
+        }
+        if (hoverRafRef.current && typeof window !== "undefined") {
+          window.cancelAnimationFrame(hoverRafRef.current);
+          hoverRafRef.current = 0;
         }
         crosshairHandlerRef.current = null;
         candleSeriesRef.current = null;
@@ -316,6 +428,10 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
         candleSeriesRef.current = null;
         crosshairHandlerRef.current = null;
       }
+      if (hoverRafRef.current && typeof window !== "undefined") {
+        window.cancelAnimationFrame(hoverRafRef.current);
+        hoverRafRef.current = 0;
+      }
     };
   }, [height]);
 
@@ -334,10 +450,7 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
     if (!chartRef.current || !candleSeriesRef.current) {
       return;
     }
-    candlesRef.current = normalizedCandleRows;
-    candleByTimeRef.current = new Map(
-      normalizedCandleRows.map((row) => [row.time, row])
-    );
+    candleByTimeRef.current = new Map(normalizedCandleRows.map((row) => [row.time, row]));
     candleSeriesRef.current.setData(
       normalizedCandleRows.map((row) => ({
         time: row.time,
@@ -365,15 +478,11 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
     }
 
     const candleTimesMs = normalizedCandleRows.map((row) => row.timeMs);
-    const candleTimesToRows = new Map(
-      normalizedCandleRows.map((row) => [row.time, row])
-    );
-    const seriesMarkers = [];
     const markerDetailsByTime = new Map();
+    const chartMarkers = [];
 
-    normalizedMarkerRows.forEach((marker) => {
-      const markerTimeMs = toEpochMs(marker?.timestamp);
-      const nearestIndex = findNearestIndex(candleTimesMs, markerTimeMs);
+    sampledMarkers.rows.forEach((marker) => {
+      const nearestIndex = findNearestIndex(candleTimesMs, marker.__timestampMs);
       if (nearestIndex < 0) {
         return;
       }
@@ -381,41 +490,69 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
       if (!candle) {
         return;
       }
-      const markerType = String(marker?.marker_type || "event").toLowerCase();
-      const isEntry = markerType === "entry";
-      const shape = isEntry ? "arrowUp" : "arrowDown";
-      const position = isEntry ? "belowBar" : "aboveBar";
-      const color = isEntry ? marker.__entryColor : marker.__exitColor;
-      const priceCandidate = toFiniteNumber(marker?.price);
-      const priceValue = priceCandidate === null ? candle.close : priceCandidate;
-      const details = {
-        type: markerType,
-        sourceLabel: marker.__label || marker.__runId || "Run",
-        runId: marker.__runId || "",
-        timestamp: formatTimestamp(marker?.timestamp || candle.ts),
-        price: priceValue,
-        side: marker?.side ? String(marker.side) : null,
-        tradeId: marker?.trade_id ? String(marker.trade_id) : null,
-      };
+      const markerType = marker.__type;
+      const isTradeMarker = marker.__kind === "trade";
+      let shape = "circle";
+      let position = "inBar";
+      let color = marker.__eventColor;
 
-      seriesMarkers.push({
+      if (isTradeMarker) {
+        if (markerType === "entry") {
+          shape = "arrowUp";
+          position = "belowBar";
+          color = marker.__entryColor;
+        } else if (markerType === "exit") {
+          shape = "arrowDown";
+          position = "aboveBar";
+          color = marker.__exitColor;
+        } else {
+          shape = "circle";
+          position = "inBar";
+          color = marker.__eventColor;
+        }
+      } else if (SIGNAL_ENTRY_TYPES.has(markerType)) {
+        shape = "circle";
+        position = "belowBar";
+        color = marker.__entryColor;
+      } else if (SIGNAL_EXIT_TYPES.has(markerType)) {
+        shape = "circle";
+        position = "aboveBar";
+        color = marker.__exitColor;
+      } else {
+        shape = "square";
+        position = "inBar";
+        color = marker.__eventColor;
+      }
+
+      chartMarkers.push({
         time: candle.time,
         position,
         color,
         shape,
       });
-      if (!markerDetailsByTime.has(candle.time)) {
-        markerDetailsByTime.set(candle.time, details);
-      }
+
+      const existing = markerDetailsByTime.get(candle.time) || [];
+      const priceCandidate = toFiniteNumber(marker?.price);
+      existing.push({
+        uid: marker.__uid,
+        kind: marker.__kind,
+        type: markerType,
+        sourceLabel: marker.__label || marker.__runId || "Run",
+        runId: marker.__runId || "",
+        timestamp: formatTimestamp(marker?.timestamp || candle.ts),
+        price: priceCandidate === null ? candle.close : priceCandidate,
+        side: marker?.side ? String(marker.side) : null,
+        tradeId: marker?.trade_id ? String(marker.trade_id) : null,
+        signalAction: marker?.signal_action ? String(marker.signal_action) : null,
+        reasonCode: marker?.reason_code ? String(marker.reason_code) : null,
+        riskState: marker?.risk_state ? String(marker.risk_state) : null,
+      });
+      markerDetailsByTime.set(candle.time, existing);
     });
 
     markerDetailsByTimeRef.current = markerDetailsByTime;
-    candleSeriesRef.current.setMarkers(seriesMarkers);
-
-    if (hoverInfo?.time && !candleTimesToRows.has(hoverInfo.time)) {
-      setHoverInfo(null);
-    }
-  }, [normalizedCandleRows, normalizedMarkerRows, hoverInfo?.time]);
+    candleSeriesRef.current.setMarkers(chartMarkers);
+  }, [normalizedCandleRows, sampledMarkers]);
 
   if (!normalizedCandleRows.length) {
     return (
@@ -427,12 +564,41 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
 
   return (
     <div className="chart-frame" ref={containerRef} style={{ height, position: "relative" }}>
+      {overlayControls && (markerCounts.trade > 0 || markerCounts.signal > 0) && (
+        <div className="chart-overlay-controls">
+          {markerCounts.trade > 0 && (
+            <label className="chart-overlay-toggle">
+              <input
+                type="checkbox"
+                checked={showTradeMarkers}
+                onChange={(event) => setShowTradeMarkers(event.target.checked)}
+              />
+              <span>Trades ({markerCounts.trade})</span>
+            </label>
+          )}
+          {markerCounts.signal > 0 && (
+            <label className="chart-overlay-toggle">
+              <input
+                type="checkbox"
+                checked={showSignalMarkers}
+                onChange={(event) => setShowSignalMarkers(event.target.checked)}
+              />
+              <span>Signals ({markerCounts.signal})</span>
+            </label>
+          )}
+          {sampledMarkers.downsampled && (
+            <span className="chart-overlay-note">
+              Showing {sampledMarkers.rows.length}/{filteredMarkerRows.length} markers
+            </span>
+          )}
+        </div>
+      )}
       {hoverInfo && (
         <div
           className="chart-tooltip"
           style={{
-            left: Math.max(8, Math.min((hoverInfo.x || 0) + 12, Math.max(8, containerWidth - 220))),
-            top: Math.max(8, Math.min((hoverInfo.y || 0) + 12, Math.max(8, height - 96))),
+            left: Math.max(8, Math.min((hoverInfo.x || 0) + 12, Math.max(8, containerWidth - 250))),
+            top: Math.max(8, Math.min((hoverInfo.y || 0) + 12, Math.max(8, height - 170))),
           }}
         >
           <div className="chart-tooltip-title">{formatTimestamp(hoverInfo.timestamp)}</div>
@@ -440,18 +606,28 @@ export default function CandlestickChart({ data, markers, markerSets, height = 4
           <div className="chart-tooltip-row">H: {formatPrice(hoverInfo.high)}</div>
           <div className="chart-tooltip-row">L: {formatPrice(hoverInfo.low)}</div>
           <div className="chart-tooltip-row">C: {formatPrice(hoverInfo.close)}</div>
-          {hoverInfo.marker && (
+          {Array.isArray(hoverInfo.markers) && hoverInfo.markers.length > 0 && (
             <>
               <div className="chart-tooltip-divider" />
-              <div className="chart-tooltip-row">
-                {hoverInfo.marker.sourceLabel} {hoverInfo.marker.type}
-              </div>
-              {hoverInfo.marker.tradeId && (
-                <div className="chart-tooltip-row">Trade: {hoverInfo.marker.tradeId}</div>
-              )}
-              {hoverInfo.marker.side && (
-                <div className="chart-tooltip-row">Side: {hoverInfo.marker.side}</div>
-              )}
+              {hoverInfo.markers.map((marker) => (
+                <div key={marker.uid} className="chart-tooltip-marker">
+                  <div className="chart-tooltip-row">
+                    {marker.sourceLabel} {marker.kind}
+                  </div>
+                  {marker.signalAction && (
+                    <div className="chart-tooltip-row">Action: {marker.signalAction}</div>
+                  )}
+                  {marker.tradeId && (
+                    <div className="chart-tooltip-row">Trade: {marker.tradeId}</div>
+                  )}
+                  {marker.reasonCode && (
+                    <div className="chart-tooltip-row">Reason: {marker.reasonCode}</div>
+                  )}
+                  {marker.riskState && (
+                    <div className="chart-tooltip-row">Risk: {marker.riskState}</div>
+                  )}
+                </div>
+              ))}
             </>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  getDecisions,
   getMetrics,
   getOhlcv,
   getActivePlugins,
@@ -24,6 +25,8 @@ const MAX_TRADES_PAGE_SIZE = 500;
 const TRANSIENT_RETRY_DELAYS_MS = [250, 500, 1000];
 const TRANSIENT_RETRY_MESSAGE = "Temporary filesystem probe failure, retrying...";
 const TERMINAL_RUN_STATES = new Set(["COMPLETED", "FAILED", "CORRUPTED", "OK"]);
+const SIGNAL_ENTRY_ACTIONS = new Set(["BUY", "LONG", "ENTER_LONG", "ENTRY"]);
+const SIGNAL_EXIT_ACTIONS = new Set(["SELL", "SHORT", "EXIT_LONG", "EXIT_SHORT", "EXIT"]);
 
 const isArtifactLifecycleReady = (state) => {
   const normalized = String(state || "").toUpperCase();
@@ -97,6 +100,8 @@ export default function useWorkspace(runId, options = {}) {
   const [ohlcvError, setOhlcvError] = useState(null);
   const [markers, setMarkers] = useState([]);
   const [markersError, setMarkersError] = useState(null);
+  const [signalMarkers, setSignalMarkers] = useState([]);
+  const [signalMarkersError, setSignalMarkersError] = useState(null);
   const [trades, setTrades] = useState({ results: [] });
   const [tradesError, setTradesError] = useState(null);
   const [tradesPage, setTradesPage] = useState(1);
@@ -124,6 +129,8 @@ export default function useWorkspace(runId, options = {}) {
   const ohlcvAbortRef = useRef(null);
   const markersRequestId = useRef(0);
   const markersAbortRef = useRef(null);
+  const signalMarkersRequestId = useRef(0);
+  const signalMarkersAbortRef = useRef(null);
   const tradesRequestId = useRef(0);
   const tradesAbortRef = useRef(null);
   const metricsRequestId = useRef(0);
@@ -163,6 +170,41 @@ export default function useWorkspace(runId, options = {}) {
     }
     return isArtifactLifecycleReady(run?.status);
   }, [requestedLifecycleState, run?.status]);
+
+  const toSignalMarker = (record) => {
+    if (!record || typeof record !== "object") {
+      return null;
+    }
+    const timestamp = String(record.timestamp || record.timestamp_utc || "").trim();
+    if (!timestamp) {
+      return null;
+    }
+    const action = String(record.action || "").toUpperCase();
+    let markerType = "signal_event";
+    if (SIGNAL_ENTRY_ACTIONS.has(action)) {
+      markerType = "signal_entry";
+    } else if (SIGNAL_EXIT_ACTIONS.has(action)) {
+      markerType = "signal_exit";
+    }
+    const toNumber = (value) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    return {
+      timestamp,
+      price:
+        toNumber(record.price) ??
+        toNumber(record.fill_price) ??
+        toNumber(record.entry_price) ??
+        toNumber(record.exit_price),
+      marker_type: markerType,
+      signal_action: action || null,
+      decision_id: record.decision_id || record.id || null,
+      reason_code: record.reason_code || record.reason || null,
+      risk_state: record.risk_state || null,
+      severity: record.severity || null,
+    };
+  };
 
   useEffect(() => {
     if (effectiveTradesPageSize !== tradesPageSize) {
@@ -452,6 +494,64 @@ export default function useWorkspace(runId, options = {}) {
     if (!runId) {
       return;
     }
+    if (!artifactsReady) {
+      return;
+    }
+    const requestId = signalMarkersRequestId.current + 1;
+    signalMarkersRequestId.current = requestId;
+    if (signalMarkersAbortRef.current) {
+      signalMarkersAbortRef.current.abort();
+    }
+    const controller = new AbortController();
+    signalMarkersAbortRef.current = controller;
+    async function loadSignalMarkers() {
+      const params = {
+        start_ts: range.start_ts || undefined,
+        end_ts: range.end_ts || undefined,
+        page: 1,
+        page_size: 500,
+      };
+      const result = await requestWithTransientRetry({
+        request: () =>
+          getDecisions(runId, params, {
+            signal: controller.signal,
+            cache: true,
+          }),
+        signal: controller.signal,
+        onRetry: () => setTransientRetryNotice(TRANSIENT_RETRY_MESSAGE),
+      });
+      if (signalMarkersRequestId.current !== requestId || result.aborted) {
+        return;
+      }
+      if (!result.ok) {
+        const { code } = extractErrorInfo(result.data);
+        if (result.status === 404 && code === "decision_records_missing") {
+          setTransientRetryNotice(null);
+          setSignalMarkers([]);
+          setSignalMarkersError(null);
+          return;
+        }
+        setTransientRetryNotice(null);
+        setSignalMarkers([]);
+        setSignalMarkersError(mapApiErrorDetails(result, "Failed to load decision signals"));
+        return;
+      }
+      const rows = Array.isArray(result.data?.results) ? result.data.results : [];
+      const normalized = rows.map(toSignalMarker).filter(Boolean);
+      setTransientRetryNotice(null);
+      setSignalMarkers(normalized);
+      setSignalMarkersError(null);
+    }
+    loadSignalMarkers();
+    return () => {
+      controller.abort();
+    };
+  }, [artifactsReady, runId, range, reloadToken]);
+
+  useEffect(() => {
+    if (!runId) {
+      return;
+    }
     setTradesPage(1);
   }, [runId]);
 
@@ -686,6 +786,8 @@ export default function useWorkspace(runId, options = {}) {
     ohlcvError,
     markers,
     markersError,
+    signalMarkers,
+    signalMarkersError,
     trades,
     tradesError,
     tradesPage: effectiveTradesPage,

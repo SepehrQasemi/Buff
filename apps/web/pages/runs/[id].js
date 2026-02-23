@@ -169,6 +169,8 @@ export default function ChartWorkspace() {
     ohlcvError,
     markers,
     markersError,
+    signalMarkers,
+    signalMarkersError,
     trades,
     tradesError,
     tradesPage,
@@ -340,6 +342,30 @@ export default function ChartWorkspace() {
   }, [runId]);
 
   const candles = useMemo(() => ohlcv?.candles || [], [ohlcv]);
+  const chartMarkerSets = useMemo(() => {
+    const sets = [];
+    if (Array.isArray(markers) && markers.length > 0) {
+      sets.push({
+        runId: runId || "run",
+        label: "Trades",
+        markers,
+        entryColor: "var(--accent)",
+        exitColor: "var(--accent-2)",
+        eventColor: "var(--accent-2)",
+      });
+    }
+    if (Array.isArray(signalMarkers) && signalMarkers.length > 0) {
+      sets.push({
+        runId: `${runId || "run"}:signals`,
+        label: "Signals",
+        markers: signalMarkers,
+        entryColor: "rgba(14, 122, 77, 0.95)",
+        exitColor: "rgba(180, 35, 24, 0.95)",
+        eventColor: "rgba(209, 147, 47, 0.95)",
+      });
+    }
+    return sets;
+  }, [markers, runId, signalMarkers]);
   const tradeRows = useMemo(() => trades?.results || [], [trades]);
   const demoMode = useMemo(
     () =>
@@ -791,6 +817,9 @@ export default function ChartWorkspace() {
       {markersError && (
         <ErrorNotice error={markersError} onRetry={reload} compact mode={errorMode} />
       )}
+      {signalMarkersError && (
+        <ErrorNotice error={signalMarkersError} onRetry={reload} compact mode={errorMode} />
+      )}
       {reportExportError && (
         <ErrorNotice error={reportExportError} onRetry={handleReportExport} mode={errorMode} />
       )}
@@ -966,7 +995,7 @@ export default function ChartWorkspace() {
               <p>Loading OHLCV artifacts...</p>
             </div>
           ) : (
-            <CandlestickChart data={candles} markers={markers} height={420} />
+            <CandlestickChart data={candles} markerSets={chartMarkerSets} height={420} />
           )}
 
           <div className="chart-status">

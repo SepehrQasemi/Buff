@@ -509,7 +509,12 @@ export default function CompareRunsPage() {
           {markersErrorB && (
             <p className="inline-warning">{`Run B markers: ${markersErrorB}`}</p>
           )}
-          <CandlestickChart data={candles} markerSets={markerSets} height={360} />
+          <CandlestickChart
+            data={candles}
+            markerSets={markerSets}
+            overlayControls={false}
+            height={360}
+          />
           <div className="chart-status">
             <div>
               <span>Baseline OHLCV:</span>{" "}

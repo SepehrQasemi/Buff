@@ -356,6 +356,8 @@ export default function ExperimentDetailPage() {
     ohlcvError,
     markers,
     markersError,
+    signalMarkers,
+    signalMarkersError,
     symbol,
     setSymbol,
     timeframe,
@@ -407,6 +409,30 @@ export default function ExperimentDetailPage() {
   const overallStatus = String(manifest?.status || comparison?.status || "UNKNOWN").toUpperCase();
   const counts = comparison?.counts || manifest?.summary || {};
   const candles = Array.isArray(ohlcv?.candles) ? ohlcv.candles : [];
+  const chartMarkerSets = useMemo(() => {
+    const sets = [];
+    if (Array.isArray(markers) && markers.length > 0) {
+      sets.push({
+        runId: selectedRunId || "run",
+        label: "Trades",
+        markers,
+        entryColor: "var(--accent)",
+        exitColor: "var(--accent-2)",
+        eventColor: "var(--accent-2)",
+      });
+    }
+    if (Array.isArray(signalMarkers) && signalMarkers.length > 0) {
+      sets.push({
+        runId: `${selectedRunId || "run"}:signals`,
+        label: "Signals",
+        markers: signalMarkers,
+        entryColor: "rgba(14, 122, 77, 0.95)",
+        exitColor: "rgba(180, 35, 24, 0.95)",
+        eventColor: "rgba(209, 147, 47, 0.95)",
+      });
+    }
+    return sets;
+  }, [markers, selectedRunId, signalMarkers]);
   const hasSuccessfulCandidates = successfulCandidates.length > 0;
 
   const toggleSort = (column) => {
@@ -641,6 +667,9 @@ export default function ExperimentDetailPage() {
                   {markersError && (
                     <ErrorNotice error={markersError} compact mode="pro" onRetry={reload} />
                   )}
+                  {signalMarkersError && (
+                    <ErrorNotice error={signalMarkersError} compact mode="pro" onRetry={reload} />
+                  )}
 
                   {!artifactsReady ? (
                     <div className="chart-empty" style={{ height: 420 }}>
@@ -654,7 +683,7 @@ export default function ExperimentDetailPage() {
                       <p>Loading baseline OHLCV artifacts...</p>
                     </div>
                   ) : (
-                    <CandlestickChart data={candles} markers={markers} height={420} />
+                    <CandlestickChart data={candles} markerSets={chartMarkerSets} height={420} />
                   )}
                 </>
               )}
