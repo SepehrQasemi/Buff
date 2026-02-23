@@ -25,7 +25,7 @@ function ToastCard({ item, onClose }) {
         onClick={() => onClose(item.id)}
         aria-label="Dismiss notification"
       >
-        ×
+        {"\u00D7"}
       </button>
     </div>
   );

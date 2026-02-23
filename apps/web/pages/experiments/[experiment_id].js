@@ -17,12 +17,12 @@ const TABS = [
 const statusBadgeKind = (status) => {
   const normalized = String(status || "").toUpperCase();
   if (normalized === "COMPLETED" || normalized === "OK") {
-    return "ok";
+    return "status-completed";
   }
   if (normalized === "PARTIAL") {
-    return "info";
+    return "status-partial";
   }
-  return "invalid";
+  return "status-failed";
 };
 
 const toText = (value, fallback = "n/a") => {
@@ -52,8 +52,12 @@ const compareValues = (left, right) => {
   return String(left ?? "").localeCompare(String(right ?? ""));
 };
 
-const NUMBER_FORMATTER = new Intl.NumberFormat("en-US", {
+const NUMBER_DECIMAL_FORMATTER = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
   maximumFractionDigits: 4,
+});
+const NUMBER_INTEGER_FORMATTER = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 0,
 });
 
 const isNumericValue = (value) => {
@@ -81,7 +85,10 @@ const formatComparisonValue = (value, numeric) => {
   if (!Number.isFinite(numericValue)) {
     return String(value);
   }
-  return NUMBER_FORMATTER.format(numericValue);
+  if (Number.isInteger(numericValue)) {
+    return NUMBER_INTEGER_FORMATTER.format(numericValue);
+  }
+  return NUMBER_DECIMAL_FORMATTER.format(numericValue);
 };
 
 export default function ExperimentDetailPage() {
@@ -389,10 +396,10 @@ export default function ExperimentDetailPage() {
             <div className="section-title">
               <h3>Loading experiment artifacts...</h3>
             </div>
-            <div style={{ display: "grid", gap: "10px" }}>
-              <div style={{ height: "12px", borderRadius: "999px", background: "rgba(27,32,36,0.12)" }} />
-              <div style={{ height: "12px", width: "84%", borderRadius: "999px", background: "rgba(27,32,36,0.1)" }} />
-              <div style={{ height: "12px", width: "62%", borderRadius: "999px", background: "rgba(27,32,36,0.08)" }} />
+            <div className="skeleton-stack">
+              <div className="skeleton-line" />
+              <div className="skeleton-line medium" />
+              <div className="skeleton-line short" />
             </div>
           </section>
         )}
@@ -565,7 +572,9 @@ export default function ExperimentDetailPage() {
 
                     {comparisonColumns.length === 0 ? (
                       <div className="panel-card">
-                        <p className="muted">No comparison columns available.</p>
+                        <div className="empty-state">
+                          <p>No comparison columns available for this experiment.</p>
+                        </div>
                       </div>
                     ) : (
                       <div className="panel-card">

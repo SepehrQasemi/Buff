@@ -97,6 +97,20 @@ const buildDefaultParams = (strategy) =>
     return acc;
   }, {});
 
+const experimentStatusBadgeClass = (status) => {
+  const normalized = String(status || "").toUpperCase();
+  if (normalized === "COMPLETED" || normalized === "OK") {
+    return "status-completed";
+  }
+  if (normalized === "PARTIAL") {
+    return "status-partial";
+  }
+  if (normalized === "FAILED") {
+    return "status-failed";
+  }
+  return "info";
+};
+
 export default function ExperimentsPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -523,7 +537,11 @@ export default function ExperimentsPage() {
           <section className="card fade-up" style={{ marginBottom: "16px" }}>
             <div className="section-title">
               <h3>Experiment Submitted</h3>
-              <span className="badge ok">{createdExperiment.status || "COMPLETED"}</span>
+              <span
+                className={`badge ${experimentStatusBadgeClass(createdExperiment.status || "COMPLETED")}`}
+              >
+                {createdExperiment.status || "COMPLETED"}
+              </span>
             </div>
             <div className="grid three">
               <div className="kpi">
@@ -663,7 +681,11 @@ export default function ExperimentsPage() {
           </div>
 
           {loadingStrategies ? (
-            <div className="muted">Loading strategy catalog...</div>
+            <div className="skeleton-stack" aria-label="Loading strategy catalog">
+              <div className="skeleton-line" />
+              <div className="skeleton-line medium" />
+              <div className="skeleton-line short" />
+            </div>
           ) : (
             <div className="grid" style={{ gap: "14px" }}>
               {candidates.map((candidate, index) => {
