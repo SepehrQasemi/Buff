@@ -755,6 +755,47 @@ th {
   margin: 6px 0;
 }
 
+.chart-tooltip-marker {
+  margin-top: 6px;
+}
+
+.chart-overlay-controls {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 8;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(26, 31, 36, 0.14);
+  backdrop-filter: blur(4px);
+}
+
+.chart-overlay-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  color: var(--ink);
+}
+
+.chart-overlay-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  padding: 0;
+}
+
+.chart-overlay-note {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+}
+
 .chart-empty {
   border-radius: 16px;
   border: 1px dashed var(--border);
