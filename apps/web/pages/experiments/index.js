@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AppShell from "../../components/AppShell";
 import ErrorNotice from "../../components/ErrorNotice";
 import { createExperiment, getExperimentsIndex, getStrategies } from "../../lib/api";
@@ -146,6 +146,7 @@ const experimentStatusBadgeClass = (status) => {
 export default function ExperimentsPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const openExperimentInputRef = useRef(null);
   const [strategies, setStrategies] = useState([]);
   const [loadingStrategies, setLoadingStrategies] = useState(true);
   const [error, setError] = useState(null);
@@ -292,6 +293,30 @@ export default function ExperimentsPage() {
       })
     );
   }, [strategies, strategiesById]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const onKeyDown = (event) => {
+      if (event.defaultPrevented || event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) {
+        return;
+      }
+      const target = event.target;
+      const tagName = target?.tagName ? String(target.tagName).toLowerCase() : "";
+      const isEditing =
+        target?.isContentEditable || tagName === "input" || tagName === "textarea" || tagName === "select";
+      if (isEditing) {
+        return;
+      }
+      event.preventDefault();
+      openExperimentInputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, []);
 
   const updateCandidate = (index, updater) => {
     setCandidates((current) =>
@@ -532,9 +557,16 @@ export default function ExperimentsPage() {
             <label>
               Experiment ID
               <input
+                ref={openExperimentInputRef}
                 type="text"
                 value={openExperimentId}
                 onChange={(event) => setOpenExperimentId(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    openExistingExperiment();
+                  }
+                }}
                 placeholder="exp_abcdef123456"
               />
             </label>

@@ -859,6 +859,35 @@ th {
   background: var(--card);
 }
 
+.columns-panel {
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: var(--card);
+}
+
+.columns-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.column-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--ink);
+}
+
+.column-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+}
+
 .comparison-table {
   width: max-content;
   min-width: 100%;
@@ -905,6 +934,18 @@ th {
 .comparison-th-text,
 .comparison-td-text {
   text-align: left;
+}
+
+.comparison-run-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.comparison-open-run {
+  font-size: 0.75rem;
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .comparison-th-numeric,
