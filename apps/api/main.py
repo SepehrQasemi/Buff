@@ -91,6 +91,7 @@ DATASET_MAX_BYTES = 10 * 1024 * 1024
 DATASET_ID_PATTERN = re.compile(r"^[a-f0-9]{64}$")
 DATASET_DEFAULT_SYMBOL = "LOCAL"
 DATASET_DEFAULT_TIMEFRAME = "1m"
+EXPERIMENT_INDEX_LIMIT = 50
 
 
 def _kill_switch_enabled() -> bool:
@@ -1791,6 +1792,173 @@ def _load_experiment_artifact(experiment_dir: Path, name: str) -> dict[str, obje
     return payload
 
 
+def _parse_iso_datetime(value: object) -> datetime | None:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _utc_iso_from_datetime(value: datetime) -> str:
+    normalized = value.astimezone(timezone.utc)
+    text = normalized.isoformat(timespec="seconds")
+    if text.endswith("+00:00"):
+        return f"{text[:-6]}Z"
+    return text
+
+
+def _derive_experiment_created_at(
+    experiment_dir: Path, manifest: dict[str, object] | None
+) -> tuple[str | None, datetime | None]:
+    if isinstance(manifest, dict):
+        parsed_created_at = _parse_iso_datetime(manifest.get("created_at"))
+        if parsed_created_at is not None:
+            return _utc_iso_from_datetime(parsed_created_at), parsed_created_at
+    try:
+        mtime = experiment_dir.stat().st_mtime
+    except OSError:
+        return None, None
+    try:
+        parsed_mtime = datetime.fromtimestamp(mtime, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None, None
+    return _utc_iso_from_datetime(parsed_mtime), parsed_mtime
+
+
+def _coerce_non_negative_count(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value >= 0 else None
+    if isinstance(value, float) and value.is_integer():
+        as_int = int(value)
+        return as_int if as_int >= 0 else None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            as_int = int(text)
+        except ValueError:
+            return None
+        return as_int if as_int >= 0 else None
+    return None
+
+
+def _extract_experiment_counts(manifest: dict[str, object] | None) -> tuple[int, int, int]:
+    if not isinstance(manifest, dict):
+        return 0, 0, 0
+    summary = manifest.get("summary")
+    summary_obj = summary if isinstance(summary, dict) else {}
+    candidates = manifest.get("candidates")
+    candidate_items = candidates if isinstance(candidates, list) else []
+
+    total = _coerce_non_negative_count(summary_obj.get("total_candidates"))
+    succeeded = _coerce_non_negative_count(summary_obj.get("succeeded"))
+    failed = _coerce_non_negative_count(summary_obj.get("failed"))
+
+    if total is None:
+        total = len(candidate_items)
+
+    if succeeded is None or failed is None:
+        succeeded_calc = 0
+        failed_calc = 0
+        for item in candidate_items:
+            if not isinstance(item, dict):
+                continue
+            status = str(item.get("status") or item.get("run_status") or "").strip().upper()
+            run_id = str(item.get("run_id") or "").strip()
+            if status == "FAILED":
+                failed_calc += 1
+            elif run_id:
+                succeeded_calc += 1
+        if succeeded is None:
+            succeeded = succeeded_calc
+        if failed is None:
+            failed = failed_calc
+
+    return int(succeeded or 0), int(failed or 0), int(total or 0)
+
+
+def _normalize_experiment_status(manifest: dict[str, object] | None) -> str:
+    if not isinstance(manifest, dict):
+        return "BROKEN"
+    status = str(manifest.get("status") or "").strip().upper()
+    if status in {"COMPLETED", "PARTIAL", "FAILED"}:
+        return status
+    return "BROKEN"
+
+
+def _iter_experiment_dirs(experiments_root: Path) -> list[Path]:
+    if not experiments_root.exists() or not experiments_root.is_dir():
+        return []
+    results: list[Path] = []
+    for child in experiments_root.iterdir():
+        if not child.is_dir():
+            continue
+        experiment_id = child.name.strip()
+        if not experiment_id or experiment_id.startswith("."):
+            continue
+        if not is_valid_component(experiment_id):
+            continue
+        results.append(child.resolve())
+    return sorted(results, key=lambda item: item.name)
+
+
+def _build_experiment_index_entry(experiment_dir: Path) -> dict[str, object]:
+    experiment_id = experiment_dir.name
+    manifest = _load_experiment_artifact(experiment_dir, "experiment_manifest.json")
+    status = _normalize_experiment_status(manifest)
+    created_at, created_sort = _derive_experiment_created_at(experiment_dir, manifest)
+    succeeded_count, failed_count, total_candidates = _extract_experiment_counts(
+        manifest if status != "BROKEN" else None
+    )
+    return {
+        "experiment_id": experiment_id,
+        "status": status,
+        "created_at": created_at,
+        "succeeded_count": succeeded_count,
+        "failed_count": failed_count,
+        "total_candidates": total_candidates,
+        "_created_sort": created_sort,
+    }
+
+
+def _sort_experiment_index_entries(entries: list[dict[str, object]]) -> list[dict[str, object]]:
+    def key(item: dict[str, object]) -> tuple[int, float, str]:
+        created_sort = item.get("_created_sort")
+        experiment_id = str(item.get("experiment_id") or "")
+        if isinstance(created_sort, datetime):
+            return (0, -created_sort.timestamp(), experiment_id)
+        return (1, 0.0, experiment_id)
+
+    sorted_entries = sorted(entries, key=key)
+    compact: list[dict[str, object]] = []
+    # Cap index payload size to keep endpoint predictable and bounded.
+    for item in sorted_entries[:EXPERIMENT_INDEX_LIMIT]:
+        compact.append(
+            {
+                "experiment_id": item.get("experiment_id"),
+                "status": item.get("status"),
+                "created_at": item.get("created_at"),
+                "succeeded_count": item.get("succeeded_count"),
+                "failed_count": item.get("failed_count"),
+                "total_candidates": item.get("total_candidates"),
+            }
+        )
+    return compact
+
+
 @router.post("/runs")
 async def create_run_endpoint(request: Request) -> JSONResponse:
     if _kill_switch_enabled():
@@ -1918,6 +2086,28 @@ async def create_experiment_endpoint(request: Request) -> JSONResponse:
         return error_response(exc.status_code, exc.code, exc.message, exc.details)
     except Exception:
         return error_response(500, "INTERNAL", "Internal error")
+
+
+@router.get("/experiments")
+def list_experiments(request: Request) -> JSONResponse:
+    scope = _resolve_user_scope(request)
+    if isinstance(scope, JSONResponse):
+        return scope
+    user_ctx, base_runs_root, _, _, _ = scope
+    experiments_root = user_experiments_root(base_runs_root, user_ctx.user_id)
+    try:
+        entries = [
+            _build_experiment_index_entry(experiment_dir)
+            for experiment_dir in _iter_experiment_dirs(experiments_root)
+        ]
+    except OSError as exc:
+        return error_response(
+            503,
+            "EXPERIMENT_INDEX_UNREADABLE",
+            "Experiment index unreadable",
+            {"error": str(exc)},
+        )
+    return JSONResponse(status_code=200, content=_sort_experiment_index_entries(entries))
 
 
 @router.get("/experiments/{experiment_id}/manifest")
