@@ -4,7 +4,8 @@ const INITIAL_VIEW_BARS = 120;
 const DEFAULT_MARKER_DENSITY_LIMIT = 900;
 const MARKER_ALIGNMENT_MIN_TOLERANCE_MS = 1000;
 const SINGLE_CANDLE_ALIGNMENT_TOLERANCE_MS = 60 * 60 * 1000;
-const DRAWINGS_STORAGE_PREFIX = "buff_chart_drawings_v1";
+const DRAWINGS_STORAGE_PREFIX = "buff_chart_drawings";
+const DRAWINGS_STORAGE_VERSION = 1;
 const MARKER_PALETTE = [
   { entry: "var(--accent)", exit: "var(--accent-2)", event: "var(--accent-2)" },
   { entry: "var(--chart-up)", exit: "var(--chart-down)", event: "var(--accent-2)" },
@@ -271,6 +272,33 @@ const normalizeDrawing = (drawing) => {
   };
 };
 
+const buildDrawingsStorageKey = (scopeKey, version = DRAWINGS_STORAGE_VERSION) => {
+  const normalizedScope = String(scopeKey || "").trim();
+  if (!normalizedScope) {
+    return null;
+  }
+  return `${DRAWINGS_STORAGE_PREFIX}_v${version}:${normalizedScope}`;
+};
+
+const normalizeStoredDrawings = (payload) => {
+  if (!payload || typeof payload !== "object") {
+    return { drawings: [], invalid: true };
+  }
+  const versionRaw = payload.version;
+  const version =
+    versionRaw === undefined || versionRaw === null
+      ? DRAWINGS_STORAGE_VERSION
+      : Number.parseInt(versionRaw, 10);
+  if (!Number.isFinite(version) || version < 1 || version > DRAWINGS_STORAGE_VERSION) {
+    return { drawings: [], invalid: true };
+  }
+  const rows = Array.isArray(payload.drawings) ? payload.drawings : [];
+  return {
+    drawings: rows.map(normalizeDrawing).filter(Boolean),
+    invalid: false,
+  };
+};
+
 const distanceToSegment = (point, start, end) => {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -321,7 +349,7 @@ export default function CandlestickChart({
 
   const drawingsEnabled = enableDrawTools && Boolean(String(drawingScopeKey || "").trim());
   const drawingsStorageKey = drawingsEnabled
-    ? `${DRAWINGS_STORAGE_PREFIX}:${String(drawingScopeKey).trim()}`
+    ? buildDrawingsStorageKey(String(drawingScopeKey).trim())
     : null;
 
   const normalizedCandleRows = useMemo(() => {
@@ -798,11 +826,19 @@ export default function CandlestickChart({
         return;
       }
       const parsed = JSON.parse(raw);
-      const rows = Array.isArray(parsed?.drawings) ? parsed.drawings : [];
-      setDrawings(rows.map(normalizeDrawing).filter(Boolean));
+      const normalized = normalizeStoredDrawings(parsed);
+      if (normalized.invalid) {
+        window.localStorage.removeItem(drawingsStorageKey);
+      }
+      setDrawings(normalized.drawings);
       setDraftDrawing(null);
       setSelectedDrawingId("");
     } catch {
+      try {
+        window.localStorage.removeItem(drawingsStorageKey);
+      } catch {
+        // Storage may be unavailable; keep load fail-closed and non-fatal.
+      }
       setDrawings([]);
       setDraftDrawing(null);
       setSelectedDrawingId("");
@@ -817,7 +853,7 @@ export default function CandlestickChart({
       window.localStorage.setItem(
         drawingsStorageKey,
         JSON.stringify({
-          version: 1,
+          version: DRAWINGS_STORAGE_VERSION,
           drawings: drawings.map((drawing) => ({ ...drawing })),
         })
       );
@@ -1114,6 +1150,22 @@ export default function CandlestickChart({
     setDrawings((current) => current.filter((drawing) => drawing.id !== selectedDrawingId));
     setSelectedDrawingId("");
   };
+
+  const resetDrawings = () => {
+    setDraftDrawing(null);
+    setDrawings([]);
+    setSelectedDrawingId("");
+    setDrawTool("select");
+    if (!drawingsStorageKey || typeof window === "undefined") {
+      return;
+    }
+    try {
+      window.localStorage.removeItem(drawingsStorageKey);
+    } catch {
+      // Ignore storage failures; state reset still clears active drawings.
+    }
+  };
+
   const debugMarker = hoverInfo?.markers?.[0] || null;
   const debugDeltaText = Number.isFinite(debugMarker?.alignmentDeltaMs)
     ? `${debugMarker.alignmentDeltaMs} ms`
@@ -1187,6 +1239,9 @@ export default function CandlestickChart({
             disabled={!selectedDrawingId}
           >
             Delete
+          </button>
+          <button type="button" className="secondary" onClick={resetDrawings}>
+            Reset
           </button>
         </div>
       )}
