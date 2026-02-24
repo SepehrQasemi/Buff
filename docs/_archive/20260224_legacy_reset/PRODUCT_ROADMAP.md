@@ -17,7 +17,7 @@ Buff is a deterministic, artifact-first strategy research lab with a chart-first
 - Not a broker-connected trading terminal
 - Not a live trading execution system
 - Not a signal service
-- Not a backdoor â€œrecompute in UIâ€ product
+- Not a backdoor â€œrecompute in UIâ€ product
 
 ## Core Principles (Non-Negotiable)
 
@@ -59,7 +59,7 @@ User runs must be stored under a configured runs root directory (RUNS_ROOT).
 If missing or misconfigured, the system returns a stable error explaining how to fix it. The product must not silently fall back to demo/fixtures as a substitute for user runs. Demo/fixtures are only allowed when `DEMO_MODE=1` and must be clearly labeled.
 
 ### Demo/fixtures policy
-Demo/fixtures may exist for tests and local demos, but must be explicitly labeled and must not be the default â€œtruth sourceâ€ for user runs.
+Demo/fixtures may exist for tests and local demos, but must be explicitly labeled and must not be the default â€œtruth sourceâ€ for user runs.
 
 ## Evolution Layers
 
@@ -76,14 +76,14 @@ Deliverables:
 
 Exit criteria:
 - A first-time user can create and open a run without manual file copying.
-- No ambiguity in â€œwhere runs liveâ€ and â€œwhat the UI readsâ€.
+- No ambiguity in â€œwhere runs liveâ€ and â€œwhat the UI readsâ€.
 
 ### Layer 2 â€” Product Finalization
 Goal: make the core usable by non-expert users on a local machine.
 
 Deliverables:
 - Single-command dev start documentation
-- â€œFirst run in 10 minutesâ€ guide
+- â€œFirst run in 10 minutesâ€ guide
 - Clear UI status and error recovery steps
 - Exportable run summary/report artifacts
 

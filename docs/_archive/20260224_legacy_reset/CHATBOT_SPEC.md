@@ -2,7 +2,7 @@ ARCHIVED — NOT AUTHORITATIVE
 Superseded by new documentation reset 2026-02-24.
 Do not rely on this file for current stage or product direction.
 
-# CHATBOT_SPEC Ã¢â‚¬â€ AI Assistant (Guide + Reviewer)
+# CHATBOT_SPEC Ã¢â‚¬â€ AI Assistant (Guide + Reviewer)
 
 ## Purpose
 The chatbot helps users:
@@ -128,8 +128,8 @@ Chatbot must not:
 - recommend live deployment actions
 - circumvent validation gates
 
-## Ã¢â‚¬Å“Exact StepsÃ¢â‚¬Â Requirement
-When user asks Ã¢â‚¬Å“I want to add XÃ¢â‚¬Â the chatbot must respond with:
+## Ã¢â‚¬Å“Exact StepsÃ¢â‚¬Â Requirement
+When user asks Ã¢â‚¬Å“I want to add XÃ¢â‚¬Â the chatbot must respond with:
 1) exact files to create
 2) exact fields to fill
 3) exact commands to run

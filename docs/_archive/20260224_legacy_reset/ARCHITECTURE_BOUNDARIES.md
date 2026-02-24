@@ -13,7 +13,7 @@ This document defines boundaries that must not be violated by future changes.
 
 ## Artifact boundary
 - UI renders from artifacts only.
-- UI must not â€œrecomputeâ€ trades/metrics/signals as a hidden source of truth.
+- UI must not â€œrecomputeâ€ trades/metrics/signals as a hidden source of truth.
 
 ## Determinism boundary
 - The same canonical inputs must produce the same run id and artifacts.

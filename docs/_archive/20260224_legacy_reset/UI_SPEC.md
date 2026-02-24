@@ -124,10 +124,10 @@ Event timeline:
 
 #### 2.7 AI Chat tab
 Chatbot embedded:
-- â€œAdd Indicatorâ€ flow
-- â€œAdd Strategyâ€ flow
-- â€œReview Strategyâ€ flow
-- â€œExplain Tradeâ€ flow
+- â€œAdd Indicatorâ€ flow
+- â€œAdd Strategyâ€ flow
+- â€œReview Strategyâ€ flow
+- â€œExplain Tradeâ€ flow
 
 ### 3) Run Explorer
 Purpose: browse and compare previous runs.
