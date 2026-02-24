@@ -826,6 +826,17 @@ th {
   font-family: var(--font-mono);
 }
 
+.chart-debug-warning {
+  margin-bottom: 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(180, 35, 24, 0.55);
+  background: rgba(180, 35, 24, 0.12);
+  color: #7a1e15;
+  font-size: 0.69rem;
+  line-height: 1.35;
+  padding: 6px 8px;
+}
+
 .chart-drawtools {
   position: absolute;
   top: 8px;

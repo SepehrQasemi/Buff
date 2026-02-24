@@ -6,6 +6,8 @@ const MARKER_ALIGNMENT_MIN_TOLERANCE_MS = 1000;
 const SINGLE_CANDLE_ALIGNMENT_TOLERANCE_MS = 60 * 60 * 1000;
 const DRAWINGS_STORAGE_PREFIX = "buff_chart_drawings";
 const DRAWINGS_STORAGE_VERSION = 1;
+const DEBUG_MISMATCH_DELTA_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+const DEBUG_MISMATCH_RATIO_THRESHOLD = 0.3;
 const MARKER_PALETTE = [
   { entry: "var(--accent)", exit: "var(--accent-2)", event: "var(--accent-2)" },
   { entry: "var(--chart-up)", exit: "var(--chart-down)", event: "var(--accent-2)" },
@@ -28,6 +30,20 @@ const toEpochMs = (value) => {
   }
   if (typeof value === "number" && Number.isFinite(value)) {
     return value > 1_000_000_000_000 ? value : value * 1000;
+  }
+  if (typeof value === "string") {
+    const raw = value.trim();
+    if (!raw) {
+      return null;
+    }
+    if (/^\d+$/.test(raw)) {
+      const parsedNumber = Number(raw);
+      if (Number.isFinite(parsedNumber)) {
+        return parsedNumber > 1_000_000_000_000 ? parsedNumber : parsedNumber * 1000;
+      }
+    }
+    const parsedString = new Date(raw).getTime();
+    return Number.isFinite(parsedString) ? parsedString : null;
   }
   const parsed = new Date(value).getTime();
   return Number.isFinite(parsed) ? parsed : null;
@@ -198,6 +214,13 @@ const formatTimestamp = (value) => {
   return String(value);
 };
 
+const formatMs = (value) => {
+  if (!Number.isFinite(value)) {
+    return "n/a";
+  }
+  return `${Number(value).toLocaleString("en-US")} ms`;
+};
+
 const downsampleMarkers = (rows, limit) => {
   if (!Array.isArray(rows) || rows.length <= limit) {
     return { rows: Array.isArray(rows) ? rows : [], downsampled: false };
@@ -346,6 +369,7 @@ export default function CandlestickChart({
   const [draftDrawing, setDraftDrawing] = useState(null);
   const [selectedDrawingId, setSelectedDrawingId] = useState("");
   const [debugEnabled, setDebugEnabled] = useState(false);
+  const [debugAlignmentSummary, setDebugAlignmentSummary] = useState(null);
 
   const drawingsEnabled = enableDrawTools && Boolean(String(drawingScopeKey || "").trim());
   const drawingsStorageKey = drawingsEnabled
@@ -713,16 +737,37 @@ export default function CandlestickChart({
         candleSeriesRef.current.setMarkers([]);
       }
       markerDetailsByTimeRef.current = new Map();
+      setDebugAlignmentSummary(null);
       return;
     }
 
     const candleTimesMs = normalizedCandleRows.map((row) => row.timeMs);
     const markerDetailsByTime = new Map();
     const chartMarkers = [];
+    let invalidTimestampCount = 0;
+    let rejectedPlacementCount = 0;
+    let suspiciousMismatchCount = 0;
+    let maxRejectedDeltaMs = 0;
 
     sampledMarkers.rows.forEach((marker) => {
+      if (marker.__timestampMs === null) {
+        invalidTimestampCount += 1;
+        return;
+      }
       const placement = resolveMarkerPlacement(candleTimesMs, marker.__timestampMs);
       if (!placement) {
+        rejectedPlacementCount += 1;
+        const nearestIndex = findNearestIndex(candleTimesMs, marker.__timestampMs);
+        if (nearestIndex >= 0) {
+          const nearestTime = candleTimesMs[nearestIndex];
+          if (Number.isFinite(nearestTime)) {
+            const rejectedDeltaMs = Math.abs(nearestTime - marker.__timestampMs);
+            maxRejectedDeltaMs = Math.max(maxRejectedDeltaMs, rejectedDeltaMs);
+            if (rejectedDeltaMs >= DEBUG_MISMATCH_DELTA_THRESHOLD_MS) {
+              suspiciousMismatchCount += 1;
+            }
+          }
+        }
         return;
       }
       const candle = normalizedCandleRows[placement.index];
@@ -793,6 +838,25 @@ export default function CandlestickChart({
       markerDetailsByTime.set(candle.time, existing);
     });
 
+    const totalMarkers = sampledMarkers.rows.length;
+    const rejectedCount = invalidTimestampCount + rejectedPlacementCount;
+    const suspiciousRatio = totalMarkers > 0 ? suspiciousMismatchCount / totalMarkers : 0;
+    setDebugAlignmentSummary(
+      totalMarkers > 0
+        ? {
+            totalMarkers,
+            placedCount: chartMarkers.length,
+            rejectedCount,
+            invalidTimestampCount,
+            rejectedPlacementCount,
+            suspiciousMismatchCount,
+            suspiciousRatio,
+            maxRejectedDeltaMs,
+            mismatchSuspected:
+              suspiciousMismatchCount > 0 && suspiciousRatio >= DEBUG_MISMATCH_RATIO_THRESHOLD,
+          }
+        : null
+    );
     markerDetailsByTimeRef.current = markerDetailsByTime;
     candleSeriesRef.current.setMarkers(chartMarkers);
   }, [normalizedCandleRows, sampledMarkers]);
@@ -803,7 +867,9 @@ export default function CandlestickChart({
     }
     try {
       const params = new URLSearchParams(window.location.search);
-      const value = String(params.get("chart_debug") || "").toLowerCase();
+      const debugParam = params.get("debug");
+      const legacyDebugParam = params.get("chart_debug");
+      const value = String(debugParam ?? legacyDebugParam ?? "").toLowerCase();
       setDebugEnabled(value === "1" || value === "true" || value === "yes");
     } catch {
       setDebugEnabled(false);
@@ -1172,6 +1238,10 @@ export default function CandlestickChart({
     : "n/a";
   const debugModeText = debugMarker?.alignmentMode ? String(debugMarker.alignmentMode) : "n/a";
   const debugMarkerTimestamp = debugMarker?.timestamp ? String(debugMarker.timestamp) : "n/a";
+  const mismatchDebugWarning =
+    debugEnabled && debugAlignmentSummary?.mismatchSuspected
+      ? `Potential timestamp unit mismatch detected. ${debugAlignmentSummary.suspiciousMismatchCount}/${debugAlignmentSummary.totalMarkers} markers exceeded ${formatMs(DEBUG_MISMATCH_DELTA_THRESHOLD_MS)} with max rejected delta ${formatMs(debugAlignmentSummary.maxRejectedDeltaMs)}.`
+      : null;
 
   if (!normalizedCandleRows.length) {
     return (
@@ -1255,6 +1325,7 @@ export default function CandlestickChart({
       {debugEnabled && (
         <div className="chart-debug-panel" data-testid="chart-debug-panel">
           <div className="chart-debug-title">Chart Debug</div>
+          {mismatchDebugWarning && <div className="chart-debug-warning">{mismatchDebugWarning}</div>}
           <div className="chart-debug-row">
             <span>Candle ts</span>
             <strong>{hoverInfo?.timestamp ? String(hoverInfo.timestamp) : "n/a"}</strong>
@@ -1270,6 +1341,14 @@ export default function CandlestickChart({
           <div className="chart-debug-row">
             <span>Delta</span>
             <strong>{debugDeltaText}</strong>
+          </div>
+          <div className="chart-debug-row">
+            <span>Placed</span>
+            <strong>{debugAlignmentSummary ? debugAlignmentSummary.placedCount : "n/a"}</strong>
+          </div>
+          <div className="chart-debug-row">
+            <span>Rejected</span>
+            <strong>{debugAlignmentSummary ? debugAlignmentSummary.rejectedCount : "n/a"}</strong>
           </div>
         </div>
       )}
