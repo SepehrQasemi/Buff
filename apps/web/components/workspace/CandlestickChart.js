@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 const INITIAL_VIEW_BARS = 120;
 const DEFAULT_MARKER_DENSITY_LIMIT = 900;
+const MARKER_ALIGNMENT_MIN_TOLERANCE_MS = 1000;
+const SINGLE_CANDLE_ALIGNMENT_TOLERANCE_MS = 60 * 60 * 1000;
 const DRAWINGS_STORAGE_PREFIX = "buff_chart_drawings_v1";
 const MARKER_PALETTE = [
   { entry: "var(--accent)", exit: "var(--accent-2)", event: "var(--accent-2)" },
@@ -81,6 +83,58 @@ const findNearestIndex = (sortedTimesMs, targetMs) => {
   const leftDistance = Math.abs(sortedTimesMs[low - 1] - targetMs);
   const rightDistance = Math.abs(sortedTimesMs[low] - targetMs);
   return leftDistance <= rightDistance ? low - 1 : low;
+};
+
+const resolveMarkerPlacement = (sortedTimesMs, targetMs) => {
+  if (!Array.isArray(sortedTimesMs) || sortedTimesMs.length === 0 || targetMs === null) {
+    return null;
+  }
+  // Keep placement deterministic and fail closed for markers too far from the nearest candle.
+  const nearestIndex = findNearestIndex(sortedTimesMs, targetMs);
+  if (nearestIndex < 0) {
+    return null;
+  }
+  const nearestTime = sortedTimesMs[nearestIndex];
+  if (!Number.isFinite(nearestTime)) {
+    return null;
+  }
+  const deltaMs = Math.abs(nearestTime - targetMs);
+  if (deltaMs === 0) {
+    return { index: nearestIndex, mode: "exact", deltaMs, toleranceMs: 0 };
+  }
+  if (sortedTimesMs.length === 1) {
+    if (deltaMs > SINGLE_CANDLE_ALIGNMENT_TOLERANCE_MS) {
+      return null;
+    }
+    return {
+      index: nearestIndex,
+      mode: "nearest",
+      deltaMs,
+      toleranceMs: SINGLE_CANDLE_ALIGNMENT_TOLERANCE_MS,
+    };
+  }
+  const leftGap =
+    nearestIndex > 0 ? Math.abs(sortedTimesMs[nearestIndex] - sortedTimesMs[nearestIndex - 1]) : null;
+  const rightGap =
+    nearestIndex < sortedTimesMs.length - 1
+      ? Math.abs(sortedTimesMs[nearestIndex + 1] - sortedTimesMs[nearestIndex])
+      : null;
+  const nearestGap = [leftGap, rightGap]
+    .filter((gap) => Number.isFinite(gap) && gap > 0)
+    .reduce((acc, gap) => (acc === null ? gap : Math.min(acc, gap)), null);
+  const toleranceMs =
+    nearestGap === null
+      ? SINGLE_CANDLE_ALIGNMENT_TOLERANCE_MS
+      : Math.max(MARKER_ALIGNMENT_MIN_TOLERANCE_MS, Math.floor(nearestGap / 2));
+  if (deltaMs > toleranceMs) {
+    return null;
+  }
+  return {
+    index: nearestIndex,
+    mode: "nearest",
+    deltaMs,
+    toleranceMs,
+  };
 };
 
 const normalizeMarkerSets = (markerSets, markers) => {
@@ -263,6 +317,7 @@ export default function CandlestickChart({
   const [drawings, setDrawings] = useState([]);
   const [draftDrawing, setDraftDrawing] = useState(null);
   const [selectedDrawingId, setSelectedDrawingId] = useState("");
+  const [debugEnabled, setDebugEnabled] = useState(false);
 
   const drawingsEnabled = enableDrawTools && Boolean(String(drawingScopeKey || "").trim());
   const drawingsStorageKey = drawingsEnabled
@@ -638,11 +693,11 @@ export default function CandlestickChart({
     const chartMarkers = [];
 
     sampledMarkers.rows.forEach((marker) => {
-      const nearestIndex = findNearestIndex(candleTimesMs, marker.__timestampMs);
-      if (nearestIndex < 0) {
+      const placement = resolveMarkerPlacement(candleTimesMs, marker.__timestampMs);
+      if (!placement) {
         return;
       }
-      const candle = normalizedCandleRows[nearestIndex];
+      const candle = normalizedCandleRows[placement.index];
       if (!candle) {
         return;
       }
@@ -696,6 +751,10 @@ export default function CandlestickChart({
         sourceLabel: marker.__label || marker.__runId || "Run",
         runId: marker.__runId || "",
         timestamp: formatTimestamp(marker?.timestamp || candle.ts),
+        alignedTimestamp: candle.ts,
+        alignmentMode: placement.mode,
+        alignmentDeltaMs: placement.deltaMs,
+        alignmentToleranceMs: placement.toleranceMs,
         price: priceCandidate === null ? candle.close : priceCandidate,
         side: marker?.side ? String(marker.side) : null,
         tradeId: marker?.trade_id ? String(marker.trade_id) : null,
@@ -709,6 +768,19 @@ export default function CandlestickChart({
     markerDetailsByTimeRef.current = markerDetailsByTime;
     candleSeriesRef.current.setMarkers(chartMarkers);
   }, [normalizedCandleRows, sampledMarkers]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const value = String(params.get("chart_debug") || "").toLowerCase();
+      setDebugEnabled(value === "1" || value === "true" || value === "yes");
+    } catch {
+      setDebugEnabled(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!drawingsStorageKey || typeof window === "undefined") {
@@ -1042,6 +1114,12 @@ export default function CandlestickChart({
     setDrawings((current) => current.filter((drawing) => drawing.id !== selectedDrawingId));
     setSelectedDrawingId("");
   };
+  const debugMarker = hoverInfo?.markers?.[0] || null;
+  const debugDeltaText = Number.isFinite(debugMarker?.alignmentDeltaMs)
+    ? `${debugMarker.alignmentDeltaMs} ms`
+    : "n/a";
+  const debugModeText = debugMarker?.alignmentMode ? String(debugMarker.alignmentMode) : "n/a";
+  const debugMarkerTimestamp = debugMarker?.timestamp ? String(debugMarker.timestamp) : "n/a";
 
   if (!normalizedCandleRows.length) {
     return (
@@ -1118,6 +1196,27 @@ export default function CandlestickChart({
           className="chart-drawing-layer"
           aria-hidden="true"
         />
+      )}
+      {debugEnabled && (
+        <div className="chart-debug-panel" data-testid="chart-debug-panel">
+          <div className="chart-debug-title">Chart Debug</div>
+          <div className="chart-debug-row">
+            <span>Candle ts</span>
+            <strong>{hoverInfo?.timestamp ? String(hoverInfo.timestamp) : "n/a"}</strong>
+          </div>
+          <div className="chart-debug-row">
+            <span>Marker ts</span>
+            <strong>{debugMarkerTimestamp}</strong>
+          </div>
+          <div className="chart-debug-row">
+            <span>Align mode</span>
+            <strong>{debugModeText}</strong>
+          </div>
+          <div className="chart-debug-row">
+            <span>Delta</span>
+            <strong>{debugDeltaText}</strong>
+          </div>
+        </div>
       )}
       {hoverInfo && (
         <div
