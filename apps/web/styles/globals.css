@@ -796,6 +796,36 @@ th {
   font-family: var(--font-mono);
 }
 
+.chart-debug-panel {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  z-index: 11;
+  min-width: 180px;
+  border-radius: 10px;
+  border: 1px solid rgba(26, 31, 36, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  padding: 8px 10px;
+  box-shadow: 0 8px 18px rgba(10, 14, 18, 0.16);
+  font-size: 0.72rem;
+}
+
+.chart-debug-title {
+  font-weight: 700;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.chart-debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-family: var(--font-mono);
+}
+
 .chart-drawtools {
   position: absolute;
   top: 8px;
