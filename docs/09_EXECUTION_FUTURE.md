@@ -1,4 +1,4 @@
-﻿# 09_EXECUTION_FUTURE
+# 09_EXECUTION_FUTURE
 
 ## Status
 Design-only specification.

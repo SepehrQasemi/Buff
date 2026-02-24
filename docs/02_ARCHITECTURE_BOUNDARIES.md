@@ -1,4 +1,4 @@
-﻿# 02_ARCHITECTURE_BOUNDARIES
+# 02_ARCHITECTURE_BOUNDARIES
 
 ## Scope
 This document defines system boundaries for Buff's futures R&D direction.

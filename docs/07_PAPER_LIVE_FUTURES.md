@@ -1,4 +1,4 @@
-﻿# 07_PAPER_LIVE_FUTURES
+# 07_PAPER_LIVE_FUTURES
 
 ## Purpose
 Define Buff's primary paper-live futures simulation contract.

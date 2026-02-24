@@ -1,4 +1,4 @@
-﻿# 06_DATA_PLANE_ONLINE
+# 06_DATA_PLANE_ONLINE
 
 ## Purpose
 Define the mandatory online data plane for Buff's futures R&D lifecycle.

@@ -1,4 +1,4 @@
-﻿# 03_CONTRACTS_AND_SCHEMAS
+# 03_CONTRACTS_AND_SCHEMAS
 
 ## Scope
 This document defines active contract expectations for Buff's refoundation stage.
@@ -24,6 +24,10 @@ Rules:
 - `code`, `message`, and `details` are required.
 - Nested `error` mirrors top-level values.
 - Unknown codes are treated as fatal by default clients.
+
+## Canonical Error Schema
+Reference anchor: `canonical-error-schema`.
+Canonical error envelope and error-code registry are defined in this document.
 
 ## Error Code Registry
 The following API error codes are currently documented:

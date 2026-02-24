@@ -1,4 +1,4 @@
-﻿# 05_RUNBOOK_DEV_WORKFLOW
+# 05_RUNBOOK_DEV_WORKFLOW
 
 Canonical operational commands for local development, verification, and recovery.
 No other active document should carry runnable command blocks.
@@ -18,6 +18,9 @@ python -m tools.release_preflight --timeout-seconds 900
 python -m tools.release_gate --strict --timeout-seconds 900
 ```
 
+## Contract Wiring
+- canonical-error-schema: `docs/03_CONTRACTS_AND_SCHEMAS.md#canonical-error-schema`
+
 ## Service Lifecycle
 
 ```bash
@@ -30,6 +33,10 @@ Use online ingest via the data CLI entrypoint.
 
 ```bash
 python -m src.data.cli ingest --symbols BTCUSDT ETHUSDT --since 2024-01-01T00:00:00Z --until 2024-01-03T00:00:00Z --timeframes 1m 5m 15m 1h --out data/ohlcv --report reports/data_quality.json
+```
+
+```bash
+python -m src.paper.feed_generate --help
 ```
 
 ## Paper-Live Operations
@@ -48,6 +55,12 @@ python -m src.audit.report_decisions --run-dir runs/paper_live_dev --out runs/pa
 python -m src.audit.record_decision --input tests/fixtures/decision_payload.json --out artifacts/decisions
 python -m src.audit.make_snapshot --input tests/fixtures/snapshot_payload.json --out artifacts/snapshots
 python -m src.audit.replay --decision <decision_path.json> --snapshot <snapshot_path.json> --strict
+```
+
+## Reporting Operations
+
+```bash
+python scripts/export_report.py --help
 ```
 
 ## Troubleshooting Matrix

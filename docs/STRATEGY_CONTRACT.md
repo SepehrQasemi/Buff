@@ -10,12 +10,5 @@ Do not use this file to determine current stage, runtime behavior, or product di
 - `docs/08_RESEARCH_LOOP.md`
 
 ## Contract Alignment
-Indicator and plugin contract authority is defined in canonical docs and runtime code.
-This shim preserves legacy path compatibility only.
-
-## Canonical Contract Constants
-```yaml
-ALLOWED_PARAM_TYPES: ["int", "float", "bool", "string", "enum"]
-ALLOWED_NAN_POLICIES: ["propagate", "fill", "error"]
-ALLOWED_INTENTS: ["HOLD", "ENTER_LONG", "ENTER_SHORT", "EXIT_LONG", "EXIT_SHORT"]
-```
+Strategy contract alignment is governed by canonical contract docs and runtime validation.
+This shim is a redirect and not an authority source.

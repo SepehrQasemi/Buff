@@ -7,15 +7,8 @@ Do not use this file to determine current stage, runtime behavior, or product di
 ## Canonical Redirect
 - `docs/README.md`
 - `docs/03_CONTRACTS_AND_SCHEMAS.md`
-- `docs/08_RESEARCH_LOOP.md`
+- `docs/07_PAPER_LIVE_FUTURES.md`
 
 ## Contract Alignment
-Indicator and plugin contract authority is defined in canonical docs and runtime code.
+Risk model requirements and enforcement rules live in canonical contracts and paper-live specs.
 This shim preserves legacy path compatibility only.
-
-## Canonical Contract Constants
-```yaml
-ALLOWED_PARAM_TYPES: ["int", "float", "bool", "string", "enum"]
-ALLOWED_NAN_POLICIES: ["propagate", "fill", "error"]
-ALLOWED_INTENTS: ["HOLD", "ENTER_LONG", "ENTER_SHORT", "EXIT_LONG", "EXIT_SHORT"]
-```

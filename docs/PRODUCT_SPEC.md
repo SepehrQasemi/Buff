@@ -1,4 +1,8 @@
-﻿# PRODUCT_SPEC - Buff Futures Research Platform
+# PRODUCT_SPEC - Buff Futures Research Platform
+
+## Normative Authority
+Current stage and transition authority are defined only in `docs/PROJECT_STATE.md`.
+This document defines product identity and scope intent.
 
 ## Stage Source
 Current stage is defined only in `docs/PROJECT_STATE.md`.

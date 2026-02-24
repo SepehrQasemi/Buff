@@ -1,4 +1,4 @@
-﻿# Buff
+# Buff
 [![CI](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml/badge.svg)](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml)
 
 ## Direction

@@ -1,4 +1,4 @@
-﻿# Buff Docs Index
+# Buff Docs Index
 
 Active documentation set:
 - [PROJECT_STATE.md](./PROJECT_STATE.md)

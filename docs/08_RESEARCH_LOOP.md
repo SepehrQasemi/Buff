@@ -1,4 +1,4 @@
-﻿# 08_RESEARCH_LOOP
+# 08_RESEARCH_LOOP
 
 ## Purpose
 Define the required research progression from offline evaluation to paper-live validation.
