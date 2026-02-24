@@ -1,41 +1,42 @@
-# Architecture Boundaries
+# 02_ARCHITECTURE_BOUNDARIES
 
-## Table Of Contents
-- [System Boundaries And Safety Rules](#system-boundaries-and-safety-rules)
-- [UI Read-Only Guarantees](#ui-read-only-guarantees)
-- [Runtime Boundaries](#runtime-boundaries)
-- [Extensibility Boundaries](#extensibility-boundaries)
-- [Future Readiness Non-Goal](#future-readiness-non-goal)
-- [Canonical Links](#canonical-links)
+## Scope
+This document defines system boundaries for Buff's futures R&D direction.
+Current stage is defined only in `docs/PROJECT_STATE.md`.
 
-## System Boundaries And Safety Rules
-- Interface plane (UI/chatbot) is read-only for execution.
-- Core/data plane produces deterministic artifacts.
-- Control plane governs arming, safety locks, and kill-switch behavior.
-- Fail-closed policy applies when validation, registry, or artifact checks fail.
+## Boundary 1: Data Plane vs Decision Plane
+- Online data collection is mandatory.
+- Data plane responsibilities end at deterministic canonical market artifacts.
+- Data plane has no strategy decision authority and no execution authority.
 
-## UI Read-Only Guarantees
-- No buy/sell controls in UI.
-- No broker controls in UI.
-- No hidden mutation paths through UI or chatbot endpoints.
-- Artifact-driven rendering only.
+## Boundary 2: Deterministic Decision Core
+- Decision generation must be reproducible from canonical inputs.
+- Equivalent inputs must produce equivalent decision artifacts and stable digests.
+- Silent mutation of decision artifacts is forbidden.
 
-## Runtime Boundaries
-- No live trading execution in current scope.
-- Run creation and analysis are local, deterministic, and bounded by contract checks.
-- Missing prerequisites must return explicit error responses.
+## Boundary 3: Paper-Live Simulation Authority
+- Paper-live futures simulation is the primary runtime mode for execution-like validation.
+- Simulation must model realistic costs and risk constraints.
+- Simulation runtime remains fail-closed on missing/invalid dependencies.
 
-## Extensibility Boundaries
-- Plugins must pass validation before becoming visible or selectable.
-- Unsafe imports/calls and non-deterministic behavior are rejected.
-- Validation artifacts are the source of truth for plugin visibility.
+## Boundary 4: Safety and Fail-Closed Behavior
+- Integrity failures, schema violations, and unresolved mismatches block progression.
+- Kill-switch semantics are mandatory in paper-live runtime.
+- Safety gates override throughput goals.
 
-## Future Readiness Non-Goal
-Multi-user tenancy is a non-goal for the current product phase.
-Any future move toward multi-user support must define explicit identity, isolation, and quota boundaries before implementation.
+## Boundary 5: Future Execution Connector Isolation
+- Execution connector implementation is deferred.
+- Any future connector path must remain isolated from deterministic decision generation.
+- Shadow-mode reconciliation evidence is required before connector activation.
 
-## Canonical Links
-- Product overview: [01_PRODUCT_OVERVIEW_AND_JOURNEYS.md](./01_PRODUCT_OVERVIEW_AND_JOURNEYS.md)
-- Contracts: [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md)
-- Roadmap and status: [04_ROADMAP_AND_DELIVERY_CHECKLIST.md](./04_ROADMAP_AND_DELIVERY_CHECKLIST.md)
-- Existing detailed boundaries (temporary): [ARCHITECTURE_BOUNDARIES.md](./ARCHITECTURE_BOUNDARIES.md)
+## Boundary 6: Artifact Truth
+- Artifact records are the only source of runtime truth.
+- UI, reporting, and research promotion logic must consume artifacts, not hidden recomputation.
+
+## Canonical Companions
+- Contracts: `docs/03_CONTRACTS_AND_SCHEMAS.md`
+- Runbook: `docs/05_RUNBOOK_DEV_WORKFLOW.md`
+- Online data plane spec: `docs/06_DATA_PLANE_ONLINE.md`
+- Paper-live futures spec: `docs/07_PAPER_LIVE_FUTURES.md`
+- Research loop spec: `docs/08_RESEARCH_LOOP.md`
+- Future execution design: `docs/09_EXECUTION_FUTURE.md`

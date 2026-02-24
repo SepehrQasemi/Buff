@@ -1,87 +1,64 @@
-# PRODUCT_SPEC — Buff (TradingView-like Strategy Lab)
+# PRODUCT_SPEC - Buff Futures Research Platform
 
 ## Normative Authority
-Current stage is defined exclusively by:
-docs/PROJECT_STATE.md
+Current stage and transition authority are defined only in `docs/PROJECT_STATE.md`.
+This document defines product identity and scope intent.
 
-Runtime behavior is normatively defined by:
-- [02_ARCHITECTURE_BOUNDARIES.md](./02_ARCHITECTURE_BOUNDARIES.md)
-- [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md)
-
-If this document conflicts with either normative document, the normative document takes precedence.
-This file is descriptive and is not authoritative for canonical error codes or HTTP status mapping.
+## Stage Source
+Current stage is defined only in `docs/PROJECT_STATE.md`.
+This file defines product identity and operating intent, not stage authority.
 
 ## Product Identity
-Buff is a TradingView-like **strategy analysis lab**: a chart-first UI for visualizing signals, trades, and outcomes of strategies on historical data and paper runs.
-Buff is **read-only** in the UI: it does not provide Buy/Sell buttons, broker connections, or live execution controls.
+Buff is a crypto futures R&D platform built for:
+- Mandatory online market data ingestion
+- Deterministic artifact-driven research workflows
+- Realistic paper-live futures simulation
+- Safety-first, fail-closed runtime behavior
 
-## Roadmap Alignment
+Buff is not limited to static read-only analysis. The core product direction is research-to-paper-live operation over real online data, with execution connector work deferred until proven.
 
-The official roadmap and locked product decisions live in:
-- `docs/PRODUCT_ROADMAP.md`
-- `docs/USER_JOURNEY.md`
-- `docs/ARCHITECTURE_BOUNDARIES.md`
+## Product Mandates
 
-If any document conflicts with these boundaries, the boundaries win.
+### 1) Online Data Is Mandatory
+- Research and paper-live workflows must run on online market data collection.
+- Data ingestion must be resilient (websocket primary, REST fallback) and reproducible via artifacts.
 
-## Target User
-- Users who want to **test, compare, and iterate** on strategies and indicators visually.
-- Users can be technical or semi-technical, but the product must guide them step-by-step when adding strategies/indicators.
+### 2) Deterministic Artifact Truth
+- Canonical artifacts are the source of truth for evaluation, comparison, and replay.
+- Equivalent inputs must produce equivalent canonical outputs and stable digests.
 
-## Core Value Proposition
-- On-chart truth: show **exactly where** a strategy would enter/exit and **what happened** (PnL, win/loss, drawdown).
-- Fast iteration: select strategy, tune parameters, rerun, compare.
-- Extensible: users can add strategies/indicators safely through a defined contract and guided chatbot.
+### 3) Paper-Live Is Primary Runtime Mode
+- Paper-live futures simulation is the primary execution-like mode for validation.
+- Paper-live must include realistic baseline cost/risk mechanics (fees, funding, slippage, liquidation safeguards).
 
-## Scope (Product v1)
-### UI-first (TradingView-like)
-- Candlestick chart + overlays + trade markers + outcome visualization.
-- Strategy selection + parameter editing.
-- Indicator selection + configuration and overlay.
-- Run/result explorer: compare runs, inspect trades, metrics, and decision timeline.
-#### Metrics Artifacts (UI)
-- Metrics artifacts may include metrics.time_breakdown: an array of period buckets (e.g., monthly/weekly).
-- UI behavior: when present, render a time breakdown table; when absent, show \"Time breakdown not available.\"
-- No UI recomputation; values are displayed as-is from artifacts.
+### 4) Execution Connector Is Deferred
+- Real exchange order routing is intentionally deferred to a future stage.
+- No current-stage claim implies production execution readiness.
 
-### Strategy Catalog
-- Built-in pack of **20 well-known strategies** (rule-based) with documented rules and parameters.
-- Strategies are customizable via parameter schema and UI forms.
+## Core Principles
+- Safety-first: fail closed on invalid inputs, integrity failures, policy violations, or unresolved mismatches.
+- Determinism-first: no hidden nondeterministic paths in decision generation.
+- Provenance-first: every decision/result is traceable through versioned artifacts.
+- Separation of concerns: data plane, simulation plane, and future execution connector boundaries remain explicit.
 
-### User Extensibility
-- Users can add:
-  - Custom indicators (pure computations)
-  - Custom strategies (signals generation using indicators)
-- Additions must follow contracts and pass validation. The system must not allow unsafe behavior.
+## Product Scope (Current Direction)
+- Online futures data plane with immutable raw events and canonical market series.
+- Backtest and walk-forward experimentation linked to paper-live progression.
+- Realistic paper-live futures simulation with risk hard stops and replay guarantees.
+- Research promotion loop with explicit pass/fail evidence from artifacts.
 
-### Risk Model
-- Default risk configuration exists.
-- Users can customize risk behavior within safe boundaries.
-- Risk has **5 levels** (1..5) with increasing aggressiveness but still bounded by hard safety caps.
+## Out Of Scope (Current Stage)
+- Live broker/exchange connector operation.
+- Production order placement.
+- Claims of execution readiness without shadow/reconciliation proof.
 
-### AI Chatbot
-- Built-in chatbot helps users:
-  - Define and generate indicator/strategy templates
-  - Understand required files and steps
-  - Validate and troubleshoot errors
-  - Review common issues (lookahead, leakage, NaNs, warmup, overfitting smells)
+## Safety And Risk Expectations
+- Hard risk caps and kill-switch semantics are mandatory in simulation runtime.
+- Policy failures, data corruption, and digest mismatches block progression automatically.
+- Promotion to later stages requires explicit evidence gates, not manual optimism.
 
-## Explicit Non-goals
-- No buy/sell buttons or trading execution from UI.
-- No broker connections or live trading controls in UI.
-- No “AI that guarantees profits” or “signals marketplace”.
-- No multi-tenant SaaS or hosted user accounts (v1).
-
-## Product Principles (Non-negotiable)
-- **UI shows truth derived from artifacts**; no hidden calculations that diverge from engine results.
-- Deterministic, explainable outputs; every plotted trade/outcome has traceable provenance.
-- Extensibility must be safe: user code cannot bypass core contracts, risk safety caps, or artifacts integrity.
-
-## Definition of “Usable”
-A user can:
-1) Open the UI and load data / runs.
-2) Select a built-in strategy, tune parameters, run, and see:
-   - entries/exits on chart
-   - each trade outcome
-   - summary metrics and timeline events
-3) Add a new indicator or strategy using guided chatbot steps, validate it, and see it appear in UI.
+## Relationship To Supporting Specs
+- Data plane contract: `docs/06_DATA_PLANE_ONLINE.md`
+- Paper-live futures contract: `docs/07_PAPER_LIVE_FUTURES.md`
+- Research progression contract: `docs/08_RESEARCH_LOOP.md`
+- Future execution design boundary: `docs/09_EXECUTION_FUTURE.md`

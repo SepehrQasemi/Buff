@@ -1,75 +1,32 @@
 # Buff
 [![CI](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml/badge.svg)](https://github.com/Buff-Trading-AI/Buff/actions/workflows/ci.yml)
 
-## Project State (Authoritative)
+## Direction
+Buff is evolving into a crypto futures R&D platform with:
+- Mandatory online data ingestion
+- Deterministic artifact-driven decision and analysis workflows
+- Realistic paper-live futures simulation as the primary runtime mode
+- Deferred execution connector scope until proven by shadow/reconciliation evidence
 
-The active stage, objectives, and transition gates are defined exclusively in:
-docs/PROJECT_STATE.md
+## Stage Source
+Current stage is defined only in `docs/PROJECT_STATE.md`.
 
-All reasoning about project direction must begin from that file.
-This README is a non-normative summary.
+## Invariants & Non-Goals
+- Deterministic, artifact-first behavior is mandatory for comparable research outcomes.
+- Non-goals include discretionary runtime drift, hidden mutable state, and unverifiable outputs.
+- No prediction claims: Buff is an R&D and simulation platform, not a guaranteed forecasting engine.
 
-## Overview
-
-Buff is a safety-first, artifact-driven crypto strategy analysis system.
-Current stage details are authoritative in `docs/PROJECT_STATE.md`.
-
-## Scope And Boundaries
-
-Summary only (non-authoritative):
-- Read-only UI: no buy/sell controls, no broker execution actions.
-- Fail-closed behavior on missing/invalid inputs.
-- Deterministic outputs from artifact inputs.
-- Live execution is out of current product scope.
-
-## Invariants & Non-goals
-
-Invariants:
-- Deterministic outputs for the same canonical inputs.
-- Read-only UI and API boundaries for execution.
-- Fail-closed behavior for invalid inputs and missing artifacts.
-
-Non-goals:
-- No prediction.
-- Buff does not forecast future prices or claim directional certainty.
-- Live broker execution in current scope.
-- Strategy invention in UI.
-- Multi-tenant hosted accounts in current scope.
-
-Architecture and boundary rules:
-- `docs/02_ARCHITECTURE_BOUNDARIES.md`
-
-Error and artifact contracts:
-- `docs/03_CONTRACTS_AND_SCHEMAS.md`
-
-Roadmap and current status:
-- `docs/04_ROADMAP_AND_DELIVERY_CHECKLIST.md#current-status`
-
-## Quickstart
-
-Use the canonical quickstart commands from:
-- `docs/05_RUNBOOK_DEV_WORKFLOW.md#quickstart`
-
-Run verification from:
-- `docs/05_RUNBOOK_DEV_WORKFLOW.md#verification-gates`
-
-For full run/verify/recover workflows, use the canonical runbook:
-- `docs/05_RUNBOOK_DEV_WORKFLOW.md`
-
-## Docs (Canonical)
-
-- `docs/01_PRODUCT_OVERVIEW_AND_JOURNEYS.md`
-- `docs/02_ARCHITECTURE_BOUNDARIES.md`
-- `docs/03_CONTRACTS_AND_SCHEMAS.md`
-- `docs/04_ROADMAP_AND_DELIVERY_CHECKLIST.md`
-- `docs/05_RUNBOOK_DEV_WORKFLOW.md`
-
-## Specs Index
-
+## Active Docs
 - `docs/README.md`
+- `docs/PROJECT_STATE.md`
+- `docs/02_ARCHITECTURE_BOUNDARIES.md`
+- `docs/03_CONTRACTS_AND_SCHEMAS.md`
+- `docs/05_RUNBOOK_DEV_WORKFLOW.md`
+- `docs/06_DATA_PLANE_ONLINE.md`
+- `docs/07_PAPER_LIVE_FUTURES.md`
+- `docs/08_RESEARCH_LOOP.md`
+- `docs/09_EXECUTION_FUTURE.md`
 
 ## Governance
-
 - `SECURITY.md`
 - `GITHUB_SETTINGS_CHECKLIST.md`
-
