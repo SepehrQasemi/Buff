@@ -16,6 +16,12 @@ const MARKER_PALETTE = [
 
 const SIGNAL_ENTRY_TYPES = new Set(["signal_entry"]);
 const SIGNAL_EXIT_TYPES = new Set(["signal_exit"]);
+const DRAWING_ALLOWED_KEYS = {
+  trendline: new Set(["id", "type", "x1", "y1", "x2", "y2"]),
+  hline: new Set(["id", "type", "y"]),
+  rectangle: new Set(["id", "type", "x1", "y1", "x2", "y2"]),
+};
+const DRAWINGS_STORAGE_ALLOWED_KEYS = new Set(["version", "drawings"]);
 const DRAW_TOOL_LABELS = {
   select: "Select",
   trendline: "Trend",
@@ -262,6 +268,9 @@ const nextDrawingId = (drawings) => {
   return `d_${max + 1}`;
 };
 
+const hasOnlyAllowedKeys = (value, allowedKeys) =>
+  Object.keys(value).every((key) => allowedKeys.has(key));
+
 const normalizeDrawing = (drawing) => {
   if (!drawing || typeof drawing !== "object") {
     return null;
@@ -269,6 +278,10 @@ const normalizeDrawing = (drawing) => {
   const id = String(drawing.id || "").trim();
   const type = String(drawing.type || "").toLowerCase();
   if (!id || !["trendline", "hline", "rectangle"].includes(type)) {
+    return null;
+  }
+  const allowedKeys = DRAWING_ALLOWED_KEYS[type];
+  if (!allowedKeys || !hasOnlyAllowedKeys(drawing, allowedKeys)) {
     return null;
   }
   if (type === "hline") {
@@ -307,6 +320,9 @@ const normalizeStoredDrawings = (payload) => {
   if (!payload || typeof payload !== "object") {
     return { drawings: [], invalid: true };
   }
+  if (!hasOnlyAllowedKeys(payload, DRAWINGS_STORAGE_ALLOWED_KEYS)) {
+    return { drawings: [], invalid: true };
+  }
   const versionRaw = payload.version;
   const version =
     versionRaw === undefined || versionRaw === null
@@ -315,11 +331,56 @@ const normalizeStoredDrawings = (payload) => {
   if (!Number.isFinite(version) || version < 1 || version > DRAWINGS_STORAGE_VERSION) {
     return { drawings: [], invalid: true };
   }
-  const rows = Array.isArray(payload.drawings) ? payload.drawings : [];
+  if (!Array.isArray(payload.drawings)) {
+    return { drawings: [], invalid: true };
+  }
+  const drawings = [];
+  for (const row of payload.drawings) {
+    const normalized = normalizeDrawing(row);
+    if (!normalized) {
+      return { drawings: [], invalid: true };
+    }
+    drawings.push(normalized);
+  }
   return {
-    drawings: rows.map(normalizeDrawing).filter(Boolean),
+    drawings,
     invalid: false,
   };
+};
+
+const readLocalStorage = (key) => {
+  if (!key || typeof window === "undefined") {
+    return null;
+  }
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+const writeLocalStorage = (key, value) => {
+  if (!key || typeof window === "undefined") {
+    return false;
+  }
+  try {
+    window.localStorage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const removeLocalStorage = (key) => {
+  if (!key || typeof window === "undefined") {
+    return false;
+  }
+  try {
+    window.localStorage.removeItem(key);
+    return true;
+  } catch {
+    return false;
+  }
 };
 
 const distanceToSegment = (point, start, end) => {
@@ -884,7 +945,7 @@ export default function CandlestickChart({
       return;
     }
     try {
-      const raw = window.localStorage.getItem(drawingsStorageKey);
+      const raw = readLocalStorage(drawingsStorageKey);
       if (!raw) {
         setDrawings([]);
         setDraftDrawing(null);
@@ -894,17 +955,13 @@ export default function CandlestickChart({
       const parsed = JSON.parse(raw);
       const normalized = normalizeStoredDrawings(parsed);
       if (normalized.invalid) {
-        window.localStorage.removeItem(drawingsStorageKey);
+        removeLocalStorage(drawingsStorageKey);
       }
       setDrawings(normalized.drawings);
       setDraftDrawing(null);
       setSelectedDrawingId("");
     } catch {
-      try {
-        window.localStorage.removeItem(drawingsStorageKey);
-      } catch {
-        // Storage may be unavailable; keep load fail-closed and non-fatal.
-      }
+      removeLocalStorage(drawingsStorageKey);
       setDrawings([]);
       setDraftDrawing(null);
       setSelectedDrawingId("");
@@ -915,15 +972,14 @@ export default function CandlestickChart({
     if (!drawingsStorageKey || typeof window === "undefined") {
       return;
     }
-    try {
-      window.localStorage.setItem(
-        drawingsStorageKey,
-        JSON.stringify({
-          version: DRAWINGS_STORAGE_VERSION,
-          drawings: drawings.map((drawing) => ({ ...drawing })),
-        })
-      );
-    } catch {
+    const wrote = writeLocalStorage(
+      drawingsStorageKey,
+      JSON.stringify({
+        version: DRAWINGS_STORAGE_VERSION,
+        drawings: drawings.map((drawing) => ({ ...drawing })),
+      })
+    );
+    if (!wrote) {
       // Local storage can be unavailable; keep chart interactions non-fatal.
     }
   }, [drawingsStorageKey, drawings]);
@@ -1222,14 +1278,7 @@ export default function CandlestickChart({
     setDrawings([]);
     setSelectedDrawingId("");
     setDrawTool("select");
-    if (!drawingsStorageKey || typeof window === "undefined") {
-      return;
-    }
-    try {
-      window.localStorage.removeItem(drawingsStorageKey);
-    } catch {
-      // Ignore storage failures; state reset still clears active drawings.
-    }
+    removeLocalStorage(drawingsStorageKey);
   };
 
   const debugMarker = hoverInfo?.markers?.[0] || null;
