@@ -1,19 +1,10 @@
-CURRENT_STAGE=S7_PERSONAL_RESEARCH_ENGINE
-OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=275
-LAST_STAGE_RELEVANT_SHA=b3aa5df597cf31e008aab90854cce2ad251e0c5b
-S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
-SNAPSHOT_SEMANTICS=Stage snapshot fields track stage/governance-relevant merges, not every merge on main.
-
-NEXT_3_ACTIONS=
-- Keep S7 experiment and strict gate checks green in CI.
-- Expand deterministic experiment analysis UX on artifact-backed comparison surfaces.
-- Prepare post-S7 scope decision for the External Integration Layer.
-
-HOW_TO_REFRESH=
-- Use canonical operational commands from docs/05_RUNBOOK_DEV_WORKFLOW.md.
-- Query live PR state from GitHub before refreshing this snapshot.
-- Update: LAST_STAGE_RELEVANT_PR / LAST_STAGE_RELEVANT_SHA / OPEN_PRS_TO_DECIDE / NEXT_3_ACTIONS
+﻿CURRENT_STAGE=S0_REFOUNDATION
+NEXT_STAGE_CANDIDATE=S1_ONLINE_DATA_PLANE
+OPEN_PRS_TO_DECIDE=1
+LAST_RESET_DATE_UTC=2026-02-24
+STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_TO_PROD_LOOP|S4_EXECUTION_SHADOW_MODE|S5_EXECUTION_CONNECTOR_FUTURE
+OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
+SNAPSHOT_SEMANTICS=Machine-readable stage snapshot fields track current authoritative direction and transition readiness.
 
 # PROJECT_STATE
 
@@ -32,118 +23,119 @@ No other document determines current stage.
 
 ## Machine-Readable Snapshot
 
-
-CURRENT_STAGE=S7_PERSONAL_RESEARCH_ENGINE
-OPEN_PRS_TO_DECIDE=0
-LAST_STAGE_RELEVANT_PR=275
-LAST_STAGE_RELEVANT_SHA=b3aa5df597cf31e008aab90854cce2ad251e0c5b
-S2_IMPLEMENTED_MAIN_SHA=7056fb402ad1c13e61c7c2d1294271fc50b128ca
+CURRENT_STAGE=S0_REFOUNDATION
+NEXT_STAGE_CANDIDATE=S1_ONLINE_DATA_PLANE
+OPEN_PRS_TO_DECIDE=1
+LAST_RESET_DATE_UTC=2026-02-24
+STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_TO_PROD_LOOP|S4_EXECUTION_SHADOW_MODE|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
 
 ## Current Stage
-S7_PERSONAL_RESEARCH_ENGINE
-
-## Stage Description
-Deterministic personal research engine over run artifacts.
-S7 adds experiment orchestration and multi-run comparison while preserving SIM_ONLY safety boundaries.
-No broker integration.
-No live execution path.
+S0_REFOUNDATION
 
 ## Current Objective
-Run deterministic experiment workflows and artifact-backed multi-run analysis for single-user research without expanding execution authority.
-
-## Definition of Done
-- User can define a deterministic experiment input over canonical candidate run configs.
-- System writes truthful experiment artifacts (`experiment_manifest.json`, `comparison_summary.json`) derived from run artifacts.
-- Partial candidate failures are represented explicitly (fail-closed) with canonical error envelopes.
-- Candidate caps and per-experiment lock timeout behavior are enforced and covered by strict gate checks.
-- `python -m tools.release_gate --strict --timeout-seconds 900` PASS on `main`.
-- CI green on current `main` tip SHA for active workflows.
+Refound Buff as a crypto futures R&D platform with a mandatory online data plane, deterministic artifact truth, realistic paper-live futures simulation, and deferred execution connector scope.
 
 ## Active Constraints
-- Execution is out of scope
-- Broker APIs forbidden
-- Deterministic runtime only
-- Fail-closed error handling
-- Canonical contract authority enforced
+- Runtime safety is fail-closed by default.
+- Deterministic artifact contracts are mandatory.
+- Online data collection is in scope; live order execution is not.
+- No production broker connector implementation in the current stage.
 
-## Next Stage Candidate
-TBD
-Next stage token not yet defined; see `docs/06_SYSTEM_EVOLUTION_ROADMAP.md` Future Layer section.
+## Stage Ladder
 
-## S7 Preview (Candidate)
-- Objective:
-  Extend Buff from a single-run artifact viewer into a personal quant research lab built on deterministic experiment workflows and artifact-backed analysis.
-- Non-goals:
-  No live trading path, no broker integration, no multi-user SaaS scope, and no cloud deployment requirements.
-- Value Target Persona:
-  Solo quant researcher who needs repeatable experiment execution, ranked comparisons, and artifact-grounded insight workflows on local infrastructure.
+### S0_REFOUNDATION
+Objective:
+- Establish canonical product direction, contracts, and stage system for futures R&D and paper-live progression.
 
-## Evidence Note (S6 Stage Flip)
-- Runtime hardening PR: #264 https://github.com/Buff-Trading-AI/Buff/pull/264
-- No-write enforcement tests: `tools/test_s6_observability_surface.py`
-- Main SHA validated for strict gate: `cadccad38c3748212dd94dd80378a51d53be61e9` (`python -m tools.release_gate --strict --timeout-seconds 900` PASS)
+Definition of Done (explicit, testable):
+- `docs/PROJECT_STATE.md`, `docs/PRODUCT_SPEC.md`, `docs/06_DATA_PLANE_ONLINE.md`, `docs/07_PAPER_LIVE_FUTURES.md`, `docs/08_RESEARCH_LOOP.md`, and `docs/09_EXECUTION_FUTURE.md` exist and are internally consistent.
+- Legacy stage/phase docs are archived under `docs/_archive/20260224_legacy_reset/` with explicit non-authoritative header.
+- No active doc claims stage authority except this file.
 
-## S3 Acceptance Evidence
-- S3 runtime acceptance validated on `main` at `3e36db11a5706006bb464f046d2b1ef531f4182f` with deterministic run/replay behavior.
-- Strict release gate includes and passes: `s3_double_run_compare`, `s3_input_digest_verification`, `s3_cross_tenant_isolation`, `s3_no_network`, `s3_no_live_execution_path`, `s3_artifact_pack_completeness`, and `s3_smoke_demo`.
-- Stage-relevant completion recorded by PR #225 and SHA `3e36db11a5706006bb464f046d2b1ef531f4182f`.
+Active Constraints:
+- Documentation reset only; no runtime behavior change implied by this stage alone.
+- Historical content remains available in archive and is not authoritative.
 
-## S5 Acceptance Evidence
-- Lean S5 guardrails are merged on `main` in PR #240 (`phase6: enforce SIM_ONLY run manifest + reject execution overrides`).
-- Stage-relevant authority is anchored at PR #240 with SHA `558e427c0b0902d8c6dbd9aed532186a3d5f6a4d`.
-- Runtime acceptance confirms SIM_ONLY manifest/capability enforcement and fail-closed rejection of execution overrides, with strict release-gate enforcement.
+Transition Gate:
+- Documentation consistency checks pass: no broken local links in active docs, no legacy stage tokens in active docs, no runnable command blocks outside the runbook.
 
-## S6 Platform Observability & Productization - Acceptance Evidence
-STAGE_TOKEN=S6_PLATFORM_OBSERVABILITY_LAYER
-DATE_VERIFIED_UTC=2026-02-19
-MAIN_SHA=cb91cc6ddaeb38565db0294c446eca80f8ec2fa8
-PRS=#244 https://github.com/Buff-Trading-AI/Buff/pull/244; #245 https://github.com/Buff-Trading-AI/Buff/pull/245; #246 https://github.com/Buff-Trading-AI/Buff/pull/246; #247 https://github.com/Buff-Trading-AI/Buff/pull/247
-CI_WORKFLOWS=https://github.com/Buff-Trading-AI/Buff/actions/runs/22183407044; https://github.com/Buff-Trading-AI/Buff/actions/runs/22183926606; https://github.com/Buff-Trading-AI/Buff/actions/runs/22184643631; https://github.com/Buff-Trading-AI/Buff/actions/runs/22184943839
-- Runtime evidence: `GET /api/v1/health/ready` is present for readiness checks.
-- Runtime evidence: observability surfaces are present at `GET /api/v1/observability/runs`, `GET /api/v1/observability/runs/{run_id}`, and `GET /api/v1/observability/registry`.
-- Runtime evidence: deterministic report export is present at `GET /api/v1/runs/{run_id}/report/export`.
-- Runtime evidence: SIM_ONLY invariant preserved; observability surfaces are GET-only; no network execution surface added.
-- Risk note: plugin validation runtime timeout was deliberately increased from 2s to 4s to reduce flakes under load, while keeping fail-closed behavior.
+### S1_ONLINE_DATA_PLANE
+Objective:
+- Implement mandatory online futures market data ingestion with deterministic canonicalization and replayable artifacts.
 
-## S7 Acceptance Evidence
-- S7 runtime experiment surface is merged on `main` in PR #270 at SHA `a44ab2418c8b49873b95ec182beed3596132f2f0`.
-- S7 strict release gate checks are merged on `main` in PR #271 at SHA `27180ca94a54c40d5efa5057a33e912e6c5d8787` (merged at `2026-02-21T11:52:56Z`).
-- Runtime caps and lock-timeout hardening are merged on `main` in PR #273 at SHA `48ed3d019f3926088b189a3a36a288bdb179c98f`; strict gate enforcement for those guarantees is merged in PR #275 at SHA `b3aa5df597cf31e008aab90854cce2ad251e0c5b`.
-- Error-code registry alignment for experiment caps/lock-timeout is merged on `main` in PR #274 at SHA `76853cee4fbd03677b4523864b73ac5fe9651c64`.
-- Strict release gate on `main` includes `s7_experiment_artifact_contract`, `s7_experiment_determinism`, `s7_experiment_fail_closed_partial`, `s7_experiment_caps_enforced`, and `s7_experiment_lock_enforced`, and is PASS on `main` SHA `b3aa5df597cf31e008aab90854cce2ad251e0c5b`.
+Definition of Done (explicit, testable):
+- Feed adapter supports websocket-first ingestion with REST backfill fallback.
+- Raw immutable event log artifact is produced for every ingest session.
+- Canonical OHLCV output is reproducible from raw events with identical hashes across replays.
+- Gap, late-data, and revision policies are enforced and artifact-recorded.
 
-## PRODUCTIZATION STATUS SNAPSHOT (Post S5)
-- Docker named volume default for RUNS_ROOT: not merged on `main` in this snapshot; compose default remains `${RUNS_ROOT_HOST:-./.runs_compose}:/runs`.
-- UI Create Run Wizard is implemented (`/runs/new`: import data -> choose strategy -> configure -> create run).
-- Observability endpoints are present (`/api/v1/observability/registry`, `/api/v1/observability/runs`, `/api/v1/observability/runs/{run_id}`).
-- Report export is functional (`/api/v1/runs/{run_id}/report/export`).
-- UI Journey Runner is implemented (Playwright-based, `apps/web/scripts/user-journey.spec.mjs`).
-- Known issue: historical Windows bind mount flakiness can surface intermittent `RUNS_ROOT_NOT_WRITABLE` 503 responses.
-- Known issue: NumPy/pyarrow ABI warning appears in API container logs; currently non-blocking but tracked.
+Active Constraints:
+- Data plane has no execution authority.
+- Fail-closed behavior on feed inconsistency, digest mismatch, or schema violation.
 
-## Transition Gate Requirements (S0 -> S1, Historical And Satisfied)
-- Run indexing layer
-- Queryable artifact registry
-- Structured runtime metrics
-- Observability documentation: `docs/OBSERVABILITY.md`
-- Updated PROJECT_STATE.md
+Transition Gate:
+- Deterministic replay tests pass for `raw -> canonical` reconstruction and artifact digest stability.
 
-## Workflow Lanes
-- Lane 1 (DocsOnly): `docs/**` and `README.md` only.
-- Lane 2 (Tooling): `tools/**` and `scripts/**` only.
-- Lane 3 (Runtime): `src/**`, `apps/**`, and `tests/**` only.
+### S2_PAPER_LIVE_FUTURES
+Objective:
+- Deliver realistic paper-live futures simulation as the primary execution mode for validation.
 
-## Solo Mode
-- Local guardrails are warn-only to avoid blocking solo development loops.
-- PR gate enforcement is strict and authoritative.
-- Untracked `tools/**` or `scripts/**` files are allowed while developing locally.
-- Before merging a DocsOnly PR, any `tools/**` or `scripts/**` local work must be:
-  - committed in a Tooling lane branch/PR, or
-  - removed from local workspace.
+Definition of Done (explicit, testable):
+- Bar-close decision loop executes against canonical market data.
+- Baseline fee, slippage, funding, position, and conservative liquidation models are enforced.
+- Risk kill-switch and hard safety caps are enforced at runtime.
+- Required paper-live artifacts are produced and replay-verifiable.
 
-## Last Verified Commit
+Active Constraints:
+- No external order placement.
+- Simulation must remain deterministic under fixed input artifacts.
 
-b3aa5df597cf31e008aab90854cce2ad251e0c5b
+Transition Gate:
+- Paper-live replay parity passes with stable metrics/trade artifacts under identical inputs.
+
+### S3_RESEARCH_TO_PROD_LOOP
+Objective:
+- Operationalize a disciplined research loop from backtest to walk-forward to paper-live promotion.
+
+Definition of Done (explicit, testable):
+- Backtest, walk-forward, and paper-live results are linked through canonical experiment lineage.
+- Regime split and cost sensitivity checks are mandatory pre-promotion requirements.
+- Promotion/rollback/stop conditions are artifact-tracked and enforceable.
+
+Active Constraints:
+- Promotion decisions remain research-governed and fail-closed on missing evidence.
+- No live connector enablement in this stage.
+
+Transition Gate:
+- Promotion rules execute automatically on artifacts and block candidates that violate stop conditions.
+
+### S4_EXECUTION_SHADOW_MODE
+Objective:
+- Define and validate deterministic decision generation against non-deterministic external execution observations in shadow mode.
+
+Definition of Done (explicit, testable):
+- Shadow mode contract records deterministic Decision and observed ExecutionResult separately.
+- Reconciliation engine detects drift/mismatch and emits freeze signals.
+- Freeze-on-mismatch policy blocks connector progression when reconciliation breaks.
+
+Active Constraints:
+- Shadow mode is analysis and reconciliation only; no production order routing.
+
+Transition Gate:
+- Reconciliation/freeze behavior is proven under induced mismatch scenarios.
+
+### S5_EXECUTION_CONNECTOR_FUTURE
+Objective:
+- Future stage reserved for controlled execution connector implementation after shadow-mode evidence is sufficient.
+
+Definition of Done (explicit, testable):
+- Not active. Criteria will be defined only after S4 completion evidence is accepted.
+
+Active Constraints:
+- Connector implementation is deferred and out of current scope.
+
+Transition Gate:
+- Formal stage-entry decision recorded after S4 readiness evidence.
