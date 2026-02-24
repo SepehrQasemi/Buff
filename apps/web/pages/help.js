@@ -9,6 +9,7 @@ const QUICK_LINKS = [
   { href: "/help#run-stuck", label: "Run Stuck" },
   { href: "/help#backend-verify", label: "Verify Backend" },
   { href: "/help#logs-report", label: "Logs and Report Bundle" },
+  { href: "/help#oss-attribution", label: "Open Source Attribution" },
 ];
 
 export default function HelpPage() {
@@ -24,6 +25,7 @@ export default function HelpPage() {
       "run-stuck",
       "backend-verify",
       "logs-report",
+      "oss-attribution",
     ];
     const normalized = anchors.find(
       (anchor) =>
@@ -145,7 +147,7 @@ export default function HelpPage() {
         </p>
       </section>
 
-        <section id="logs-report" className="card fade-up">
+        <section id="logs-report" className="card fade-up" style={{ marginBottom: "16px" }}>
         <div className="section-title">
           <h3>4) Where to Find Logs / Report Bundle</h3>
         </div>
@@ -155,6 +157,25 @@ export default function HelpPage() {
           <li>Release gate reports are written to `reports/release_gate_report.json` in repo root.</li>
           <li>Capture these details when reporting issues so failures are reproducible.</li>
         </ul>
+        </section>
+
+        <section id="oss-attribution" className="card fade-up">
+          <div className="section-title">
+            <h3>5) Open-Source Attribution</h3>
+          </div>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Chart rendering uses Lightweight Charts by TradingView, Inc.
+          </p>
+          <ul style={{ margin: 0, paddingLeft: "20px", display: "grid", gap: "8px" }}>
+            <li>Package: `lightweight-charts@4.2.3`</li>
+            <li>License: Apache-2.0</li>
+            <li>
+              Project:{" "}
+              <a href="https://github.com/tradingview/lightweight-charts" target="_blank" rel="noreferrer">
+                github.com/tradingview/lightweight-charts
+              </a>
+            </li>
+          </ul>
         </section>
       </main>
     </AppShell>
