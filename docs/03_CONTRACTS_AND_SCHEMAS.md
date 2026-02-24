@@ -25,6 +25,29 @@ Rules:
 - Nested `error` mirrors top-level values.
 - Unknown codes are treated as fatal by default clients.
 
+## Error Code Registry
+The following API error codes are currently documented:
+
+- `artifacts_root_missing`
+- `chat_mode_invalid`
+- `decision_records_invalid`
+- `decision_records_missing`
+- `http_error`
+- `invalid_export_format`
+- `invalid_time_range`
+- `invalid_timestamp`
+- `metrics_invalid`
+- `metrics_missing`
+- `ohlcv_invalid`
+- `ohlcv_missing`
+- `run_not_found`
+- `timeline_invalid`
+- `timeline_missing`
+- `too_many_filter_values`
+- `trades_invalid`
+- `trades_missing`
+- `validation_error`
+
 ## Active Artifact Contract Families
 
 ### A) Online Data Plane Artifacts

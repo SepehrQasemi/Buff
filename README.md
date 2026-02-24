@@ -11,6 +11,11 @@ Buff is evolving into a crypto futures R&D platform with:
 ## Stage Source
 Current stage is defined only in `docs/PROJECT_STATE.md`.
 
+## Invariants & Non-Goals
+- Deterministic, artifact-first behavior is mandatory for comparable research outcomes.
+- Non-goals include discretionary runtime drift, hidden mutable state, and unverifiable outputs.
+- No prediction claims: Buff is an R&D and simulation platform, not a guaranteed forecasting engine.
+
 ## Active Docs
 - `docs/README.md`
 - `docs/PROJECT_STATE.md`
