@@ -52,6 +52,32 @@ The following API error codes are currently documented:
 - `trades_missing`
 - `validation_error`
 
+## S2 Runtime Error Registry
+The S2 runtime and artifact validation layer uses this allowed error-code set:
+
+- `ARTIFACT_MISSING`
+- `DATA_INTEGRITY_FAILURE`
+- `DIGEST_MISMATCH`
+- `INPUT_DIGEST_MISMATCH`
+- `INPUT_INVALID`
+- `INPUT_MISSING`
+- `MISSING_CRITICAL_FUNDING_WINDOW`
+- `ORDERING_INVALID`
+- `SCHEMA_INVALID`
+- `SIMULATION_FAILED`
+
+S2 precedence contract (`resolve_error_code`) is deterministic:
+1. `SCHEMA_INVALID`
+2. `ARTIFACT_MISSING`
+3. `DIGEST_MISMATCH`
+4. `INPUT_DIGEST_MISMATCH`
+5. `INPUT_MISSING`
+6. `INPUT_INVALID`
+7. `MISSING_CRITICAL_FUNDING_WINDOW`
+8. `DATA_INTEGRITY_FAILURE`
+9. `ORDERING_INVALID`
+10. `SIMULATION_FAILED`
+
 ## Active Artifact Contract Families
 
 ### A) Online Data Plane Artifacts
