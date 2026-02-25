@@ -9,6 +9,9 @@ from typing import Any, Iterable, Mapping
 
 from .canonical import (
     build_pack_root_hash,
+    NUMERIC_POLICY,
+    NUMERIC_POLICY_DIGEST_SHA256,
+    NUMERIC_POLICY_ID,
     canonical_json_bytes,
     canonicalize_artifact_path,
     canonicalize_timestamp_utc,
@@ -31,12 +34,23 @@ from .core import (
     S2CoreError,
     run_s2_core_loop,
 )
+from .failure import (
+    ALLOWED_ERROR_CODES,
+    RUN_FAILURE_SCHEMA_VERSION,
+    S2StructuredFailure,
+    build_run_failure_payload,
+    deterministic_failure_timestamp,
+)
+from .models import FundingDataMissingError, PositionInvariantError
 
 
 PAPER_RUN_MANIFEST_SCHEMA = "s2/paper_run_manifest/v1"
 COST_BREAKDOWN_SCHEMA = "s2/cost_breakdown/v1"
 ARTIFACT_PACK_MANIFEST_SCHEMA = "s2/artifact_pack_manifest/v1"
 RUN_DIGESTS_SCHEMA = "s2/run_digests/v1"
+RUN_FAILURE_SCHEMA = RUN_FAILURE_SCHEMA_VERSION
+RUN_STATUS_SUCCEEDED = "SUCCEEDED"
+RUN_STATUS_FAILED = "FAILED"
 
 REQUIRED_ARTIFACTS = (
     "paper_run_manifest.json",
@@ -51,9 +65,22 @@ REQUIRED_ARTIFACTS = (
     "run_digests.json",
 )
 
+REQUIRED_FAILURE_ARTIFACTS = (
+    "paper_run_manifest.json",
+    "risk_events.jsonl",
+    "run_failure.json",
+    "artifact_pack_manifest.json",
+    "run_digests.json",
+)
+
 PACK_HASH_EXCLUDED_ARTIFACTS = frozenset({"artifact_pack_manifest.json", "run_digests.json"})
-PACK_HASH_SCOPE_ARTIFACTS = tuple(
-    name for name in REQUIRED_ARTIFACTS if name not in PACK_HASH_EXCLUDED_ARTIFACTS
+JSONL_ARTIFACTS = (
+    "decision_records.jsonl",
+    "simulated_orders.jsonl",
+    "simulated_fills.jsonl",
+    "position_timeline.jsonl",
+    "risk_events.jsonl",
+    "funding_transfers.jsonl",
 )
 
 JSONL_SCHEMAS = {
@@ -83,6 +110,7 @@ JSONL_SORT_KEYS = {
 JSONL_REQUIRED_FIELDS = {
     "decision_records.jsonl": {
         "schema_version",
+        "numeric_policy_id",
         "event_seq",
         "ts_utc",
         "decision",
@@ -91,6 +119,7 @@ JSONL_REQUIRED_FIELDS = {
     },
     "simulated_orders.jsonl": {
         "schema_version",
+        "numeric_policy_id",
         "order_id",
         "event_seq",
         "ts_utc",
@@ -102,6 +131,7 @@ JSONL_REQUIRED_FIELDS = {
     },
     "simulated_fills.jsonl": {
         "schema_version",
+        "numeric_policy_id",
         "fill_id",
         "order_id",
         "event_seq",
@@ -117,6 +147,7 @@ JSONL_REQUIRED_FIELDS = {
     },
     "position_timeline.jsonl": {
         "schema_version",
+        "numeric_policy_id",
         "event_seq",
         "ts_utc",
         "mark_price",
@@ -130,6 +161,7 @@ JSONL_REQUIRED_FIELDS = {
     },
     "risk_events.jsonl": {
         "schema_version",
+        "numeric_policy_id",
         "event_seq",
         "ts_utc",
         "reason_code",
@@ -137,6 +169,7 @@ JSONL_REQUIRED_FIELDS = {
     },
     "funding_transfers.jsonl": {
         "schema_version",
+        "numeric_policy_id",
         "event_seq",
         "ts_utc",
         "funding_rate",
@@ -144,6 +177,14 @@ JSONL_REQUIRED_FIELDS = {
         "mark_price",
         "transfer_quote",
     },
+}
+
+JSON_SCHEMAS = {
+    "paper_run_manifest.json": PAPER_RUN_MANIFEST_SCHEMA,
+    "cost_breakdown.json": COST_BREAKDOWN_SCHEMA,
+    "artifact_pack_manifest.json": ARTIFACT_PACK_MANIFEST_SCHEMA,
+    "run_digests.json": RUN_DIGESTS_SCHEMA,
+    "run_failure.json": RUN_FAILURE_SCHEMA,
 }
 
 _RUN_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{2,63}$")
@@ -231,27 +272,11 @@ def _load_bars_from_csv(path: Path) -> list[dict[str, Any]]:
             )
         except (KeyError, TypeError, ValueError) as exc:
             raise S2ArtifactError(
-                "INPUT_INVALID",
-                "data row invalid",
+                "SCHEMA_INVALID",
+                "data row schema invalid",
                 {"field": "data_path", "row_index": idx},
             ) from exc
     return bars
-
-
-def _write_kill_switch_event(run_dir: Path, reason_code: str, detail: str) -> None:
-    run_dir.mkdir(parents=True, exist_ok=True)
-    write_canonical_jsonl(
-        run_dir / "risk_events.jsonl",
-        [
-            {
-                "schema_version": RISK_EVENT_SCHEMA,
-                "event_seq": -1,
-                "ts_utc": "1970-01-01T00:00:00Z",
-                "reason_code": reason_code,
-                "detail": detail,
-            }
-        ],
-    )
 
 
 def _strategy_fn_from_config(config: Mapping[str, Any]):
@@ -311,11 +336,16 @@ def _manifest_payload(
     risk_config_digest: str,
     replay_tuple: list[Any],
     replay_digest: str,
+    artifacts: tuple[str, ...],
+    run_status: str,
 ) -> dict[str, Any]:
     data_ref = canonicalize_artifact_path(request.data_path, repo_root=_repo_root())
     return {
         "schema_version": PAPER_RUN_MANIFEST_SCHEMA,
+        "numeric_policy_id": NUMERIC_POLICY_ID,
+        "numeric_policy": dict(NUMERIC_POLICY),
         "run_id": request.run_id,
+        "run_status": run_status,
         "symbol": request.symbol,
         "timeframe": request.timeframe,
         "strategy": {
@@ -359,14 +389,17 @@ def _manifest_payload(
             "tuple": replay_tuple,
             "digest_sha256": replay_digest,
         },
-        "artifacts": list(REQUIRED_ARTIFACTS),
+        "artifacts": list(artifacts),
     }
 
 
 def _validate_manifest_schema(payload: Mapping[str, Any]) -> None:
     required = {
         "schema_version",
+        "numeric_policy_id",
+        "numeric_policy",
         "run_id",
+        "run_status",
         "symbol",
         "timeframe",
         "strategy",
@@ -388,6 +421,31 @@ def _validate_manifest_schema(payload: Mapping[str, Any]) -> None:
         raise S2ArtifactError(
             "SCHEMA_INVALID",
             "manifest schema_version invalid",
+            {"artifact": "paper_run_manifest.json"},
+        )
+    if payload.get("numeric_policy_id") != NUMERIC_POLICY_ID:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "manifest numeric_policy_id invalid",
+            {"artifact": "paper_run_manifest.json"},
+        )
+    if payload.get("numeric_policy") != NUMERIC_POLICY:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "manifest numeric_policy invalid",
+            {"artifact": "paper_run_manifest.json"},
+        )
+    if payload.get("run_status") not in {RUN_STATUS_SUCCEEDED, RUN_STATUS_FAILED}:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "manifest run_status invalid",
+            {"artifact": "paper_run_manifest.json"},
+        )
+    artifacts = payload.get("artifacts")
+    if not isinstance(artifacts, list) or not all(isinstance(item, str) for item in artifacts):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "manifest artifacts invalid",
             {"artifact": "paper_run_manifest.json"},
         )
 
@@ -458,6 +516,17 @@ def _validate_jsonl_schema(path: Path, rows: list[dict[str, Any]]) -> None:
                     "line_index": idx,
                     "expected": expected_schema,
                     "actual": row.get("schema_version"),
+                },
+            )
+        if row.get("numeric_policy_id") != NUMERIC_POLICY_ID:
+            raise S2ArtifactError(
+                "SCHEMA_INVALID",
+                "artifact jsonl row numeric_policy_id invalid",
+                {
+                    "artifact": path.name,
+                    "line_index": idx,
+                    "expected": NUMERIC_POLICY_ID,
+                    "actual": row.get("numeric_policy_id"),
                 },
             )
 
@@ -551,11 +620,27 @@ def _collect_file_entries(root: Path, files: Iterable[str]) -> list[dict[str, An
     return entries
 
 
-def _build_artifact_pack_manifest(run_id: str, root: Path) -> dict[str, Any]:
-    file_entries = _collect_file_entries(root, PACK_HASH_SCOPE_ARTIFACTS)
+def _pack_hash_scope_from_artifacts(artifacts: Iterable[str]) -> tuple[str, ...]:
+    return tuple(
+        name for name in sorted(set(artifacts)) if name not in PACK_HASH_EXCLUDED_ARTIFACTS
+    )
+
+
+def _build_artifact_pack_manifest(
+    run_id: str,
+    root: Path,
+    *,
+    artifacts: tuple[str, ...],
+    run_status: str,
+) -> dict[str, Any]:
+    hash_scope = _pack_hash_scope_from_artifacts(artifacts)
+    file_entries = _collect_file_entries(root, hash_scope)
     return {
         "schema_version": ARTIFACT_PACK_MANIFEST_SCHEMA,
+        "numeric_policy_id": NUMERIC_POLICY_ID,
+        "numeric_policy": dict(NUMERIC_POLICY),
         "run_id": run_id,
+        "run_status": run_status,
         "hash_scope": {
             "included_files": [row["path"] for row in file_entries],
             "excluded_files": sorted(PACK_HASH_EXCLUDED_ARTIFACTS),
@@ -576,11 +661,40 @@ def _validate_ordering(path: Path, rows: list[dict[str, Any]]) -> None:
             )
 
 
-def _validate_artifact_pack_manifest(root: Path, payload: Mapping[str, Any]) -> dict[str, str]:
+def _validate_artifact_pack_manifest(
+    root: Path,
+    payload: Mapping[str, Any],
+    *,
+    expected_hash_scope: tuple[str, ...],
+    expected_run_status: str,
+) -> dict[str, str]:
     if payload.get("schema_version") != ARTIFACT_PACK_MANIFEST_SCHEMA:
         raise S2ArtifactError(
             "SCHEMA_INVALID",
             "artifact pack manifest schema invalid",
+            {"artifact": "artifact_pack_manifest.json"},
+        )
+    if payload.get("numeric_policy_id") != NUMERIC_POLICY_ID:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack numeric_policy_id mismatch",
+            {
+                "artifact": "artifact_pack_manifest.json",
+                "expected": NUMERIC_POLICY_ID,
+                "actual": payload.get("numeric_policy_id"),
+            },
+        )
+    numeric_policy = payload.get("numeric_policy")
+    if numeric_policy != NUMERIC_POLICY:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack numeric_policy mismatch",
+            {"artifact": "artifact_pack_manifest.json"},
+        )
+    if payload.get("run_status") != expected_run_status:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack run_status mismatch",
             {"artifact": "artifact_pack_manifest.json"},
         )
     files = payload.get("files")
@@ -609,7 +723,7 @@ def _validate_artifact_pack_manifest(root: Path, payload: Mapping[str, Any]) -> 
         path = str(row.get("path") or "")
         sha = str(row.get("sha256") or "")
         size_bytes = row.get("size_bytes")
-        if path not in PACK_HASH_SCOPE_ARTIFACTS:
+        if path not in expected_hash_scope:
             raise S2ArtifactError(
                 "SCHEMA_INVALID",
                 "artifact pack includes unsupported file path",
@@ -643,7 +757,7 @@ def _validate_artifact_pack_manifest(root: Path, payload: Mapping[str, Any]) -> 
         )
 
     manifest_paths = {row["path"] for row in parsed_entries}
-    expected_paths = set(PACK_HASH_SCOPE_ARTIFACTS)
+    expected_paths = set(expected_hash_scope)
     if manifest_paths != expected_paths:
         raise S2ArtifactError(
             "SCHEMA_INVALID",
@@ -655,7 +769,7 @@ def _validate_artifact_pack_manifest(root: Path, payload: Mapping[str, Any]) -> 
             },
         )
 
-    actual_entries = _collect_file_entries(root, PACK_HASH_SCOPE_ARTIFACTS)
+    actual_entries = _collect_file_entries(root, expected_hash_scope)
     if parsed_entries != actual_entries:
         raise S2ArtifactError(
             "DIGEST_MISMATCH",
@@ -683,11 +797,24 @@ def _validate_run_digests(
     pack_file_hashes: Mapping[str, str],
     manifest_replay_digest: str,
     pack_root_hash: str,
+    expected_artifacts: tuple[str, ...],
 ) -> dict[str, str]:
     if payload.get("schema_version") != RUN_DIGESTS_SCHEMA:
         raise S2ArtifactError(
             "SCHEMA_INVALID",
             "run_digests schema invalid",
+            {"artifact": "run_digests.json"},
+        )
+    if payload.get("numeric_policy_id") != NUMERIC_POLICY_ID:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_digests numeric_policy_id mismatch",
+            {"artifact": "run_digests.json"},
+        )
+    if str(payload.get("numeric_policy_digest_sha256") or "") != NUMERIC_POLICY_DIGEST_SHA256:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_digests numeric_policy_digest mismatch",
             {"artifact": "run_digests.json"},
         )
 
@@ -699,7 +826,7 @@ def _validate_run_digests(
             {"artifact": "run_digests.json"},
         )
 
-    expected_digest_keys = sorted(name for name in REQUIRED_ARTIFACTS if name != "run_digests.json")
+    expected_digest_keys = sorted(name for name in expected_artifacts if name != "run_digests.json")
     if sorted(digest_map.keys()) != expected_digest_keys:
         raise S2ArtifactError(
             "DIGEST_MISMATCH",
@@ -778,8 +905,205 @@ def _validate_run_digests(
 
 
 def _canonical_rows(rows: Iterable[Mapping[str, Any]], artifact_name: str) -> list[dict[str, Any]]:
-    normalized = [dict(row) for row in rows]
+    normalized = []
+    for row in rows:
+        payload = dict(row)
+        payload["numeric_policy_id"] = NUMERIC_POLICY_ID
+        normalized.append(payload)
     return _sorted_rows_for_artifact(artifact_name, normalized)
+
+
+def _replay_identity_tuple(
+    *,
+    bars_sha256: str,
+    strategy_version: str,
+    strategy_config_digest: str,
+    risk_version: str,
+    risk_config_digest: str,
+    core_config: S2CoreConfig,
+    seed: int,
+) -> list[Any]:
+    return [
+        bars_sha256,
+        strategy_version,
+        strategy_config_digest,
+        risk_version,
+        risk_config_digest,
+        core_config.fee_model.version,
+        core_config.slippage_model.version,
+        core_config.funding_model.version,
+        core_config.liquidation_model.version,
+        int(seed),
+    ]
+
+
+def _error_code_from_artifact_error(exc: S2ArtifactError) -> str:
+    code = str(exc.code).strip().upper()
+    if code == "INPUT_DIGEST_MISMATCH":
+        return "DIGEST_MISMATCH"
+    if code in ALLOWED_ERROR_CODES:
+        return code
+    return "SIMULATION_FAILED"
+
+
+def _error_code_from_core_error(exc: S2CoreError) -> str:
+    cause = exc.__cause__
+    if isinstance(cause, FundingDataMissingError):
+        return "MISSING_CRITICAL_FUNDING_WINDOW"
+    if isinstance(cause, PositionInvariantError):
+        return "DATA_INTEGRITY_FAILURE"
+    text = str(exc)
+    if "missing_critical_funding_window" in text:
+        return "MISSING_CRITICAL_FUNDING_WINDOW"
+    if "position invariant" in text or "position_" in text:
+        return "DATA_INTEGRITY_FAILURE"
+    return "SIMULATION_FAILED"
+
+
+def _extract_missing_funding_ts(error: S2CoreError) -> str | None:
+    cause = error.__cause__
+    if isinstance(cause, FundingDataMissingError):
+        return cause.ts_utc
+    text = str(error)
+    marker = "missing_critical_funding_window:"
+    if marker in text:
+        return text.split(marker, 1)[1].strip() or None
+    return None
+
+
+def _build_failure_context(
+    *,
+    code: str,
+    exc: Exception,
+    request: S2ArtifactRequest,
+    bars: list[dict[str, Any]],
+    data_file_sha256: str | None,
+) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "run_id": request.run_id,
+        "symbol": request.symbol,
+        "timeframe": request.timeframe,
+        "seed": int(request.seed),
+        "data_path": canonicalize_artifact_path(request.data_path, repo_root=_repo_root()),
+    }
+    if data_file_sha256 is not None:
+        context["data_file_sha256"] = data_file_sha256
+    if isinstance(exc, S2ArtifactError):
+        context.update(exc.details)
+    if isinstance(exc, S2CoreError):
+        context["core_error"] = str(exc)
+        if code == "MISSING_CRITICAL_FUNDING_WINDOW":
+            missing_ts = _extract_missing_funding_ts(exc)
+            if missing_ts:
+                ts_utc = canonicalize_timestamp_utc(missing_ts)
+                context["missing_funding_ts_utc"] = ts_utc
+                interval = max(int(request.core_config.funding_model.interval_minutes), 0)
+                if interval > 0:
+                    context["funding_interval_minutes"] = interval
+                    context["funding_window_start_utc"] = ts_utc
+                    context["funding_window_end_utc"] = ts_utc
+    if bars:
+        context["bar_count"] = len(bars)
+        context["first_bar_ts_utc"] = bars[0]["ts_utc"]
+        context["last_bar_ts_utc"] = bars[-1]["ts_utc"]
+    return context
+
+
+def _write_failure_artifact_pack(
+    *,
+    run_dir: Path,
+    request: S2ArtifactRequest,
+    failure_code: str,
+    failure_message: str,
+    failure_context: Mapping[str, Any],
+    replay_tuple: list[Any],
+    replay_digest: str,
+    data_file_sha256: str | None,
+    bars_sha256: str,
+    strategy_config_digest: str,
+    risk_config_digest: str,
+    failure_ts_utc: str,
+) -> None:
+    for path in sorted(run_dir.iterdir()):
+        if path.is_file():
+            path.unlink()
+
+    failure_artifacts = REQUIRED_FAILURE_ARTIFACTS
+    manifest_payload = _manifest_payload(
+        request,
+        data_file_sha256=data_file_sha256 or "",
+        bars_sha256=bars_sha256,
+        strategy_config_digest=strategy_config_digest,
+        risk_config_digest=risk_config_digest,
+        replay_tuple=replay_tuple,
+        replay_digest=replay_digest,
+        artifacts=failure_artifacts,
+        run_status=RUN_STATUS_FAILED,
+    )
+    write_canonical_json(run_dir / "paper_run_manifest.json", manifest_payload)
+
+    risk_rows = _canonical_rows(
+        [
+            {
+                "schema_version": RISK_EVENT_SCHEMA,
+                "event_seq": -1,
+                "ts_utc": failure_ts_utc,
+                "reason_code": (
+                    "digest_mismatch"
+                    if failure_code in {"DIGEST_MISMATCH", "INPUT_DIGEST_MISMATCH"}
+                    else failure_code.lower()
+                ),
+                "detail": failure_message,
+            }
+        ],
+        "risk_events.jsonl",
+    )
+    write_canonical_jsonl(run_dir / "risk_events.jsonl", risk_rows)
+
+    failure = S2StructuredFailure(
+        error_code=failure_code,
+        message=failure_message,
+        context=dict(failure_context),
+        source_component="s2.artifacts",
+        source_stage="s2",
+        source_function="run_s2_artifact_pack",
+        timestamp=failure_ts_utc,
+    )
+    run_failure_payload = build_run_failure_payload(
+        run_id=request.run_id,
+        failure=failure,
+        details={
+            "numeric_policy_digest_sha256": NUMERIC_POLICY_DIGEST_SHA256,
+        },
+    )
+    write_canonical_json(run_dir / "run_failure.json", run_failure_payload)
+
+    pack_manifest = _build_artifact_pack_manifest(
+        request.run_id,
+        run_dir,
+        artifacts=failure_artifacts,
+        run_status=RUN_STATUS_FAILED,
+    )
+    write_canonical_json(run_dir / "artifact_pack_manifest.json", pack_manifest)
+
+    artifact_digests = {
+        name: sha256_hex_file(run_dir / name)
+        for name in sorted(failure_artifacts)
+        if name != "run_digests.json"
+    }
+    run_digests_payload = {
+        "schema_version": RUN_DIGESTS_SCHEMA,
+        "numeric_policy_id": NUMERIC_POLICY_ID,
+        "numeric_policy_digest_sha256": NUMERIC_POLICY_DIGEST_SHA256,
+        "run_id": request.run_id,
+        "artifact_sha256": artifact_digests,
+        "artifact_pack_root_hash": pack_manifest["root_hash"],
+        "artifact_pack_files_sha256": {
+            str(row["path"]): str(row["sha256"]) for row in pack_manifest["files"]
+        },
+        "replay_identity_digest_sha256": replay_digest,
+    }
+    write_canonical_json(run_dir / "run_digests.json", run_digests_payload)
 
 
 def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
@@ -791,152 +1115,316 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
     data_path = Path(_require_nonempty(request.data_path, "data_path")).resolve()
     run_dir = (output_root / run_id).resolve()
     run_dir.mkdir(parents=True, exist_ok=True)
-    bars = _load_bars_from_csv(data_path)
 
     strategy_config = dict(request.strategy_config)
     risk_config = dict(request.risk_config)
-
-    data_file_sha256 = sha256_hex_file(data_path)
-    if request.data_sha256 is not None:
-        expected_data_sha = str(request.data_sha256).strip()
-        if expected_data_sha != data_file_sha256:
-            _write_kill_switch_event(
-                run_dir,
-                "digest_mismatch",
-                "input data digest mismatch",
-            )
-            raise S2ArtifactError(
-                "INPUT_DIGEST_MISMATCH",
-                "data_path sha256 mismatch",
-                {
-                    "field": "data_sha256",
-                    "expected": expected_data_sha,
-                    "actual": data_file_sha256,
-                },
-            )
-    bars_sha256 = sha256_hex_bytes(canonical_json_bytes(_bars_payload(bars)))
     strategy_config_digest = sha256_hex_bytes(canonical_json_bytes(strategy_config))
     risk_config_digest = sha256_hex_bytes(canonical_json_bytes(risk_config))
-
-    replay_tuple = [
-        bars_sha256,
-        strategy_version,
-        strategy_config_digest,
-        risk_version,
-        risk_config_digest,
-        request.core_config.fee_model.version,
-        request.core_config.slippage_model.version,
-        request.core_config.funding_model.version,
-        request.core_config.liquidation_model.version,
-        int(request.seed),
-    ]
+    bars: list[dict[str, Any]] = []
+    data_file_sha256: str | None = None
+    bars_sha256 = sha256_hex_bytes(canonical_json_bytes(_bars_payload(bars)))
+    replay_tuple = _replay_identity_tuple(
+        bars_sha256=bars_sha256,
+        strategy_version=strategy_version,
+        strategy_config_digest=strategy_config_digest,
+        risk_version=risk_version,
+        risk_config_digest=risk_config_digest,
+        core_config=request.core_config,
+        seed=int(request.seed),
+    )
     replay_digest = sha256_hex_bytes(canonical_json_bytes(replay_tuple))
 
-    core_config = S2CoreConfig(
-        symbol=symbol,
-        timeframe=timeframe,
-        seed=int(request.seed),
-        initial_cash_quote=float(request.core_config.initial_cash_quote),
-        target_position_qty=float(request.core_config.target_position_qty),
-        fee_model=request.core_config.fee_model,
-        slippage_model=request.core_config.slippage_model,
-        funding_model=request.core_config.funding_model,
-        liquidation_model=request.core_config.liquidation_model,
-        risk_caps=request.core_config.risk_caps,
-        kill_switch=request.core_config.kill_switch,
-    )
+    def _failure_timestamp(core_error: S2CoreError | None = None) -> str:
+        candidates = [row["ts_utc"] for row in bars]
+        if core_error is not None:
+            missing_ts = _extract_missing_funding_ts(core_error)
+            if missing_ts:
+                candidates.append(missing_ts)
+        return deterministic_failure_timestamp(candidates)
 
     try:
+        bars = _load_bars_from_csv(data_path)
+        bars_sha256 = sha256_hex_bytes(canonical_json_bytes(_bars_payload(bars)))
+        data_file_sha256 = sha256_hex_file(data_path)
+        if request.data_sha256 is not None:
+            expected_data_sha = str(request.data_sha256).strip()
+            if expected_data_sha != data_file_sha256:
+                raise S2ArtifactError(
+                    "INPUT_DIGEST_MISMATCH",
+                    "data_path sha256 mismatch",
+                    {
+                        "field": "data_sha256",
+                        "expected": expected_data_sha,
+                        "actual": data_file_sha256,
+                    },
+                )
+        replay_tuple = _replay_identity_tuple(
+            bars_sha256=bars_sha256,
+            strategy_version=strategy_version,
+            strategy_config_digest=strategy_config_digest,
+            risk_version=risk_version,
+            risk_config_digest=risk_config_digest,
+            core_config=request.core_config,
+            seed=int(request.seed),
+        )
+        replay_digest = sha256_hex_bytes(canonical_json_bytes(replay_tuple))
+
+        core_config = S2CoreConfig(
+            symbol=symbol,
+            timeframe=timeframe,
+            seed=int(request.seed),
+            initial_cash_quote=float(request.core_config.initial_cash_quote),
+            target_position_qty=float(request.core_config.target_position_qty),
+            fee_model=request.core_config.fee_model,
+            slippage_model=request.core_config.slippage_model,
+            funding_model=request.core_config.funding_model,
+            liquidation_model=request.core_config.liquidation_model,
+            risk_caps=request.core_config.risk_caps,
+            kill_switch=request.core_config.kill_switch,
+        )
+
         result = run_s2_core_loop(
             bars=bars,
             config=core_config,
             strategy_fn=_strategy_fn_from_config(strategy_config),
             risk_fn=_risk_fn_from_config(risk_config),
         )
-    except S2CoreError as exc:
-        _write_kill_switch_event(
-            run_dir,
-            "data_integrity_failure",
-            str(exc),
+        manifest_payload = _manifest_payload(
+            request,
+            data_file_sha256=data_file_sha256,
+            bars_sha256=bars_sha256,
+            strategy_config_digest=strategy_config_digest,
+            risk_config_digest=risk_config_digest,
+            replay_tuple=replay_tuple,
+            replay_digest=replay_digest,
+            artifacts=REQUIRED_ARTIFACTS,
+            run_status=RUN_STATUS_SUCCEEDED,
         )
-        raise S2ArtifactError("SIMULATION_FAILED", "core loop failed", {"error": str(exc)}) from exc
+        _validate_manifest_schema(manifest_payload)
 
-    manifest_payload = _manifest_payload(
-        S2ArtifactRequest(
-            run_id=run_id,
-            symbol=symbol,
-            timeframe=timeframe,
-            seed=int(request.seed),
-            data_path=request.data_path,
-            data_sha256=request.data_sha256,
-            strategy_version=strategy_version,
-            strategy_config=strategy_config,
-            risk_version=risk_version,
-            risk_config=risk_config,
-            core_config=core_config,
-        ),
-        data_file_sha256=data_file_sha256,
-        bars_sha256=bars_sha256,
-        strategy_config_digest=strategy_config_digest,
-        risk_config_digest=risk_config_digest,
-        replay_tuple=replay_tuple,
-        replay_digest=replay_digest,
-    )
-    _validate_manifest_schema(manifest_payload)
+        write_canonical_json(run_dir / "paper_run_manifest.json", manifest_payload)
+        write_canonical_jsonl(
+            run_dir / "decision_records.jsonl",
+            _canonical_rows(result.decision_records, "decision_records.jsonl"),
+        )
+        write_canonical_jsonl(
+            run_dir / "simulated_orders.jsonl",
+            _canonical_rows(result.simulated_orders, "simulated_orders.jsonl"),
+        )
+        write_canonical_jsonl(
+            run_dir / "simulated_fills.jsonl",
+            _canonical_rows(result.simulated_fills, "simulated_fills.jsonl"),
+        )
+        write_canonical_jsonl(
+            run_dir / "position_timeline.jsonl",
+            _canonical_rows(result.position_timeline, "position_timeline.jsonl"),
+        )
+        write_canonical_jsonl(
+            run_dir / "risk_events.jsonl",
+            _canonical_rows(result.risk_events, "risk_events.jsonl"),
+        )
+        write_canonical_jsonl(
+            run_dir / "funding_transfers.jsonl",
+            _canonical_rows(result.funding_transfers, "funding_transfers.jsonl"),
+        )
+        write_canonical_json(
+            run_dir / "cost_breakdown.json",
+            {
+                "schema_version": COST_BREAKDOWN_SCHEMA,
+                "numeric_policy_id": NUMERIC_POLICY_ID,
+                **result.cost_breakdown,
+            },
+        )
 
-    write_canonical_json(run_dir / "paper_run_manifest.json", manifest_payload)
-    write_canonical_jsonl(
-        run_dir / "decision_records.jsonl",
-        _canonical_rows(result.decision_records, "decision_records.jsonl"),
-    )
-    write_canonical_jsonl(
-        run_dir / "simulated_orders.jsonl",
-        _canonical_rows(result.simulated_orders, "simulated_orders.jsonl"),
-    )
-    write_canonical_jsonl(
-        run_dir / "simulated_fills.jsonl",
-        _canonical_rows(result.simulated_fills, "simulated_fills.jsonl"),
-    )
-    write_canonical_jsonl(
-        run_dir / "position_timeline.jsonl",
-        _canonical_rows(result.position_timeline, "position_timeline.jsonl"),
-    )
-    write_canonical_jsonl(
-        run_dir / "risk_events.jsonl",
-        _canonical_rows(result.risk_events, "risk_events.jsonl"),
-    )
-    write_canonical_jsonl(
-        run_dir / "funding_transfers.jsonl",
-        _canonical_rows(result.funding_transfers, "funding_transfers.jsonl"),
-    )
-    write_canonical_json(
-        run_dir / "cost_breakdown.json",
-        {"schema_version": COST_BREAKDOWN_SCHEMA, **result.cost_breakdown},
+        artifact_pack_manifest = _build_artifact_pack_manifest(
+            run_id,
+            run_dir,
+            artifacts=REQUIRED_ARTIFACTS,
+            run_status=RUN_STATUS_SUCCEEDED,
+        )
+        write_canonical_json(run_dir / "artifact_pack_manifest.json", artifact_pack_manifest)
+
+        artifact_digests = {
+            name: sha256_hex_file(run_dir / name)
+            for name in sorted(REQUIRED_ARTIFACTS)
+            if name != "run_digests.json"
+        }
+        pack_file_hashes = {
+            str(row["path"]): str(row["sha256"]) for row in artifact_pack_manifest["files"]
+        }
+        run_digests_payload = {
+            "schema_version": RUN_DIGESTS_SCHEMA,
+            "numeric_policy_id": NUMERIC_POLICY_ID,
+            "numeric_policy_digest_sha256": NUMERIC_POLICY_DIGEST_SHA256,
+            "run_id": run_id,
+            "artifact_sha256": artifact_digests,
+            "artifact_pack_root_hash": artifact_pack_manifest["root_hash"],
+            "artifact_pack_files_sha256": pack_file_hashes,
+            "replay_identity_digest_sha256": replay_digest,
+        }
+        write_canonical_json(run_dir / "run_digests.json", run_digests_payload)
+
+        validate_s2_artifact_pack(run_dir)
+        return run_dir
+    except S2CoreError as exc:
+        failure_code = _error_code_from_core_error(exc)
+        failure_context = _build_failure_context(
+            code=failure_code,
+            exc=exc,
+            request=request,
+            bars=bars,
+            data_file_sha256=data_file_sha256,
+        )
+        _write_failure_artifact_pack(
+            run_dir=run_dir,
+            request=S2ArtifactRequest(
+                run_id=run_id,
+                symbol=symbol,
+                timeframe=timeframe,
+                seed=int(request.seed),
+                data_path=request.data_path,
+                data_sha256=request.data_sha256,
+                strategy_version=strategy_version,
+                strategy_config=strategy_config,
+                risk_version=risk_version,
+                risk_config=risk_config,
+                core_config=request.core_config,
+            ),
+            failure_code=failure_code,
+            failure_message=str(exc),
+            failure_context=failure_context,
+            replay_tuple=replay_tuple,
+            replay_digest=replay_digest,
+            data_file_sha256=data_file_sha256,
+            bars_sha256=bars_sha256,
+            strategy_config_digest=strategy_config_digest,
+            risk_config_digest=risk_config_digest,
+            failure_ts_utc=_failure_timestamp(exc),
+        )
+        raise S2ArtifactError(failure_code, "core loop failed", {"error": str(exc)}) from exc
+    except S2ArtifactError as exc:
+        failure_code = _error_code_from_artifact_error(exc)
+        failure_context = _build_failure_context(
+            code=failure_code,
+            exc=exc,
+            request=request,
+            bars=bars,
+            data_file_sha256=data_file_sha256,
+        )
+        _write_failure_artifact_pack(
+            run_dir=run_dir,
+            request=S2ArtifactRequest(
+                run_id=run_id,
+                symbol=symbol,
+                timeframe=timeframe,
+                seed=int(request.seed),
+                data_path=request.data_path,
+                data_sha256=request.data_sha256,
+                strategy_version=strategy_version,
+                strategy_config=strategy_config,
+                risk_version=risk_version,
+                risk_config=risk_config,
+                core_config=request.core_config,
+            ),
+            failure_code=failure_code,
+            failure_message=str(exc),
+            failure_context=failure_context,
+            replay_tuple=replay_tuple,
+            replay_digest=replay_digest,
+            data_file_sha256=data_file_sha256,
+            bars_sha256=bars_sha256,
+            strategy_config_digest=strategy_config_digest,
+            risk_config_digest=risk_config_digest,
+            failure_ts_utc=_failure_timestamp(),
+        )
+        raise
+
+
+def _expected_artifacts_for_run_status(run_status: str) -> tuple[str, ...]:
+    if run_status == RUN_STATUS_SUCCEEDED:
+        return REQUIRED_ARTIFACTS
+    if run_status == RUN_STATUS_FAILED:
+        return REQUIRED_FAILURE_ARTIFACTS
+    raise S2ArtifactError(
+        "SCHEMA_INVALID",
+        "manifest run_status invalid",
+        {"artifact": "paper_run_manifest.json"},
     )
 
-    artifact_pack_manifest = _build_artifact_pack_manifest(run_id, run_dir)
-    write_canonical_json(run_dir / "artifact_pack_manifest.json", artifact_pack_manifest)
 
-    artifact_digests = {
-        name: sha256_hex_file(run_dir / name)
-        for name in sorted(REQUIRED_ARTIFACTS)
-        if name != "run_digests.json"
-    }
-    pack_file_hashes = {
-        str(row["path"]): str(row["sha256"]) for row in artifact_pack_manifest["files"]
-    }
-    run_digests_payload = {
-        "schema_version": RUN_DIGESTS_SCHEMA,
-        "run_id": run_id,
-        "artifact_sha256": artifact_digests,
-        "artifact_pack_root_hash": artifact_pack_manifest["root_hash"],
-        "artifact_pack_files_sha256": pack_file_hashes,
-        "replay_identity_digest_sha256": replay_digest,
-    }
-    write_canonical_json(run_dir / "run_digests.json", run_digests_payload)
-
-    validate_s2_artifact_pack(run_dir)
-    return run_dir
+def _validate_run_failure_payload(payload: Mapping[str, Any]) -> None:
+    if payload.get("schema_version") != RUN_FAILURE_SCHEMA:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure schema invalid",
+            {"artifact": "run_failure.json"},
+        )
+    if payload.get("numeric_policy_id") != NUMERIC_POLICY_ID:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure numeric_policy_id invalid",
+            {"artifact": "run_failure.json"},
+        )
+    error = payload.get("error")
+    if not isinstance(error, dict):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure error payload invalid",
+            {"artifact": "run_failure.json"},
+        )
+    if error.get("schema_version") != "s2/error/v1":
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure error schema invalid",
+            {"artifact": "run_failure.json"},
+        )
+    if error.get("numeric_policy_id") != NUMERIC_POLICY_ID:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure error numeric policy mismatch",
+            {"artifact": "run_failure.json"},
+        )
+    code = str(error.get("error_code") or "")
+    if code not in ALLOWED_ERROR_CODES:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure error_code invalid",
+            {"artifact": "run_failure.json", "error_code": code},
+        )
+    if error.get("severity") != "FATAL":
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure severity invalid",
+            {"artifact": "run_failure.json"},
+        )
+    source = error.get("source")
+    if not isinstance(source, dict):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure source invalid",
+            {"artifact": "run_failure.json"},
+        )
+    required_source_fields = {"component", "stage", "function"}
+    missing_source = sorted(required_source_fields - set(source.keys()))
+    if missing_source:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure source missing required fields",
+            {"artifact": "run_failure.json", "missing_fields": missing_source},
+        )
+    timestamp = error.get("timestamp")
+    if not isinstance(timestamp, str):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure timestamp invalid",
+            {"artifact": "run_failure.json"},
+        )
+    if canonicalize_timestamp_utc(timestamp) != timestamp:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "run_failure timestamp not canonical",
+            {"artifact": "run_failure.json"},
+        )
 
 
 def validate_s2_artifact_pack(run_dir: Path) -> dict[str, Any]:
@@ -944,7 +1432,34 @@ def validate_s2_artifact_pack(run_dir: Path) -> dict[str, Any]:
     if not root.exists() or not root.is_dir():
         raise S2ArtifactError("ARTIFACT_MISSING", "run directory missing", {"run_dir": str(root)})
 
-    for name in REQUIRED_ARTIFACTS:
+    manifest_path = root / "paper_run_manifest.json"
+    if not manifest_path.exists() or not manifest_path.is_file():
+        raise S2ArtifactError(
+            "ARTIFACT_MISSING", "required artifact missing", {"artifact": "paper_run_manifest.json"}
+        )
+    _validate_artifact_encoding(root, "paper_run_manifest.json")
+
+    manifest = _load_json(manifest_path)
+    _validate_manifest_schema(manifest)
+    _assert_no_forbidden_paths(manifest, artifact="paper_run_manifest.json")
+    _assert_normalized_timestamps(manifest, artifact="paper_run_manifest.json")
+    run_status = str(manifest["run_status"])
+    expected_artifacts = _expected_artifacts_for_run_status(run_status)
+
+    declared_artifacts = tuple(str(item) for item in manifest["artifacts"])
+    if declared_artifacts != expected_artifacts:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "manifest artifact list mismatch for run_status",
+            {
+                "artifact": "paper_run_manifest.json",
+                "run_status": run_status,
+                "expected": list(expected_artifacts),
+                "actual": list(declared_artifacts),
+            },
+        )
+
+    for name in expected_artifacts:
         artifact = root / name
         if not artifact.exists():
             raise S2ArtifactError(
@@ -956,47 +1471,80 @@ def validate_s2_artifact_pack(run_dir: Path) -> dict[str, Any]:
             )
         _validate_artifact_encoding(root, name)
 
-    manifest = _load_json(root / "paper_run_manifest.json")
-    _validate_manifest_schema(manifest)
-    _assert_no_forbidden_paths(manifest, artifact="paper_run_manifest.json")
-    _assert_normalized_timestamps(manifest, artifact="paper_run_manifest.json")
+    if run_status == RUN_STATUS_SUCCEEDED:
+        if (root / "run_failure.json").exists():
+            raise S2ArtifactError(
+                "SCHEMA_INVALID",
+                "run_failure must not exist for succeeded runs",
+                {"artifact": "run_failure.json"},
+            )
+        for jsonl_name in JSONL_ARTIFACTS:
+            path = root / jsonl_name
+            rows = _load_jsonl(path)
+            _validate_jsonl_schema(path, rows)
+            _validate_ordering(path, rows)
+            _assert_no_forbidden_paths(rows, artifact=jsonl_name)
+            _assert_normalized_timestamps(rows, artifact=jsonl_name)
 
-    for jsonl_name in JSONL_SCHEMAS:
-        path = root / jsonl_name
-        rows = _load_jsonl(path)
-        _validate_jsonl_schema(path, rows)
-        _validate_ordering(path, rows)
-        _assert_no_forbidden_paths(rows, artifact=jsonl_name)
-        _assert_normalized_timestamps(rows, artifact=jsonl_name)
-
-    costs = _load_json(root / "cost_breakdown.json")
-    if costs.get("schema_version") != COST_BREAKDOWN_SCHEMA:
-        raise S2ArtifactError(
-            "SCHEMA_INVALID",
-            "cost_breakdown schema invalid",
-            {"artifact": "cost_breakdown.json"},
-        )
-    required_cost_fields = {
-        "schema_version",
-        "fees_quote",
-        "slippage_quote",
-        "funding_quote",
-        "total_cost_quote",
-    }
-    missing_cost_fields = sorted(required_cost_fields - set(costs.keys()))
-    if missing_cost_fields:
-        raise S2ArtifactError(
-            "SCHEMA_INVALID",
-            "cost_breakdown missing required fields",
-            {"missing_fields": missing_cost_fields, "artifact": "cost_breakdown.json"},
-        )
-    _assert_no_forbidden_paths(costs, artifact="cost_breakdown.json")
-    _assert_normalized_timestamps(costs, artifact="cost_breakdown.json")
+        costs = _load_json(root / "cost_breakdown.json")
+        if costs.get("schema_version") != COST_BREAKDOWN_SCHEMA:
+            raise S2ArtifactError(
+                "SCHEMA_INVALID",
+                "cost_breakdown schema invalid",
+                {"artifact": "cost_breakdown.json"},
+            )
+        if costs.get("numeric_policy_id") != NUMERIC_POLICY_ID:
+            raise S2ArtifactError(
+                "SCHEMA_INVALID",
+                "cost_breakdown numeric_policy_id mismatch",
+                {"artifact": "cost_breakdown.json"},
+            )
+        required_cost_fields = {
+            "schema_version",
+            "numeric_policy_id",
+            "fees_quote",
+            "slippage_quote",
+            "funding_quote",
+            "total_cost_quote",
+        }
+        missing_cost_fields = sorted(required_cost_fields - set(costs.keys()))
+        if missing_cost_fields:
+            raise S2ArtifactError(
+                "SCHEMA_INVALID",
+                "cost_breakdown missing required fields",
+                {"missing_fields": missing_cost_fields, "artifact": "cost_breakdown.json"},
+            )
+        _assert_no_forbidden_paths(costs, artifact="cost_breakdown.json")
+        _assert_normalized_timestamps(costs, artifact="cost_breakdown.json")
+    else:
+        for name in REQUIRED_ARTIFACTS:
+            if name in REQUIRED_FAILURE_ARTIFACTS:
+                continue
+            if (root / name).exists():
+                raise S2ArtifactError(
+                    "SCHEMA_INVALID",
+                    "succeeded-only artifact present in failed run",
+                    {"artifact": name},
+                )
+        risk_rows = _load_jsonl(root / "risk_events.jsonl")
+        _validate_jsonl_schema(root / "risk_events.jsonl", risk_rows)
+        _validate_ordering(root / "risk_events.jsonl", risk_rows)
+        _assert_no_forbidden_paths(risk_rows, artifact="risk_events.jsonl")
+        _assert_normalized_timestamps(risk_rows, artifact="risk_events.jsonl")
+        run_failure = _load_json(root / "run_failure.json")
+        _validate_run_failure_payload(run_failure)
+        _assert_no_forbidden_paths(run_failure, artifact="run_failure.json")
+        _assert_normalized_timestamps(run_failure, artifact="run_failure.json")
 
     pack_manifest = _load_json(root / "artifact_pack_manifest.json")
     _assert_no_forbidden_paths(pack_manifest, artifact="artifact_pack_manifest.json")
     _assert_normalized_timestamps(pack_manifest, artifact="artifact_pack_manifest.json")
-    pack_file_hashes = _validate_artifact_pack_manifest(root, pack_manifest)
+    pack_file_hashes = _validate_artifact_pack_manifest(
+        root,
+        pack_manifest,
+        expected_hash_scope=_pack_hash_scope_from_artifacts(expected_artifacts),
+        expected_run_status=run_status,
+    )
     pack_root_hash = str(pack_manifest["root_hash"])
 
     run_digests = _load_json(root / "run_digests.json")
@@ -1016,11 +1564,13 @@ def validate_s2_artifact_pack(run_dir: Path) -> dict[str, Any]:
         pack_file_hashes=pack_file_hashes,
         manifest_replay_digest=replay_digest,
         pack_root_hash=pack_root_hash,
+        expected_artifacts=expected_artifacts,
     )
 
     return {
         "run_dir": str(root),
         "run_id": manifest["run_id"],
+        "run_status": run_status,
         "artifact_sha256": digest_map,
         "artifact_pack_root_hash": pack_root_hash,
         "artifact_pack_file_sha256": dict(pack_file_hashes),

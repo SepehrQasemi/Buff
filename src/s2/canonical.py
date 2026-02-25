@@ -12,6 +12,14 @@ from typing import Any, Iterable, Mapping, Sequence
 FLOAT_SCALE = 8
 _FLOAT_QUANT = Decimal("1").scaleb(-FLOAT_SCALE)
 _WINDOWS_ABS_RE = re.compile(r"^[A-Za-z]:[\\/]")
+NUMERIC_POLICY = {
+    "policy_id": "s2/numeric/fixed_decimal_8/v1",
+    "format": "fixed_decimal",
+    "decimals": 8,
+    "rounding": "ROUND_HALF_EVEN",
+    "notes": "All numeric fields serialized deterministically using this policy.",
+}
+NUMERIC_POLICY_ID = str(NUMERIC_POLICY["policy_id"])
 
 
 def canonicalize_float(value: float | Decimal) -> str:
@@ -153,3 +161,10 @@ def build_pack_root_hash(file_entries: Sequence[Mapping[str, Any]]) -> str:
         parts.append(f"{row['path']}\n{row['size_bytes']}\n{row['sha256']}\n")
     preimage = "".join(parts).encode("utf-8")
     return sha256_hex_bytes(preimage)
+
+
+def numeric_policy_digest_sha256() -> str:
+    return sha256_hex_bytes(canonical_json_bytes(NUMERIC_POLICY))
+
+
+NUMERIC_POLICY_DIGEST_SHA256 = numeric_policy_digest_sha256()
