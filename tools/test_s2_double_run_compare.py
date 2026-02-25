@@ -5,7 +5,12 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from s2.artifacts import S2ArtifactRequest, run_s2_artifact_pack
+from s2.artifacts import (
+    REQUIRED_ARTIFACTS,
+    S2ArtifactRequest,
+    run_s2_artifact_pack,
+    validate_s2_artifact_pack,
+)
 from s2.core import S2CoreConfig
 from s2.models import FeeModel, FundingModel, SlippageBucket, SlippageModel
 
@@ -41,4 +46,16 @@ def test_s2_double_run_compare(tmp_path: Path) -> None:
     run_a = run_s2_artifact_pack(request, tmp_path / "out_a")
     run_b = run_s2_artifact_pack(request, tmp_path / "out_b")
 
-    assert (run_a / "run_digests.json").read_bytes() == (run_b / "run_digests.json").read_bytes()
+    files_a = sorted(path.name for path in run_a.iterdir() if path.is_file())
+    files_b = sorted(path.name for path in run_b.iterdir() if path.is_file())
+    assert files_a == files_b
+    assert set(files_a) == set(REQUIRED_ARTIFACTS)
+
+    for artifact_name in REQUIRED_ARTIFACTS:
+        assert (run_a / artifact_name).read_bytes() == (run_b / artifact_name).read_bytes()
+
+    validated_a = validate_s2_artifact_pack(run_a)
+    validated_b = validate_s2_artifact_pack(run_b)
+    assert validated_a["artifact_pack_root_hash"] == validated_b["artifact_pack_root_hash"]
+    assert validated_a["artifact_pack_file_sha256"] == validated_b["artifact_pack_file_sha256"]
+    assert validated_a["artifact_sha256"] == validated_b["artifact_sha256"]

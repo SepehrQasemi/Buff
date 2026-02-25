@@ -8,6 +8,7 @@ import socket
 from typing import Any, Callable, Iterable, Literal, Sequence
 from unittest.mock import patch
 
+from .canonical import canonicalize_timestamp_utc
 from .models import (
     FeeModel,
     FundingDataMissingError,
@@ -28,6 +29,13 @@ StrategyFn = Callable[["BarCloseEvent", "CoreStateView", random.Random], Decisio
 RiskFn = Callable[
     ["BarCloseEvent", "CoreStateView", DecisionAction, random.Random], tuple[bool, str | None]
 ]
+DECISION_RECORD_SCHEMA = "s2/decision_records/v1"
+RISK_CHECK_SCHEMA = "s2/risk_checks/v1"
+SIMULATED_ORDER_SCHEMA = "s2/simulated_orders/v1"
+SIMULATED_FILL_SCHEMA = "s2/simulated_fills/v1"
+POSITION_TIMELINE_SCHEMA = "s2/position_timeline/v1"
+RISK_EVENT_SCHEMA = "s2/risk_events/v1"
+FUNDING_TRANSFER_SCHEMA = "s2/funding_transfers/v1"
 
 
 class S2CoreError(RuntimeError):
@@ -143,8 +151,14 @@ def _format_utc(dt: datetime) -> str:
 
 def _coerce_bar(raw: Bar | dict[str, Any]) -> Bar:
     if isinstance(raw, Bar):
-        _parse_utc(raw.ts_utc)
-        return raw
+        return Bar(
+            ts_utc=canonicalize_timestamp_utc(raw.ts_utc),
+            open=float(raw.open),
+            high=float(raw.high),
+            low=float(raw.low),
+            close=float(raw.close),
+            volume=float(raw.volume),
+        )
     if not isinstance(raw, dict):
         raise S2CoreError("bar_invalid_payload")
     try:
@@ -158,7 +172,14 @@ def _coerce_bar(raw: Bar | dict[str, Any]) -> Bar:
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise S2CoreError("bar_invalid_payload") from exc
-    _parse_utc(bar.ts_utc)
+    bar = Bar(
+        ts_utc=canonicalize_timestamp_utc(bar.ts_utc),
+        open=bar.open,
+        high=bar.high,
+        low=bar.low,
+        close=bar.close,
+        volume=bar.volume,
+    )
     if bar.open <= 0 or bar.high <= 0 or bar.low <= 0 or bar.close <= 0:
         raise S2CoreError("bar_nonpositive_price")
     return bar
@@ -302,6 +323,7 @@ def run_s2_core_loop(
                 kill_switch_reason_code = reason_code
                 risk_events.append(
                     {
+                        "schema_version": RISK_EVENT_SCHEMA,
                         "event_seq": event.seq,
                         "ts_utc": event.bar.ts_utc,
                         "reason_code": reason_code,
@@ -332,6 +354,7 @@ def run_s2_core_loop(
 
                 simulated_orders.append(
                     {
+                        "schema_version": SIMULATED_ORDER_SCHEMA,
                         "order_id": order_id,
                         "event_seq": event.seq,
                         "ts_utc": event.bar.ts_utc,
@@ -352,6 +375,7 @@ def run_s2_core_loop(
                 position.cumulative_slippage += slippage_quote
 
                 payload: dict[str, Any] = {
+                    "schema_version": SIMULATED_FILL_SCHEMA,
                     "fill_id": fill_id,
                     "order_id": order_id,
                     "event_seq": event.seq,
@@ -391,6 +415,7 @@ def run_s2_core_loop(
                     action = _coerce_action(strategy(event, state_pre, rng))
                 decision_records.append(
                     {
+                        "schema_version": DECISION_RECORD_SCHEMA,
                         "event_seq": event.seq,
                         "ts_utc": event.bar.ts_utc,
                         "decision": action,
@@ -406,6 +431,7 @@ def run_s2_core_loop(
                     allowed, risk_reason = risk_eval(event, state_pre, action, rng)
                 risk_checks.append(
                     {
+                        "schema_version": RISK_CHECK_SCHEMA,
                         "event_seq": event.seq,
                         "ts_utc": event.bar.ts_utc,
                         "decision": action,
@@ -417,6 +443,7 @@ def run_s2_core_loop(
                 if not allowed:
                     risk_events.append(
                         {
+                            "schema_version": RISK_EVENT_SCHEMA,
                             "event_seq": event.seq,
                             "ts_utc": event.bar.ts_utc,
                             "reason_code": "risk_blocked",
@@ -484,6 +511,7 @@ def run_s2_core_loop(
                     )
                     risk_events.append(
                         {
+                            "schema_version": RISK_EVENT_SCHEMA,
                             "event_seq": event.seq,
                             "ts_utc": event.bar.ts_utc,
                             "reason_code": "kill_switch_flatten",
@@ -503,6 +531,7 @@ def run_s2_core_loop(
                     position.cumulative_funding += transfer
                     funding_transfers.append(
                         {
+                            "schema_version": FUNDING_TRANSFER_SCHEMA,
                             "event_seq": event.seq,
                             "ts_utc": event.bar.ts_utc,
                             "funding_rate": float(funding_rate),
@@ -535,6 +564,7 @@ def run_s2_core_loop(
                         position.liquidation_count += 1
                         risk_events.append(
                             {
+                                "schema_version": RISK_EVENT_SCHEMA,
                                 "event_seq": event.seq,
                                 "ts_utc": event.bar.ts_utc,
                                 "reason_code": "liquidation_triggered",
@@ -553,6 +583,7 @@ def run_s2_core_loop(
                     raise
                 position_timeline.append(
                     {
+                        "schema_version": POSITION_TIMELINE_SCHEMA,
                         "event_seq": event.seq,
                         "ts_utc": event.bar.ts_utc,
                         "mark_price": mark_price,
