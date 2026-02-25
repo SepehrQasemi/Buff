@@ -1,8 +1,8 @@
-CURRENT_STAGE=S1_ONLINE_DATA_PLANE
-NEXT_STAGE_CANDIDATE=S2_PAPER_LIVE_FUTURES
+CURRENT_STAGE=S2_PAPER_LIVE_FUTURES
+NEXT_STAGE_CANDIDATE=S3_RESEARCH_ENGINE_HARDENING
 OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
-LAST_VERIFIED_COMMIT=3fcb50d23051ed2dde96d3be8a0583efeeae7a83
+LAST_VERIFIED_COMMIT=8b651ba8aa12b71b9b03865c2894b87359eef43c
 STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 SNAPSHOT_SEMANTICS=Machine-readable stage snapshot fields track current authoritative direction and transition readiness.
@@ -25,47 +25,36 @@ No other document determines current stage.
 
 ## Machine-Readable Snapshot
 
-CURRENT_STAGE=S1_ONLINE_DATA_PLANE
-NEXT_STAGE_CANDIDATE=S2_PAPER_LIVE_FUTURES
+CURRENT_STAGE=S2_PAPER_LIVE_FUTURES
+NEXT_STAGE_CANDIDATE=S3_RESEARCH_ENGINE_HARDENING
 OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
-LAST_VERIFIED_COMMIT=3fcb50d23051ed2dde96d3be8a0583efeeae7a83
+LAST_VERIFIED_COMMIT=8b651ba8aa12b71b9b03865c2894b87359eef43c
 STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
 
 ## Current Stage
-S1_ONLINE_DATA_PLANE
+S2_PAPER_LIVE_FUTURES
 
 ## Current Objective
-Implement the online data plane with immutable raw capture, deterministic canonicalization, and artifacted gap/late/revision fail-closed policies.
+Run deterministic paper-live futures simulation from canonical data with bar-close-only decisions, deterministic execution modeling, and replay-verifiable artifacts.
 
 ## Active Constraints
 - Runtime safety is fail-closed by default.
 - Deterministic artifact contracts are mandatory.
-- Canonicalization must be driven only from raw logs.
-- Online data collection is in scope; live order execution is not.
+- Simulation must be driven only from canonical data artifacts.
+- Strategy and risk evaluation are bar-close only.
+- Online data collection may feed inputs, but no direct exchange calls are allowed in simulation.
 - No production broker connector implementation in the current stage.
 
-## S1 Acceptance Evidence
-- PR #300 merged on main: https://github.com/Buff-Trading-AI/Buff/pull/300
-- PR #303 merged on main (S1 hardening closeout): https://github.com/Buff-Trading-AI/Buff/pull/303
-- Hardening evidence:
-  - Raw-bytes capture enforced and object payload rejected (`test_raw_capture_rejects_object_payload`, `test_payload_sha256_uses_exact_raw_bytes`, `test_raw_roundtrip_bytes_fidelity`)
-  - Bounded backfill attempts implemented (`test_gap_triggers_backfill_attempts`, `test_gap_unresolved_after_n_attempts_emits_gap_unresolved`, `test_gap_resolved_clears_fail_closed`)
-  - Enforced fail-closed blocks canonical publication on unresolved gaps (`test_unresolved_gap_blocks_canonical_publication`)
-  - Duplicate `ingest_seq` conflict fail-closed (`test_duplicate_seq_diff_hash_fail_closed`, with idempotent duplicate handling in `test_duplicate_seq_same_hash_idempotent`)
-  - Manifest reproducibility fields present (`test_manifest_contains_repro_fields`)
-  - Adversarial determinism coverage including equal timestamp tie-break (`test_replay_determinism`, `test_replay_identical_sizes_and_counts`, `test_equal_timestamps_deterministic_tiebreak`)
-- Canonical artifact digests (sha256):
-  - `canonical_events.jsonl`: `8626f5ad39d693c9a32e1a7623664e434c8fe7524c5fc3977963bd804e1217a8`
-  - `canonical_ohlcv.jsonl`: `c6ae2832cc692425199ced0b514ad6fd8cf7b4f2b7e8ebc3050dace7933d6d3a`
-  - `gap_status.json`: `aafd8e28b6028a10d80a1c1d8cfc39994be06f93d183bc923b5e978bae02742a`
-  - `revision_status.json`: `cd3bd55d3b497ddba9e45827096de2dc0ef221fedf32b95687e5ce10161b0905`
-  - `manifest.json`: `0385bf85cff8b2dfdc7fa1dc2494ae6a4620f4e17c7722c359f3668f5c202982`
-- Release-gate passed on main commit `3fcb50d23051ed2dde96d3be8a0583efeeae7a83`:
-  https://github.com/Buff-Trading-AI/Buff/actions/runs/22393042614/job/64819662319
+## S1 Exit Evidence
+- S1 completion PRs merged:
+  - https://github.com/Buff-Trading-AI/Buff/pull/300
+  - https://github.com/Buff-Trading-AI/Buff/pull/303
+- CI + release gate proof on S1 closeout commit `3fcb50d23051ed2dde96d3be8a0583efeeae7a83`:
+  - https://github.com/Buff-Trading-AI/Buff/actions/runs/22393042614/job/64819662319
 
 ## Stage Ladder
 
