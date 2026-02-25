@@ -2,7 +2,7 @@ CURRENT_STAGE=S2_PAPER_LIVE_FUTURES
 NEXT_STAGE_CANDIDATE=S3_RESEARCH_ENGINE_HARDENING
 OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
-LAST_VERIFIED_COMMIT=8b651ba8aa12b71b9b03865c2894b87359eef43c
+LAST_VERIFIED_COMMIT=d7b222e30ff19fe8112a35461c1c04740263d391
 STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 SNAPSHOT_SEMANTICS=Machine-readable stage snapshot fields track current authoritative direction and transition readiness.
@@ -29,9 +29,49 @@ CURRENT_STAGE=S2_PAPER_LIVE_FUTURES
 NEXT_STAGE_CANDIDATE=S3_RESEARCH_ENGINE_HARDENING
 OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
-LAST_VERIFIED_COMMIT=8b651ba8aa12b71b9b03865c2894b87359eef43c
+LAST_VERIFIED_COMMIT=d7b222e30ff19fe8112a35461c1c04740263d391
 STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
+
+---
+
+## Stage Transition Process
+
+Stage transition ("stage flip") in Buff means updating this file's authoritative snapshot to
+move `CURRENT_STAGE` to the next approved stage and advancing `NEXT_STAGE_CANDIDATE`
+according to `STAGE_LADDER`. Stage flips are docs-lane changes and must not include
+runtime code edits.
+
+### Stage Flip Checklist
+
+Preconditions:
+- Clean working tree (`git status --porcelain` returns empty).
+- Up-to-date `main` (`git checkout main && git pull --ff-only`).
+- Runtime gates green on current `main`:
+  - `python -m ruff format .`
+  - `python -m ruff check .`
+  - `python -m pytest -q`
+  - `python -m tools.release_gate --strict --timeout-seconds 900`
+
+Execution:
+- Create a docs branch: `git checkout -b docs/stage-flip-<from>-to-<to>`.
+- Edit only `docs/PROJECT_STATE.md` for stage authority fields:
+  - `CURRENT_STAGE`
+  - `NEXT_STAGE_CANDIDATE`
+  - `LAST_VERIFIED_COMMIT`
+  - Any concise stage-exit evidence section if required.
+- Re-run gates above.
+- Open a docs-only PR, wait for CI green, squash-merge, delete branch.
+
+Expected evidence/artifacts:
+- Green CI checks (`test`, `release-gate`, required status contexts).
+- Local `release_gate: PASS` and report:
+  - `reports/release_gate_report.json`
+
+Rollback if validation fails:
+- Do not merge the stage-flip PR.
+- Revert the stage fields in the docs branch to the last merged values.
+- Re-run gates and reopen/update PR only after failures are resolved.
 
 ---
 

@@ -67,7 +67,7 @@ Kill-switch behavior:
 - Emit explicit kill-switch artifact event with reason code
 
 ## Required Artifacts
-Each paper-live run must produce at least:
+Successful runs must produce:
 - `paper_run_manifest.json`
 - `decision_records.jsonl`
 - `simulated_orders.jsonl`
@@ -76,7 +76,98 @@ Each paper-live run must produce at least:
 - `risk_events.jsonl`
 - `cost_breakdown.json`
 - `funding_transfers.jsonl`
+- `artifact_pack_manifest.json`
 - `run_digests.json`
+
+Failed runs must produce:
+- `paper_run_manifest.json`
+- `risk_events.jsonl`
+- `run_failure.json`
+- `artifact_pack_manifest.json`
+- `run_digests.json`
+
+Rule:
+- `run_failure.json` must not exist for successful runs.
+
+## Numeric Policy Contract
+S2 numeric serialization is a versioned contract:
+
+- `policy_id`: `s2/numeric/fixed_decimal_8/v1`
+- `format`: `fixed_decimal`
+- `decimals`: `8`
+- `rounding`: `ROUND_HALF_EVEN`
+
+Policy digest:
+- `numeric_policy_digest_sha256` is `sha256(canonical_json_bytes(NUMERIC_POLICY))`.
+- Canonical JSON encoding uses:
+  - `sort_keys=True`
+  - `separators=(",", ":")`
+  - `ensure_ascii=False`
+  - `allow_nan=False`
+  - UTF-8 bytes
+
+Artifact requirements:
+- Every JSON artifact includes top-level `numeric_policy_id`.
+- Every JSONL record includes `numeric_policy_id`.
+- Missing or mismatched `numeric_policy_id` fails closed with `SCHEMA_INVALID`.
+
+## Structured Failure Contract
+S2 failure artifacts use:
+- `s2/error/v1`
+- `s2/run_failure/v1`
+
+`run_failure.json` validation contract:
+- Top-level required by validator: `schema_version`, `numeric_policy_id`, `error`
+- `error` required/validated fields:
+  - `schema_version` must be `s2/error/v1`
+  - `numeric_policy_id` must match active numeric policy
+  - `error_code` must be in allowed set
+  - `severity` must be `FATAL`
+  - `source` must include `component`, `stage`, `function`
+  - `timestamp` must be canonical UTC string
+
+Allowed error codes:
+- `ARTIFACT_MISSING`
+- `DATA_INTEGRITY_FAILURE`
+- `DIGEST_MISMATCH`
+- `INPUT_DIGEST_MISMATCH`
+- `INPUT_INVALID`
+- `INPUT_MISSING`
+- `MISSING_CRITICAL_FUNDING_WINDOW`
+- `ORDERING_INVALID`
+- `SCHEMA_INVALID`
+- `SIMULATION_FAILED`
+
+Precedence contract (`resolve_error_code`):
+1. `SCHEMA_INVALID`
+2. `ARTIFACT_MISSING`
+3. `DIGEST_MISMATCH`
+4. `INPUT_DIGEST_MISMATCH`
+5. `INPUT_MISSING`
+6. `INPUT_INVALID`
+7. `MISSING_CRITICAL_FUNDING_WINDOW`
+8. `DATA_INTEGRITY_FAILURE`
+9. `ORDERING_INVALID`
+10. `SIMULATION_FAILED`
+
+Deterministic failure timestamp rule:
+- Normalize candidate timestamps to canonical UTC.
+- Use lexicographically earliest normalized candidate.
+- If no candidate exists, use fallback `1970-01-01T00:00:00Z`.
+
+## Artifact Validation Order
+Validation order is strict:
+1. Validate encoding + parse `artifact_pack_manifest.json` and `run_digests.json`
+2. Verify file hashes and root hash
+3. Parse and validate remaining artifact semantics
+
+Behavioral consequence:
+- Tampered artifact bytes without digest recompute fail as `DIGEST_MISMATCH`.
+- If digests are recomputed after tampering, semantic invalidity can fail as `SCHEMA_INVALID`.
+
+Float token policy:
+- Any parsed JSON/JSONL float token fails closed with `SCHEMA_INVALID` and message
+  `artifact contains non-canonical float token`.
 
 ## Replay Guarantee
 Paper-live replay must be reproducible for fixed inputs.
@@ -90,3 +181,14 @@ Replay identity includes at minimum:
 
 Acceptance condition:
 - Replaying the same identity tuple yields matching decision and artifact digests.
+
+## How To Verify S2 Locally
+Run from repository root:
+
+```bash
+python -m ruff format .
+python -m ruff check .
+python -m pytest -q
+python -m tools.release_gate --strict --timeout-seconds 900
+python -m pytest -q tools/test_s2_double_run_compare.py tools/test_s2_artifact_pack_completeness.py
+```
