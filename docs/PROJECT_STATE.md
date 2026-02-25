@@ -1,7 +1,8 @@
-CURRENT_STAGE=S0_REFOUNDATION
-NEXT_STAGE_CANDIDATE=S1_ONLINE_DATA_PLANE
+CURRENT_STAGE=S1_ONLINE_DATA_PLANE
+NEXT_STAGE_CANDIDATE=S2_PAPER_LIVE_FUTURES
 OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
+LAST_VERIFIED_COMMIT=3495d9f9370ef9ae237502dfc46157d665642256
 STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 SNAPSHOT_SEMANTICS=Machine-readable stage snapshot fields track current authoritative direction and transition readiness.
@@ -24,26 +25,40 @@ No other document determines current stage.
 
 ## Machine-Readable Snapshot
 
-CURRENT_STAGE=S0_REFOUNDATION
-NEXT_STAGE_CANDIDATE=S1_ONLINE_DATA_PLANE
+CURRENT_STAGE=S1_ONLINE_DATA_PLANE
+NEXT_STAGE_CANDIDATE=S2_PAPER_LIVE_FUTURES
 OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
+LAST_VERIFIED_COMMIT=3495d9f9370ef9ae237502dfc46157d665642256
 STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
 
 ## Current Stage
-S0_REFOUNDATION
+S1_ONLINE_DATA_PLANE
 
 ## Current Objective
-Refound Buff as a crypto futures R&D platform with a mandatory online data plane, deterministic artifact truth, realistic paper-live futures simulation, and deferred execution connector scope.
+Implement the online data plane with immutable raw capture, deterministic canonicalization, and artifacted gap/late/revision fail-closed policies.
 
 ## Active Constraints
 - Runtime safety is fail-closed by default.
 - Deterministic artifact contracts are mandatory.
+- Canonicalization must be driven only from raw logs.
 - Online data collection is in scope; live order execution is not.
 - No production broker connector implementation in the current stage.
+
+## S1 Acceptance Evidence
+- PR #300 merged on main: https://github.com/Buff-Trading-AI/Buff/pull/300
+- Required tests passed: `test_replay_determinism`, `test_gap_detection_fail_closed`, `test_late_event_policy`
+- Canonical artifact digests (sha256):
+  - `canonical_events.jsonl`: `89ec575b01decc77c427d0a7112dc7a9af6bf8f354397b505002d9693cefae30`
+  - `canonical_ohlcv.jsonl`: `0aa7c8a691c745adc768e72d628fade1500f07be1a82f632519e8b7b41ba5968`
+  - `gap_status.json`: `fbd5a2af09df4a02c87d80dec4892ebeb99e71dd7f585cdd91d754104dbf700a`
+  - `revision_status.json`: `7fe0b3ed15f8f53b574dec3a0919fa07b4937e24cccd97366e495db4a2a63610`
+  - `manifest.json`: `027d77f633dd37ead1d4eda5368a203c68585f920deef0a4072f72f8afda89de`
+- Release-gate passed on main commit `3495d9f9370ef9ae237502dfc46157d665642256`:
+  https://github.com/Buff-Trading-AI/Buff/actions/runs/22390630290
 
 ## Stage Ladder
 
