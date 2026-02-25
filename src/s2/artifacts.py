@@ -116,6 +116,21 @@ def _load_bars_from_csv(path: Path) -> list[Bar]:
     return bars
 
 
+def _write_kill_switch_event(run_dir: Path, reason_code: str, detail: str) -> None:
+    run_dir.mkdir(parents=True, exist_ok=True)
+    write_canonical_jsonl(
+        run_dir / "risk_events.jsonl",
+        [
+            {
+                "event_seq": -1,
+                "ts_utc": "1970-01-01T00:00:00Z",
+                "reason_code": reason_code,
+                "detail": detail,
+            }
+        ],
+    )
+
+
 def _strategy_fn_from_config(config: Mapping[str, Any]):
     raw_actions = config.get("actions", [])
     actions: list[str] = []
@@ -188,6 +203,20 @@ def _manifest_payload(
             "version": request.risk_version,
             "config_digest_sha256": risk_config_digest,
             "config": dict(request.risk_config),
+            "hard_caps": {
+                "max_leverage": float(request.core_config.risk_caps.max_leverage),
+                "max_position_notional_quote": float(
+                    request.core_config.risk_caps.max_position_notional_quote
+                ),
+                "max_daily_loss_quote": float(request.core_config.risk_caps.max_daily_loss_quote),
+                "max_drawdown_ratio": float(request.core_config.risk_caps.max_drawdown_ratio),
+                "max_orders_per_window": int(request.core_config.risk_caps.max_orders_per_window),
+                "order_window_bars": int(request.core_config.risk_caps.order_window_bars),
+            },
+            "kill_switch": {
+                "mode": str(request.core_config.kill_switch.mode),
+                "manual_trigger_event_seq": request.core_config.kill_switch.manual_trigger_event_seq,
+            },
         },
         "models": {
             "fee": {"version": request.core_config.fee_model.version},
@@ -303,6 +332,8 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
     strategy_version = _require_nonempty(request.strategy_version, "strategy_version")
     risk_version = _require_nonempty(request.risk_version, "risk_version")
     data_path = Path(_require_nonempty(request.data_path, "data_path")).resolve()
+    run_dir = (output_root / run_id).resolve()
+    run_dir.mkdir(parents=True, exist_ok=True)
     bars = _load_bars_from_csv(data_path)
 
     strategy_config = dict(request.strategy_config)
@@ -312,6 +343,11 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
     if request.data_sha256 is not None:
         expected_data_sha = str(request.data_sha256).strip()
         if expected_data_sha != data_file_sha256:
+            _write_kill_switch_event(
+                run_dir,
+                "digest_mismatch",
+                "input data digest mismatch",
+            )
             raise S2ArtifactError(
                 "INPUT_DIGEST_MISMATCH",
                 "data_path sha256 mismatch",
@@ -339,9 +375,6 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
     ]
     replay_digest = sha256_hex_bytes(canonical_json_bytes(replay_tuple))
 
-    run_dir = (output_root / run_id).resolve()
-    run_dir.mkdir(parents=True, exist_ok=True)
-
     core_config = S2CoreConfig(
         symbol=symbol,
         timeframe=timeframe,
@@ -352,6 +385,8 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
         slippage_model=request.core_config.slippage_model,
         funding_model=request.core_config.funding_model,
         liquidation_model=request.core_config.liquidation_model,
+        risk_caps=request.core_config.risk_caps,
+        kill_switch=request.core_config.kill_switch,
     )
 
     try:
@@ -362,6 +397,11 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
             risk_fn=_risk_fn_from_config(risk_config),
         )
     except S2CoreError as exc:
+        _write_kill_switch_event(
+            run_dir,
+            "data_integrity_failure",
+            str(exc),
+        )
         raise S2ArtifactError("SIMULATION_FAILED", "core loop failed", {"error": str(exc)}) from exc
 
     manifest_payload = _manifest_payload(

@@ -266,6 +266,30 @@ def main(argv: list[str] | None = None) -> int:
             [sys.executable, "-m", "pytest", "-q", "tools/test_s1_online_data_plane.py"],
         )
 
+        _log("release_gate: s2_double_run_compare")
+        run_step(
+            "s2_double_run_compare",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s2_double_run_compare.py"],
+        )
+
+        _log("release_gate: s2_no_network")
+        run_step(
+            "s2_no_network",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s2_no_network.py"],
+        )
+
+        _log("release_gate: s2_artifact_pack_completeness")
+        run_step(
+            "s2_artifact_pack_completeness",
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "tools/test_s2_artifact_pack_completeness.py",
+            ],
+        )
+
         _log("release_gate: s3_double_run_compare")
         run_step(
             "s3_double_run_compare",

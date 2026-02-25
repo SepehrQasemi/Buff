@@ -1,0 +1,44 @@
+from __future__ import annotations
+
+from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from s2.artifacts import S2ArtifactRequest, run_s2_artifact_pack
+from s2.core import S2CoreConfig
+from s2.models import FeeModel, FundingModel, SlippageBucket, SlippageModel
+
+
+def test_s2_double_run_compare(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    data_path.write_text(
+        "timestamp,open,high,low,close,volume\n"
+        "2026-02-01T00:00:00Z,100,101,99,100.5,10\n"
+        "2026-02-01T00:01:00Z,100.5,101,100,100.8,8\n"
+        "2026-02-01T00:02:00Z,100.8,101.2,100.5,101.0,7\n",
+        encoding="utf-8",
+    )
+    request = S2ArtifactRequest(
+        run_id="double001",
+        symbol="BTCUSDT",
+        timeframe="1m",
+        seed=42,
+        data_path=str(data_path),
+        strategy_version="strategy.demo.v1",
+        strategy_config={"actions": ["LONG", "HOLD", "FLAT"]},
+        risk_version="risk.demo.v1",
+        risk_config={},
+        core_config=S2CoreConfig(
+            fee_model=FeeModel(maker_bps=0.0, taker_bps=0.0),
+            slippage_model=SlippageModel(
+                buckets=(SlippageBucket(max_notional_quote=None, bps=0.0),)
+            ),
+            funding_model=FundingModel(interval_minutes=0),
+        ),
+    )
+
+    run_a = run_s2_artifact_pack(request, tmp_path / "out_a")
+    run_b = run_s2_artifact_pack(request, tmp_path / "out_b")
+
+    assert (run_a / "run_digests.json").read_bytes() == (run_b / "run_digests.json").read_bytes()
