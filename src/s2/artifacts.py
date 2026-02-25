@@ -1351,7 +1351,7 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
         validate_s2_artifact_pack(run_dir)
         return run_dir
     except S2CoreError as exc:
-        failure_code = resolve_error_code([_error_code_from_core_error(exc), "SIMULATION_FAILED"])
+        failure_code = resolve_error_code([_error_code_from_core_error(exc)])
         failure_context = _build_failure_context(
             code=failure_code,
             exc=exc,

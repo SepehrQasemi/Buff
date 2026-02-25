@@ -558,6 +558,28 @@ def test_failure_precedence_integration_uses_resolver(
     assert set(captured["candidates"]) >= {"DIGEST_MISMATCH", "INPUT_DIGEST_MISMATCH"}
 
 
+def test_failure_precedence_core_path_does_not_force_simulation_failed_candidate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = _funding_gap_request(data_path)
+    captured: dict[str, tuple[str, ...]] = {}
+    real_resolver = artifacts_module.resolve_error_code
+
+    def _capture(candidates: tuple[str, ...] | list[str]) -> str:
+        captured["candidates"] = tuple(str(item) for item in candidates)
+        return real_resolver(candidates)
+
+    monkeypatch.setattr(artifacts_module, "resolve_error_code", _capture)
+
+    with pytest.raises(S2ArtifactError, match="MISSING_CRITICAL_FUNDING_WINDOW"):
+        run_s2_artifact_pack(request, tmp_path / "out")
+
+    assert captured["candidates"] == ("MISSING_CRITICAL_FUNDING_WINDOW",)
+    assert "SIMULATION_FAILED" not in captured["candidates"]
+
+
 def test_digest_check_precedes_json_parse(tmp_path: Path) -> None:
     data_path = tmp_path / "bars.csv"
     _write_sample_csv(data_path)
@@ -568,3 +590,22 @@ def test_digest_check_precedes_json_parse(tmp_path: Path) -> None:
     with pytest.raises(S2ArtifactError) as excinfo:
         validate_s2_artifact_pack(run_dir)
     assert excinfo.value.code == "DIGEST_MISMATCH"
+
+
+def test_invalid_json_with_recomputed_digests_fails_closed_schema_invalid(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = _request(data_path)
+    run_dir = run_s2_artifact_pack(request, tmp_path / "out")
+
+    (run_dir / "decision_records.jsonl").write_bytes(b"{\n")
+    _recompute_pack_manifest_and_run_digests(
+        run_dir=run_dir,
+        request=request,
+        artifacts=REQUIRED_ARTIFACTS,
+        run_status=RUN_STATUS_SUCCEEDED,
+    )
+
+    with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID") as excinfo:
+        validate_s2_artifact_pack(run_dir)
+    assert excinfo.value.code == "SCHEMA_INVALID"
