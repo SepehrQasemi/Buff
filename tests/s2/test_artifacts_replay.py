@@ -23,6 +23,7 @@ from s2.canonical import (
     canonical_json_text,
 )
 from s2.core import S2CoreConfig, S2CoreResult
+from s2.failure import resolve_error_code
 from s2.models import FeeModel, FundingModel, LiquidationModel, SlippageBucket, SlippageModel
 
 
@@ -100,6 +101,43 @@ def _funding_gap_request(data_path: Path) -> S2ArtifactRequest:
             ),
         ),
     )
+
+
+def _recompute_pack_manifest_and_run_digests(
+    *,
+    run_dir: Path,
+    request: S2ArtifactRequest,
+    artifacts: tuple[str, ...],
+    run_status: str,
+) -> None:
+    pack_manifest = artifacts_module._build_artifact_pack_manifest(
+        request.run_id,
+        run_dir,
+        artifacts=artifacts,
+        run_status=run_status,
+    )
+    artifacts_module.write_canonical_json(run_dir / "artifact_pack_manifest.json", pack_manifest)
+
+    artifact_digests = {
+        name: artifacts_module.sha256_hex_file(run_dir / name)
+        for name in sorted(artifacts)
+        if name != "run_digests.json"
+    }
+    manifest_payload = json.loads((run_dir / "paper_run_manifest.json").read_text(encoding="utf-8"))
+    replay_digest = str(manifest_payload["replay_identity"]["digest_sha256"])
+    run_digests_payload = {
+        "schema_version": artifacts_module.RUN_DIGESTS_SCHEMA,
+        "numeric_policy_id": NUMERIC_POLICY_ID,
+        "numeric_policy_digest_sha256": NUMERIC_POLICY_DIGEST_SHA256,
+        "run_id": request.run_id,
+        "artifact_sha256": artifact_digests,
+        "artifact_pack_root_hash": pack_manifest["root_hash"],
+        "artifact_pack_files_sha256": {
+            str(row["path"]): str(row["sha256"]) for row in pack_manifest["files"]
+        },
+        "replay_identity_digest_sha256": replay_digest,
+    }
+    artifacts_module.write_canonical_json(run_dir / "run_digests.json", run_digests_payload)
 
 
 def test_double_run_identical_inputs_identical_artifact_bytes_and_digests(tmp_path: Path) -> None:
@@ -193,12 +231,19 @@ def test_input_digest_validation_fail_closed(tmp_path: Path) -> None:
 def test_schema_validation_fail_closed(tmp_path: Path) -> None:
     data_path = tmp_path / "bars.csv"
     _write_sample_csv(data_path)
-    run_dir = run_s2_artifact_pack(_request(data_path), tmp_path / "out")
+    request = _request(data_path)
+    run_dir = run_s2_artifact_pack(request, tmp_path / "out")
 
     manifest_path = run_dir / "paper_run_manifest.json"
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     payload.pop("strategy", None)
     manifest_path.write_text(json.dumps(payload), encoding="utf-8")
+    _recompute_pack_manifest_and_run_digests(
+        run_dir=run_dir,
+        request=request,
+        artifacts=REQUIRED_ARTIFACTS,
+        run_status=RUN_STATUS_SUCCEEDED,
+    )
 
     with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID"):
         validate_s2_artifact_pack(run_dir)
@@ -222,7 +267,8 @@ def test_digest_validation_fail_closed(tmp_path: Path) -> None:
 def test_missing_schema_version_row_fails_closed(tmp_path: Path) -> None:
     data_path = tmp_path / "bars.csv"
     _write_sample_csv(data_path)
-    run_dir = run_s2_artifact_pack(_request(data_path), tmp_path / "out")
+    request = _request(data_path)
+    run_dir = run_s2_artifact_pack(request, tmp_path / "out")
 
     path = run_dir / "decision_records.jsonl"
     rows = [
@@ -232,6 +278,12 @@ def test_missing_schema_version_row_fails_closed(tmp_path: Path) -> None:
     path.write_bytes(
         ("\n".join(json.dumps(row, separators=(",", ":")) for row in rows) + "\n").encode("utf-8")
     )
+    _recompute_pack_manifest_and_run_digests(
+        run_dir=run_dir,
+        request=request,
+        artifacts=REQUIRED_ARTIFACTS,
+        run_status=RUN_STATUS_SUCCEEDED,
+    )
 
     with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID"):
         validate_s2_artifact_pack(run_dir)
@@ -240,7 +292,8 @@ def test_missing_schema_version_row_fails_closed(tmp_path: Path) -> None:
 def test_wrong_schema_version_row_fails_closed(tmp_path: Path) -> None:
     data_path = tmp_path / "bars.csv"
     _write_sample_csv(data_path)
-    run_dir = run_s2_artifact_pack(_request(data_path), tmp_path / "out")
+    request = _request(data_path)
+    run_dir = run_s2_artifact_pack(request, tmp_path / "out")
 
     path = run_dir / "simulated_fills.jsonl"
     rows = [
@@ -249,6 +302,12 @@ def test_wrong_schema_version_row_fails_closed(tmp_path: Path) -> None:
     rows[0]["schema_version"] = "s2/simulated_fills/v0"
     path.write_bytes(
         ("\n".join(json.dumps(row, separators=(",", ":")) for row in rows) + "\n").encode("utf-8")
+    )
+    _recompute_pack_manifest_and_run_digests(
+        run_dir=run_dir,
+        request=request,
+        artifacts=REQUIRED_ARTIFACTS,
+        run_status=RUN_STATUS_SUCCEEDED,
     )
 
     with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID"):
@@ -394,3 +453,159 @@ def test_numeric_policy_mismatch_fails_closed(tmp_path: Path) -> None:
 
     with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID"):
         validate_s2_artifact_pack(run_dir)
+
+
+def test_float_token_in_jsonl_fails_closed_even_if_digests_recomputed(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = _request(data_path)
+    run_dir = run_s2_artifact_pack(request, tmp_path / "out")
+
+    path = run_dir / "decision_records.jsonl"
+    rows = [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+    rows[0]["seed"] = 11.125
+    path.write_text(
+        "".join(json.dumps(row, sort_keys=True, separators=(",", ":")) + "\n" for row in rows),
+        encoding="utf-8",
+        newline="\n",
+    )
+    _recompute_pack_manifest_and_run_digests(
+        run_dir=run_dir,
+        request=request,
+        artifacts=REQUIRED_ARTIFACTS,
+        run_status=RUN_STATUS_SUCCEEDED,
+    )
+
+    with pytest.raises(S2ArtifactError, match="float token") as excinfo:
+        validate_s2_artifact_pack(run_dir)
+    assert excinfo.value.code == "SCHEMA_INVALID"
+
+
+def test_float_token_in_run_failure_context_fails_closed_even_if_digests_recomputed(
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = _funding_gap_request(data_path)
+
+    with pytest.raises(S2ArtifactError, match="MISSING_CRITICAL_FUNDING_WINDOW"):
+        run_s2_artifact_pack(request, tmp_path / "out")
+
+    run_dir = tmp_path / "out" / "s2fail001"
+    path = run_dir / "run_failure.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["error"]["context"]["probe_float"] = 1.2345
+    path.write_text(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    _recompute_pack_manifest_and_run_digests(
+        run_dir=run_dir,
+        request=request,
+        artifacts=REQUIRED_FAILURE_ARTIFACTS,
+        run_status=RUN_STATUS_FAILED,
+    )
+
+    with pytest.raises(S2ArtifactError, match="float token") as excinfo:
+        validate_s2_artifact_pack(run_dir)
+    assert excinfo.value.code == "SCHEMA_INVALID"
+
+
+def test_resolve_error_code_precedence_contract() -> None:
+    assert (
+        resolve_error_code(["MISSING_CRITICAL_FUNDING_WINDOW", "SCHEMA_INVALID"])
+        == "SCHEMA_INVALID"
+    )
+    assert resolve_error_code(["unknown_code", "NOT_REAL", "DIGEST_MISMATCH"]) == "DIGEST_MISMATCH"
+
+
+def test_failure_precedence_integration_uses_resolver(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = S2ArtifactRequest(
+        run_id="s2run001",
+        symbol="BTCUSDT",
+        timeframe="1m",
+        seed=11,
+        data_path=str(data_path),
+        strategy_version="strategy.demo.v1",
+        data_sha256="0" * 64,
+        strategy_config={"actions": ["LONG", "HOLD", "FLAT", "HOLD"]},
+        risk_version="risk.demo.v1",
+        risk_config={"blocked_event_seqs": []},
+        core_config=_request(data_path).core_config,
+    )
+    captured: dict[str, tuple[str, ...]] = {}
+    real_resolver = artifacts_module.resolve_error_code
+
+    def _capture(candidates: tuple[str, ...] | list[str]) -> str:
+        captured["candidates"] = tuple(str(item) for item in candidates)
+        return real_resolver(candidates)
+
+    monkeypatch.setattr(artifacts_module, "resolve_error_code", _capture)
+
+    with pytest.raises(S2ArtifactError, match="INPUT_DIGEST_MISMATCH"):
+        run_s2_artifact_pack(request, tmp_path / "out")
+
+    failure_dir = tmp_path / "out" / "s2run001"
+    run_failure = json.loads((failure_dir / "run_failure.json").read_text(encoding="utf-8"))
+    assert run_failure["error"]["error_code"] == "DIGEST_MISMATCH"
+    assert set(captured["candidates"]) >= {"DIGEST_MISMATCH", "INPUT_DIGEST_MISMATCH"}
+
+
+def test_failure_precedence_core_path_does_not_force_simulation_failed_candidate(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = _funding_gap_request(data_path)
+    captured: dict[str, tuple[str, ...]] = {}
+    real_resolver = artifacts_module.resolve_error_code
+
+    def _capture(candidates: tuple[str, ...] | list[str]) -> str:
+        captured["candidates"] = tuple(str(item) for item in candidates)
+        return real_resolver(candidates)
+
+    monkeypatch.setattr(artifacts_module, "resolve_error_code", _capture)
+
+    with pytest.raises(S2ArtifactError, match="MISSING_CRITICAL_FUNDING_WINDOW"):
+        run_s2_artifact_pack(request, tmp_path / "out")
+
+    assert captured["candidates"] == ("MISSING_CRITICAL_FUNDING_WINDOW",)
+    assert "SIMULATION_FAILED" not in captured["candidates"]
+
+
+def test_digest_check_precedes_json_parse(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    run_dir = run_s2_artifact_pack(_request(data_path), tmp_path / "out")
+
+    (run_dir / "decision_records.jsonl").write_bytes(b"{\n")
+
+    with pytest.raises(S2ArtifactError) as excinfo:
+        validate_s2_artifact_pack(run_dir)
+    assert excinfo.value.code == "DIGEST_MISMATCH"
+
+
+def test_invalid_json_with_recomputed_digests_fails_closed_schema_invalid(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = _request(data_path)
+    run_dir = run_s2_artifact_pack(request, tmp_path / "out")
+
+    (run_dir / "decision_records.jsonl").write_bytes(b"{\n")
+    _recompute_pack_manifest_and_run_digests(
+        run_dir=run_dir,
+        request=request,
+        artifacts=REQUIRED_ARTIFACTS,
+        run_status=RUN_STATUS_SUCCEEDED,
+    )
+
+    with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID") as excinfo:
+        validate_s2_artifact_pack(run_dir)
+    assert excinfo.value.code == "SCHEMA_INVALID"

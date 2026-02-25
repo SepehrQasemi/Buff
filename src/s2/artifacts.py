@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass, field
+from decimal import Decimal
 import json
 from pathlib import Path
 import re
@@ -40,6 +41,7 @@ from .failure import (
     S2StructuredFailure,
     build_run_failure_payload,
     deterministic_failure_timestamp,
+    resolve_error_code,
 )
 from .models import FundingDataMissingError, PositionInvariantError
 
@@ -591,6 +593,29 @@ def _assert_normalized_timestamps(value: Any, *, artifact: str) -> None:
     _walk(value)
 
 
+def _assert_no_float_tokens(value: Any, *, artifact: str, path: str = "$") -> None:
+    if isinstance(value, bool) or value is None:
+        return
+    if isinstance(value, int):
+        return
+    if isinstance(value, (str, Decimal)):
+        return
+    if isinstance(value, float):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact contains non-canonical float token",
+            {"artifact": artifact, "path": path},
+        )
+    if isinstance(value, dict):
+        for key, child in value.items():
+            _assert_no_float_tokens(child, artifact=artifact, path=f"{path}.{key}")
+        return
+    if isinstance(value, list):
+        for idx, child in enumerate(value):
+            _assert_no_float_tokens(child, artifact=artifact, path=f"{path}[{idx}]")
+        return
+
+
 def _read_artifact_bytes(path: Path) -> bytes:
     try:
         return path.read_bytes()
@@ -665,8 +690,8 @@ def _validate_artifact_pack_manifest(
     root: Path,
     payload: Mapping[str, Any],
     *,
-    expected_hash_scope: tuple[str, ...],
-    expected_run_status: str,
+    expected_hash_scope: tuple[str, ...] | None = None,
+    expected_run_status: str | None = None,
 ) -> dict[str, str]:
     if payload.get("schema_version") != ARTIFACT_PACK_MANIFEST_SCHEMA:
         raise S2ArtifactError(
@@ -691,7 +716,14 @@ def _validate_artifact_pack_manifest(
             "artifact pack numeric_policy mismatch",
             {"artifact": "artifact_pack_manifest.json"},
         )
-    if payload.get("run_status") != expected_run_status:
+    run_status = str(payload.get("run_status") or "")
+    if run_status not in {RUN_STATUS_SUCCEEDED, RUN_STATUS_FAILED}:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack run_status invalid",
+            {"artifact": "artifact_pack_manifest.json"},
+        )
+    if expected_run_status is not None and run_status != expected_run_status:
         raise S2ArtifactError(
             "SCHEMA_INVALID",
             "artifact pack run_status mismatch",
@@ -723,7 +755,7 @@ def _validate_artifact_pack_manifest(
         path = str(row.get("path") or "")
         sha = str(row.get("sha256") or "")
         size_bytes = row.get("size_bytes")
-        if path not in expected_hash_scope:
+        if expected_hash_scope is not None and path not in expected_hash_scope:
             raise S2ArtifactError(
                 "SCHEMA_INVALID",
                 "artifact pack includes unsupported file path",
@@ -756,8 +788,48 @@ def _validate_artifact_pack_manifest(
             {"artifact": "artifact_pack_manifest.json"},
         )
 
-    manifest_paths = {row["path"] for row in parsed_entries}
-    expected_paths = set(expected_hash_scope)
+    hash_scope = payload.get("hash_scope")
+    if not isinstance(hash_scope, dict):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack hash_scope invalid",
+            {"artifact": "artifact_pack_manifest.json"},
+        )
+    included_files = hash_scope.get("included_files")
+    excluded_files = hash_scope.get("excluded_files")
+    if not isinstance(included_files, list) or not all(
+        isinstance(item, str) for item in included_files
+    ):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack hash_scope included_files invalid",
+            {"artifact": "artifact_pack_manifest.json"},
+        )
+    if not isinstance(excluded_files, list) or not all(
+        isinstance(item, str) for item in excluded_files
+    ):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack hash_scope excluded_files invalid",
+            {"artifact": "artifact_pack_manifest.json"},
+        )
+    if sorted(excluded_files) != sorted(PACK_HASH_EXCLUDED_ARTIFACTS):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack hash_scope excluded_files mismatch",
+            {"artifact": "artifact_pack_manifest.json"},
+        )
+
+    parsed_paths = tuple(row["path"] for row in parsed_entries)
+    if tuple(included_files) != parsed_paths:
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "artifact pack hash_scope included_files mismatch",
+            {"artifact": "artifact_pack_manifest.json"},
+        )
+
+    manifest_paths = set(parsed_paths)
+    expected_paths = set(expected_hash_scope if expected_hash_scope is not None else parsed_paths)
     if manifest_paths != expected_paths:
         raise S2ArtifactError(
             "SCHEMA_INVALID",
@@ -769,12 +841,20 @@ def _validate_artifact_pack_manifest(
             },
         )
 
-    actual_entries = _collect_file_entries(root, expected_hash_scope)
+    actual_entries = _collect_file_entries(root, parsed_paths)
     if parsed_entries != actual_entries:
+        mismatch_path = None
+        for expected_row, actual_row in zip(parsed_entries, actual_entries, strict=True):
+            if expected_row != actual_row:
+                mismatch_path = expected_row["path"]
+                break
         raise S2ArtifactError(
             "DIGEST_MISMATCH",
             "artifact pack file hashes mismatch",
-            {"artifact": "artifact_pack_manifest.json"},
+            {
+                "artifact": "artifact_pack_manifest.json",
+                "path": mismatch_path,
+            },
         )
     actual_root = build_pack_root_hash(actual_entries)
     if actual_root != root_hash:
@@ -795,9 +875,9 @@ def _validate_run_digests(
     payload: Mapping[str, Any],
     *,
     pack_file_hashes: Mapping[str, str],
-    manifest_replay_digest: str,
+    manifest_replay_digest: str | None = None,
     pack_root_hash: str,
-    expected_artifacts: tuple[str, ...],
+    expected_artifacts: tuple[str, ...] | None = None,
 ) -> dict[str, str]:
     if payload.get("schema_version") != RUN_DIGESTS_SCHEMA:
         raise S2ArtifactError(
@@ -826,8 +906,10 @@ def _validate_run_digests(
             {"artifact": "run_digests.json"},
         )
 
-    expected_digest_keys = sorted(name for name in expected_artifacts if name != "run_digests.json")
-    if sorted(digest_map.keys()) != expected_digest_keys:
+    expected_digest_keys = sorted(
+        name for name in expected_artifacts or () if name != "run_digests.json"
+    )
+    if expected_artifacts is not None and sorted(digest_map.keys()) != expected_digest_keys:
         raise S2ArtifactError(
             "DIGEST_MISMATCH",
             "run_digests artifact_sha256 keys mismatch",
@@ -837,6 +919,8 @@ def _validate_run_digests(
                 "actual_keys": sorted(digest_map.keys()),
             },
         )
+    if expected_artifacts is None:
+        expected_digest_keys = sorted(str(key) for key in digest_map.keys())
 
     for artifact_name in expected_digest_keys:
         actual_sha = sha256_hex_file(root / artifact_name)
@@ -885,7 +969,7 @@ def _validate_run_digests(
         )
 
     replay_digest = str(payload.get("replay_identity_digest_sha256") or "")
-    if replay_digest != manifest_replay_digest:
+    if manifest_replay_digest is not None and replay_digest != manifest_replay_digest:
         raise S2ArtifactError(
             "DIGEST_MISMATCH",
             "replay identity digest mismatch",
@@ -1267,7 +1351,7 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
         validate_s2_artifact_pack(run_dir)
         return run_dir
     except S2CoreError as exc:
-        failure_code = _error_code_from_core_error(exc)
+        failure_code = resolve_error_code([_error_code_from_core_error(exc)])
         failure_context = _build_failure_context(
             code=failure_code,
             exc=exc,
@@ -1303,7 +1387,7 @@ def run_s2_artifact_pack(request: S2ArtifactRequest, output_root: Path) -> Path:
         )
         raise S2ArtifactError(failure_code, "core loop failed", {"error": str(exc)}) from exc
     except S2ArtifactError as exc:
-        failure_code = _error_code_from_artifact_error(exc)
+        failure_code = resolve_error_code([_error_code_from_artifact_error(exc), str(exc.code)])
         failure_context = _build_failure_context(
             code=failure_code,
             exc=exc,
@@ -1432,14 +1516,44 @@ def validate_s2_artifact_pack(run_dir: Path) -> dict[str, Any]:
     if not root.exists() or not root.is_dir():
         raise S2ArtifactError("ARTIFACT_MISSING", "run directory missing", {"run_dir": str(root)})
 
-    manifest_path = root / "paper_run_manifest.json"
-    if not manifest_path.exists() or not manifest_path.is_file():
-        raise S2ArtifactError(
-            "ARTIFACT_MISSING", "required artifact missing", {"artifact": "paper_run_manifest.json"}
-        )
-    _validate_artifact_encoding(root, "paper_run_manifest.json")
+    bootstrap_artifacts = (
+        "paper_run_manifest.json",
+        "artifact_pack_manifest.json",
+        "run_digests.json",
+    )
+    for name in bootstrap_artifacts:
+        artifact = root / name
+        if not artifact.exists():
+            raise S2ArtifactError(
+                "ARTIFACT_MISSING", "required artifact missing", {"artifact": name}
+            )
+        if not artifact.is_file():
+            raise S2ArtifactError(
+                "ARTIFACT_MISSING", "required artifact invalid", {"artifact": name}
+            )
+        _validate_artifact_encoding(root, name)
 
+    pack_manifest = _load_json(root / "artifact_pack_manifest.json")
+    _assert_no_float_tokens(pack_manifest, artifact="artifact_pack_manifest.json")
+    _assert_no_forbidden_paths(pack_manifest, artifact="artifact_pack_manifest.json")
+    _assert_normalized_timestamps(pack_manifest, artifact="artifact_pack_manifest.json")
+    pack_file_hashes = _validate_artifact_pack_manifest(root, pack_manifest)
+    pack_root_hash = str(pack_manifest["root_hash"])
+
+    run_digests = _load_json(root / "run_digests.json")
+    _assert_no_float_tokens(run_digests, artifact="run_digests.json")
+    _assert_no_forbidden_paths(run_digests, artifact="run_digests.json")
+    _assert_normalized_timestamps(run_digests, artifact="run_digests.json")
+    _validate_run_digests(
+        root,
+        run_digests,
+        pack_file_hashes=pack_file_hashes,
+        pack_root_hash=pack_root_hash,
+    )
+
+    manifest_path = root / "paper_run_manifest.json"
     manifest = _load_json(manifest_path)
+    _assert_no_float_tokens(manifest, artifact="paper_run_manifest.json")
     _validate_manifest_schema(manifest)
     _assert_no_forbidden_paths(manifest, artifact="paper_run_manifest.json")
     _assert_normalized_timestamps(manifest, artifact="paper_run_manifest.json")
@@ -1471,6 +1585,30 @@ def validate_s2_artifact_pack(run_dir: Path) -> dict[str, Any]:
             )
         _validate_artifact_encoding(root, name)
 
+    _validate_artifact_pack_manifest(
+        root,
+        pack_manifest,
+        expected_hash_scope=_pack_hash_scope_from_artifacts(expected_artifacts),
+        expected_run_status=run_status,
+    )
+
+    replay_identity = manifest.get("replay_identity")
+    if not isinstance(replay_identity, dict):
+        raise S2ArtifactError(
+            "SCHEMA_INVALID",
+            "manifest replay_identity invalid",
+            {"artifact": "paper_run_manifest.json"},
+        )
+    replay_digest = str(replay_identity.get("digest_sha256") or "")
+    digest_map = _validate_run_digests(
+        root,
+        run_digests,
+        pack_file_hashes=pack_file_hashes,
+        manifest_replay_digest=replay_digest,
+        pack_root_hash=pack_root_hash,
+        expected_artifacts=expected_artifacts,
+    )
+
     if run_status == RUN_STATUS_SUCCEEDED:
         if (root / "run_failure.json").exists():
             raise S2ArtifactError(
@@ -1481,12 +1619,14 @@ def validate_s2_artifact_pack(run_dir: Path) -> dict[str, Any]:
         for jsonl_name in JSONL_ARTIFACTS:
             path = root / jsonl_name
             rows = _load_jsonl(path)
+            _assert_no_float_tokens(rows, artifact=jsonl_name)
             _validate_jsonl_schema(path, rows)
             _validate_ordering(path, rows)
             _assert_no_forbidden_paths(rows, artifact=jsonl_name)
             _assert_normalized_timestamps(rows, artifact=jsonl_name)
 
         costs = _load_json(root / "cost_breakdown.json")
+        _assert_no_float_tokens(costs, artifact="cost_breakdown.json")
         if costs.get("schema_version") != COST_BREAKDOWN_SCHEMA:
             raise S2ArtifactError(
                 "SCHEMA_INVALID",
@@ -1527,45 +1667,16 @@ def validate_s2_artifact_pack(run_dir: Path) -> dict[str, Any]:
                     {"artifact": name},
                 )
         risk_rows = _load_jsonl(root / "risk_events.jsonl")
+        _assert_no_float_tokens(risk_rows, artifact="risk_events.jsonl")
         _validate_jsonl_schema(root / "risk_events.jsonl", risk_rows)
         _validate_ordering(root / "risk_events.jsonl", risk_rows)
         _assert_no_forbidden_paths(risk_rows, artifact="risk_events.jsonl")
         _assert_normalized_timestamps(risk_rows, artifact="risk_events.jsonl")
         run_failure = _load_json(root / "run_failure.json")
+        _assert_no_float_tokens(run_failure, artifact="run_failure.json")
         _validate_run_failure_payload(run_failure)
         _assert_no_forbidden_paths(run_failure, artifact="run_failure.json")
         _assert_normalized_timestamps(run_failure, artifact="run_failure.json")
-
-    pack_manifest = _load_json(root / "artifact_pack_manifest.json")
-    _assert_no_forbidden_paths(pack_manifest, artifact="artifact_pack_manifest.json")
-    _assert_normalized_timestamps(pack_manifest, artifact="artifact_pack_manifest.json")
-    pack_file_hashes = _validate_artifact_pack_manifest(
-        root,
-        pack_manifest,
-        expected_hash_scope=_pack_hash_scope_from_artifacts(expected_artifacts),
-        expected_run_status=run_status,
-    )
-    pack_root_hash = str(pack_manifest["root_hash"])
-
-    run_digests = _load_json(root / "run_digests.json")
-    _assert_no_forbidden_paths(run_digests, artifact="run_digests.json")
-    _assert_normalized_timestamps(run_digests, artifact="run_digests.json")
-    replay_identity = manifest.get("replay_identity")
-    if not isinstance(replay_identity, dict):
-        raise S2ArtifactError(
-            "SCHEMA_INVALID",
-            "manifest replay_identity invalid",
-            {"artifact": "paper_run_manifest.json"},
-        )
-    replay_digest = str(replay_identity.get("digest_sha256") or "")
-    digest_map = _validate_run_digests(
-        root,
-        run_digests,
-        pack_file_hashes=pack_file_hashes,
-        manifest_replay_digest=replay_digest,
-        pack_root_hash=pack_root_hash,
-        expected_artifacts=expected_artifacts,
-    )
 
     return {
         "run_dir": str(root),

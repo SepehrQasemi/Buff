@@ -26,6 +26,33 @@ ALLOWED_ERROR_CODES = frozenset(
     }
 )
 
+ERROR_PRECEDENCE = (
+    "SCHEMA_INVALID",
+    "ARTIFACT_MISSING",
+    "DIGEST_MISMATCH",
+    "INPUT_DIGEST_MISMATCH",
+    "INPUT_MISSING",
+    "INPUT_INVALID",
+    "MISSING_CRITICAL_FUNDING_WINDOW",
+    "DATA_INTEGRITY_FAILURE",
+    "ORDERING_INVALID",
+    "SIMULATION_FAILED",
+)
+_ERROR_PRECEDENCE_RANK = {code: idx for idx, code in enumerate(ERROR_PRECEDENCE)}
+
+
+def resolve_error_code(candidates: Sequence[str]) -> str:
+    valid_codes: list[str] = []
+    for candidate in candidates:
+        code = str(candidate).strip().upper()
+        if code in ALLOWED_ERROR_CODES:
+            valid_codes.append(code)
+    if not valid_codes:
+        return "SIMULATION_FAILED"
+    return min(
+        valid_codes, key=lambda code: _ERROR_PRECEDENCE_RANK.get(code, len(ERROR_PRECEDENCE))
+    )
+
 
 @dataclass(frozen=True)
 class S2StructuredFailure:
