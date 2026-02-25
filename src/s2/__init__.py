@@ -1,3 +1,18 @@
+from .artifacts import (
+    REQUIRED_ARTIFACTS,
+    S2ArtifactError,
+    S2ArtifactRequest,
+    run_s2_artifact_pack,
+    validate_s2_artifact_pack,
+)
+from .canonical import (
+    canonical_json_bytes,
+    canonical_json_text,
+    sha256_hex_bytes,
+    sha256_hex_file,
+    write_canonical_json,
+    write_canonical_jsonl,
+)
 from .core import (
     Bar,
     BarCloseEvent,
@@ -25,6 +40,7 @@ from .models import (
 )
 
 __all__ = [
+    "REQUIRED_ARTIFACTS",
     "Bar",
     "BarCloseEvent",
     "BarCloseScheduler",
@@ -36,6 +52,8 @@ __all__ = [
     "NetworkDisabledError",
     "PositionAccounting",
     "PositionInvariantError",
+    "S2ArtifactError",
+    "S2ArtifactRequest",
     "S2CoreConfig",
     "S2CoreError",
     "S2CoreResult",
@@ -43,7 +61,15 @@ __all__ = [
     "SlippageBucket",
     "SlippageModel",
     "bars_from_ohlcv_rows",
+    "canonical_json_bytes",
+    "canonical_json_text",
     "funding_transfer_quote",
     "no_network_simulation_guard",
+    "run_s2_artifact_pack",
     "run_s2_core_loop",
+    "sha256_hex_bytes",
+    "sha256_hex_file",
+    "validate_s2_artifact_pack",
+    "write_canonical_json",
+    "write_canonical_jsonl",
 ]
