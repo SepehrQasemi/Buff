@@ -1,8 +1,8 @@
 CURRENT_STAGE=S0_REFOUNDATION
 NEXT_STAGE_CANDIDATE=S1_ONLINE_DATA_PLANE
-OPEN_PRS_TO_DECIDE=1
+OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
-STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_TO_PROD_LOOP|S4_EXECUTION_SHADOW_MODE|S5_EXECUTION_CONNECTOR_FUTURE
+STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 SNAPSHOT_SEMANTICS=Machine-readable stage snapshot fields track current authoritative direction and transition readiness.
 End-to-end development order and forbidden moves are defined in [docs/MASTER_DEVELOPMENT_PATH.md](./MASTER_DEVELOPMENT_PATH.md).
@@ -26,9 +26,9 @@ No other document determines current stage.
 
 CURRENT_STAGE=S0_REFOUNDATION
 NEXT_STAGE_CANDIDATE=S1_ONLINE_DATA_PLANE
-OPEN_PRS_TO_DECIDE=1
+OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
-STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_TO_PROD_LOOP|S4_EXECUTION_SHADOW_MODE|S5_EXECUTION_CONNECTOR_FUTURE
+STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
@@ -97,7 +97,7 @@ Active Constraints:
 Transition Gate:
 - Paper-live replay parity passes with stable metrics/trade artifacts under identical inputs.
 
-### S3_RESEARCH_TO_PROD_LOOP
+### S3_RESEARCH_ENGINE_HARDENING
 Objective:
 - Operationalize a disciplined research loop from backtest to walk-forward to paper-live promotion.
 
@@ -113,7 +113,7 @@ Active Constraints:
 Transition Gate:
 - Promotion rules execute automatically on artifacts and block candidates that violate stop conditions.
 
-### S4_EXECUTION_SHADOW_MODE
+### S4_RISK_ENGINE_MATURITY
 Objective:
 - Define and validate deterministic decision generation against non-deterministic external execution observations in shadow mode.
 
