@@ -1,6 +1,10 @@
 # Buff Docs Index
 
-Active documentation set:
+## Canonical Docs
+
+MASTER_DEVELOPMENT_PATH defines the full end-to-end development blueprint (S0..S5).
+
+- [MASTER_DEVELOPMENT_PATH.md](./MASTER_DEVELOPMENT_PATH.md)
 - [PROJECT_STATE.md](./PROJECT_STATE.md)
 - [02_ARCHITECTURE_BOUNDARIES.md](./02_ARCHITECTURE_BOUNDARIES.md)
 - [03_CONTRACTS_AND_SCHEMAS.md](./03_CONTRACTS_AND_SCHEMAS.md)
