@@ -260,6 +260,12 @@ def main(argv: list[str] | None = None) -> int:
         _log("release_gate: pytest -q")
         run_step("pytest", [sys.executable, "-m", "pytest", "-q"])
 
+        _log("release_gate: s1_online_data_plane")
+        run_step(
+            "s1_online_data_plane",
+            [sys.executable, "-m", "pytest", "-q", "tools/test_s1_online_data_plane.py"],
+        )
+
         _log("release_gate: s3_double_run_compare")
         run_step(
             "s3_double_run_compare",
