@@ -7,13 +7,21 @@ import pytest
 
 import s2.artifacts as artifacts_module
 from s2.artifacts import (
+    REQUIRED_FAILURE_ARTIFACTS,
     REQUIRED_ARTIFACTS,
+    RUN_STATUS_FAILED,
+    RUN_STATUS_SUCCEEDED,
     S2ArtifactError,
     S2ArtifactRequest,
     run_s2_artifact_pack,
     validate_s2_artifact_pack,
 )
-from s2.canonical import canonical_json_text
+from s2.canonical import (
+    NUMERIC_POLICY,
+    NUMERIC_POLICY_DIGEST_SHA256,
+    NUMERIC_POLICY_ID,
+    canonical_json_text,
+)
 from s2.core import S2CoreConfig, S2CoreResult
 from s2.models import FeeModel, FundingModel, LiquidationModel, SlippageBucket, SlippageModel
 
@@ -58,6 +66,42 @@ def _request(data_path: Path) -> S2ArtifactRequest:
     )
 
 
+def _funding_gap_request(data_path: Path) -> S2ArtifactRequest:
+    return S2ArtifactRequest(
+        run_id="s2fail001",
+        symbol="BTCUSDT",
+        timeframe="1m",
+        seed=17,
+        data_path=str(data_path),
+        strategy_version="strategy.demo.v1",
+        strategy_config={"actions": ["LONG", "HOLD", "HOLD", "HOLD"]},
+        risk_version="risk.demo.v1",
+        risk_config={},
+        core_config=S2CoreConfig(
+            symbol="BTCUSDT",
+            timeframe="1m",
+            seed=17,
+            initial_cash_quote=10_000.0,
+            target_position_qty=1.0,
+            fee_model=FeeModel(maker_bps=0.0, taker_bps=0.0),
+            slippage_model=SlippageModel(
+                buckets=(SlippageBucket(max_notional_quote=None, bps=0.0),)
+            ),
+            funding_model=FundingModel(
+                interval_minutes=1,
+                rates_by_ts_utc={
+                    "2026-02-01T00:00:00Z": 0.001,
+                    "2026-02-01T00:02:00Z": 0.001,
+                    "2026-02-01T00:03:00Z": 0.001,
+                },
+            ),
+            liquidation_model=LiquidationModel(
+                maintenance_margin_ratio=0.005, conservative_buffer_ratio=0.1
+            ),
+        ),
+    )
+
+
 def test_double_run_identical_inputs_identical_artifact_bytes_and_digests(tmp_path: Path) -> None:
     data_path = tmp_path / "bars.csv"
     _write_sample_csv(data_path)
@@ -76,12 +120,31 @@ def test_double_run_identical_inputs_identical_artifact_bytes_and_digests(tmp_pa
 
     validated_a = validate_s2_artifact_pack(run_a)
     validated_b = validate_s2_artifact_pack(run_b)
+    assert validated_a["run_status"] == RUN_STATUS_SUCCEEDED
+    assert validated_b["run_status"] == RUN_STATUS_SUCCEEDED
     assert validated_a["artifact_pack_root_hash"] == validated_b["artifact_pack_root_hash"]
     assert validated_a["artifact_pack_file_sha256"] == validated_b["artifact_pack_file_sha256"]
     assert validated_a["artifact_sha256"] == validated_b["artifact_sha256"]
     assert (
         validated_a["replay_identity_digest_sha256"] == validated_b["replay_identity_digest_sha256"]
     )
+    assert not (run_a / "run_failure.json").exists()
+    assert not (run_b / "run_failure.json").exists()
+
+    for artifact_name in (
+        "paper_run_manifest.json",
+        "artifact_pack_manifest.json",
+        "run_digests.json",
+        "cost_breakdown.json",
+    ):
+        payload = json.loads((run_a / artifact_name).read_text(encoding="utf-8"))
+        assert payload["numeric_policy_id"] == NUMERIC_POLICY_ID
+
+    manifest_payload = json.loads((run_a / "paper_run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest_payload["numeric_policy"] == NUMERIC_POLICY
+    assert manifest_payload["run_status"] == RUN_STATUS_SUCCEEDED
+    run_digest_payload = json.loads((run_a / "run_digests.json").read_text(encoding="utf-8"))
+    assert run_digest_payload["numeric_policy_digest_sha256"] == NUMERIC_POLICY_DIGEST_SHA256
 
 
 def test_missing_critical_input_fails_closed(tmp_path: Path) -> None:
@@ -89,6 +152,18 @@ def test_missing_critical_input_fails_closed(tmp_path: Path) -> None:
     request = _request(missing_path)
     with pytest.raises(S2ArtifactError, match="INPUT_MISSING"):
         run_s2_artifact_pack(request, tmp_path / "out")
+
+    failure_dir = tmp_path / "out" / "s2run001"
+    assert failure_dir.exists()
+    validated = validate_s2_artifact_pack(failure_dir)
+    assert validated["run_status"] == RUN_STATUS_FAILED
+    assert set(path.name for path in failure_dir.iterdir() if path.is_file()) == set(
+        REQUIRED_FAILURE_ARTIFACTS
+    )
+    run_failure = json.loads((failure_dir / "run_failure.json").read_text(encoding="utf-8"))
+    assert run_failure["error"]["error_code"] == "INPUT_MISSING"
+    assert run_failure["error"]["schema_version"] == "s2/error/v1"
+    assert run_failure["numeric_policy_id"] == NUMERIC_POLICY_ID
 
 
 def test_input_digest_validation_fail_closed(tmp_path: Path) -> None:
@@ -109,6 +184,10 @@ def test_input_digest_validation_fail_closed(tmp_path: Path) -> None:
     )
     with pytest.raises(S2ArtifactError, match="INPUT_DIGEST_MISMATCH"):
         run_s2_artifact_pack(request, tmp_path / "out")
+
+    failure_dir = tmp_path / "out" / "s2run001"
+    run_failure = json.loads((failure_dir / "run_failure.json").read_text(encoding="utf-8"))
+    assert run_failure["error"]["error_code"] == "DIGEST_MISMATCH"
 
 
 def test_schema_validation_fail_closed(tmp_path: Path) -> None:
@@ -135,8 +214,9 @@ def test_digest_validation_fail_closed(tmp_path: Path) -> None:
     payload["fees_quote"] = float(payload["fees_quote"]) + 1.0
     path.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(S2ArtifactError, match="DIGEST_MISMATCH"):
+    with pytest.raises(S2ArtifactError) as excinfo:
         validate_s2_artifact_pack(run_dir)
+    assert excinfo.value.code == "DIGEST_MISMATCH"
 
 
 def test_missing_schema_version_row_fails_closed(tmp_path: Path) -> None:
@@ -192,6 +272,23 @@ def test_lf_utf8_and_path_determinism(tmp_path: Path) -> None:
     assert "\\" not in data_ref
     assert ":\\" not in data_ref
     assert not data_ref.startswith("/")
+    assert manifest["numeric_policy_id"] == NUMERIC_POLICY_ID
+
+    jsonl_artifacts = [
+        "decision_records.jsonl",
+        "simulated_orders.jsonl",
+        "simulated_fills.jsonl",
+        "position_timeline.jsonl",
+        "risk_events.jsonl",
+        "funding_transfers.jsonl",
+    ]
+    for artifact_name in jsonl_artifacts:
+        rows = [
+            json.loads(line)
+            for line in (run_dir / artifact_name).read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        assert all(row["numeric_policy_id"] == NUMERIC_POLICY_ID for row in rows)
 
 
 def test_float_canonicalization_is_stable() -> None:
@@ -229,3 +326,71 @@ def test_jsonl_ordering_is_canonicalized(monkeypatch: pytest.MonkeyPatch, tmp_pa
 
     for artifact_name in REQUIRED_ARTIFACTS:
         assert (baseline / artifact_name).read_bytes() == (reordered / artifact_name).read_bytes()
+
+
+def test_missing_funding_window_writes_deterministic_run_failure(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = _funding_gap_request(data_path)
+
+    with pytest.raises(S2ArtifactError, match="MISSING_CRITICAL_FUNDING_WINDOW"):
+        run_s2_artifact_pack(request, tmp_path / "out_a")
+    with pytest.raises(S2ArtifactError, match="MISSING_CRITICAL_FUNDING_WINDOW"):
+        run_s2_artifact_pack(request, tmp_path / "out_b")
+
+    fail_a = tmp_path / "out_a" / "s2fail001"
+    fail_b = tmp_path / "out_b" / "s2fail001"
+    validated_a = validate_s2_artifact_pack(fail_a)
+    validated_b = validate_s2_artifact_pack(fail_b)
+    assert validated_a["run_status"] == RUN_STATUS_FAILED
+    assert validated_b["run_status"] == RUN_STATUS_FAILED
+    assert set(path.name for path in fail_a.iterdir() if path.is_file()) == set(
+        REQUIRED_FAILURE_ARTIFACTS
+    )
+    assert set(path.name for path in fail_b.iterdir() if path.is_file()) == set(
+        REQUIRED_FAILURE_ARTIFACTS
+    )
+
+    failure_bytes_a = (fail_a / "run_failure.json").read_bytes()
+    failure_bytes_b = (fail_b / "run_failure.json").read_bytes()
+    assert failure_bytes_a == failure_bytes_b
+
+    run_failure = json.loads(failure_bytes_a.decode("utf-8"))
+    assert run_failure["schema_version"] == "s2/run_failure/v1"
+    assert run_failure["numeric_policy_id"] == NUMERIC_POLICY_ID
+    assert run_failure["error"]["error_code"] == "MISSING_CRITICAL_FUNDING_WINDOW"
+    assert run_failure["error"]["severity"] == "FATAL"
+    assert run_failure["error"]["source"]["stage"] == "s2"
+    assert "missing_funding_ts_utc" in run_failure["error"]["context"]
+
+
+def test_schema_violation_writes_run_failure(tmp_path: Path) -> None:
+    data_path = tmp_path / "bad_bars.csv"
+    data_path.write_text(
+        "timestamp,open,high,low,close,volume\n2026-02-01T00:00:00Z,100,101,99,,10\n",
+        encoding="utf-8",
+    )
+    request = _request(data_path)
+    with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID"):
+        run_s2_artifact_pack(request, tmp_path / "out")
+
+    fail_dir = tmp_path / "out" / "s2run001"
+    run_failure = json.loads((fail_dir / "run_failure.json").read_text(encoding="utf-8"))
+    assert run_failure["error"]["error_code"] == "SCHEMA_INVALID"
+    validate_s2_artifact_pack(fail_dir)
+
+
+def test_numeric_policy_mismatch_fails_closed(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    run_dir = run_s2_artifact_pack(_request(data_path), tmp_path / "out")
+
+    path = run_dir / "artifact_pack_manifest.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["numeric_policy_id"] = "s2/numeric/invalid/v1"
+    path.write_bytes(
+        (json.dumps(payload, separators=(",", ":"), sort_keys=True) + "\n").encode("utf-8")
+    )
+
+    with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID"):
+        validate_s2_artifact_pack(run_dir)

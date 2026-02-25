@@ -7,10 +7,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from s2.artifacts import (
     REQUIRED_ARTIFACTS,
+    RUN_STATUS_SUCCEEDED,
     S2ArtifactRequest,
     run_s2_artifact_pack,
     validate_s2_artifact_pack,
 )
+from s2.canonical import NUMERIC_POLICY_ID
 from s2.core import S2CoreConfig
 from s2.models import FeeModel, FundingModel, SlippageBucket, SlippageModel
 
@@ -56,6 +58,14 @@ def test_s2_double_run_compare(tmp_path: Path) -> None:
 
     validated_a = validate_s2_artifact_pack(run_a)
     validated_b = validate_s2_artifact_pack(run_b)
+    assert validated_a["run_status"] == RUN_STATUS_SUCCEEDED
+    assert validated_b["run_status"] == RUN_STATUS_SUCCEEDED
+    assert (run_a / "run_failure.json").exists() is False
+    assert (run_b / "run_failure.json").exists() is False
     assert validated_a["artifact_pack_root_hash"] == validated_b["artifact_pack_root_hash"]
     assert validated_a["artifact_pack_file_sha256"] == validated_b["artifact_pack_file_sha256"]
     assert validated_a["artifact_sha256"] == validated_b["artifact_sha256"]
+
+    # Ensure numeric policy identifiers are part of serialized records.
+    first_line = (run_a / "decision_records.jsonl").read_text(encoding="utf-8").splitlines()[0]
+    assert f'"numeric_policy_id":"{NUMERIC_POLICY_ID}"' in first_line
