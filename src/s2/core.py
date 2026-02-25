@@ -23,6 +23,7 @@ from .models import (
 
 
 DecisionAction = Literal["LONG", "SHORT", "FLAT", "HOLD"]
+KillSwitchMode = Literal["SAFE_MODE", "FLATTEN"]
 StrategyFn = Callable[["BarCloseEvent", "CoreStateView", random.Random], DecisionAction]
 RiskFn = Callable[
     ["BarCloseEvent", "CoreStateView", DecisionAction, random.Random], tuple[bool, str | None]
@@ -70,6 +71,22 @@ class CoreStateView:
 
 
 @dataclass(frozen=True)
+class S2RiskCaps:
+    max_leverage: float = 1_000.0
+    max_position_notional_quote: float = 1_000_000_000_000.0
+    max_daily_loss_quote: float = 1_000_000_000_000.0
+    max_drawdown_ratio: float = 1_000.0
+    max_orders_per_window: int = 1_000_000
+    order_window_bars: int = 1_440
+
+
+@dataclass(frozen=True)
+class S2KillSwitchConfig:
+    mode: KillSwitchMode = "FLATTEN"
+    manual_trigger_event_seq: int | None = None
+
+
+@dataclass(frozen=True)
 class S2CoreConfig:
     symbol: str = "BTCUSDT"
     timeframe: str = "1m"
@@ -89,6 +106,8 @@ class S2CoreConfig:
     )
     funding_model: FundingModel = field(default_factory=FundingModel)
     liquidation_model: LiquidationModel = field(default_factory=LiquidationModel)
+    risk_caps: S2RiskCaps = field(default_factory=S2RiskCaps)
+    kill_switch: S2KillSwitchConfig = field(default_factory=S2KillSwitchConfig)
 
 
 @dataclass(frozen=True)
@@ -102,7 +121,7 @@ class S2CoreResult:
     risk_events: list[dict[str, Any]]
     funding_transfers: list[dict[str, Any]]
     cost_breakdown: dict[str, float]
-    final_state: dict[str, float]
+    final_state: dict[str, Any]
 
 
 def _parse_utc(ts_utc: str) -> datetime:
@@ -261,17 +280,115 @@ def run_s2_core_loop(
     order_seq = 0
     fill_seq = 0
     events = scheduler.events()
+    peak_equity = float(cash_quote)
+    orders_window: list[int] = []
+    kill_switch_active = False
+    kill_switch_reason_code = ""
 
     try:
         with no_network_simulation_guard():
+
+            def _prune_order_window(event_seq: int) -> None:
+                window = max(int(config.risk_caps.order_window_bars), 1)
+                cutoff = int(event_seq) - window + 1
+                while orders_window and orders_window[0] < cutoff:
+                    orders_window.pop(0)
+
+            def _activate_kill(event: BarCloseEvent, reason_code: str, detail: str) -> None:
+                nonlocal kill_switch_active, kill_switch_reason_code
+                if kill_switch_active:
+                    return
+                kill_switch_active = True
+                kill_switch_reason_code = reason_code
+                risk_events.append(
+                    {
+                        "event_seq": event.seq,
+                        "ts_utc": event.bar.ts_utc,
+                        "reason_code": reason_code,
+                        "detail": detail,
+                    }
+                )
+
+            def _execute_order(
+                event: BarCloseEvent,
+                qty_delta: float,
+                *,
+                decision: str,
+                order_type: str,
+                extra_fill_fields: dict[str, Any] | None = None,
+            ) -> None:
+                nonlocal order_seq, fill_seq, cash_quote
+                side = "BUY" if qty_delta > 0 else "SELL"
+                mark_price = float(event.bar.close)
+                order_seq += 1
+                order_id = f"ord-{event.seq:06d}-{order_seq:04d}"
+                notional_ref = abs(qty_delta * mark_price)
+                fill_price = config.slippage_model.apply(
+                    mark_price, side=side, notional_quote=notional_ref
+                )
+                notional_fill = abs(qty_delta * fill_price)
+                fee_quote = config.fee_model.fee_for_notional(notional_fill, liquidity="taker")
+                slippage_quote = abs(qty_delta) * abs(fill_price - mark_price)
+
+                simulated_orders.append(
+                    {
+                        "order_id": order_id,
+                        "event_seq": event.seq,
+                        "ts_utc": event.bar.ts_utc,
+                        "symbol": config.symbol,
+                        "side": side,
+                        "qty": float(qty_delta),
+                        "decision": decision,
+                        "order_type": order_type,
+                    }
+                )
+
+                fill_seq += 1
+                fill_id = f"fill-{event.seq:06d}-{fill_seq:04d}"
+                realized_delta = position.apply_fill(qty_delta, fill_price)
+                cash_quote += realized_delta
+                cash_quote -= fee_quote
+                position.cumulative_fees += fee_quote
+                position.cumulative_slippage += slippage_quote
+
+                payload: dict[str, Any] = {
+                    "fill_id": fill_id,
+                    "order_id": order_id,
+                    "event_seq": event.seq,
+                    "ts_utc": event.bar.ts_utc,
+                    "symbol": config.symbol,
+                    "side": side,
+                    "qty": float(qty_delta),
+                    "reference_price": mark_price,
+                    "fill_price": fill_price,
+                    "fee_quote": fee_quote,
+                    "slippage_quote": slippage_quote,
+                    "realized_pnl_delta_quote": realized_delta,
+                }
+                if extra_fill_fields:
+                    payload.update(extra_fill_fields)
+                simulated_fills.append(payload)
+                orders_window.append(event.seq)
+
             for event in events:
                 mark_price = float(event.bar.close)
                 position.mark_to_market(mark_price)
+                equity_quote = float(cash_quote) + float(position.unrealized_pnl)
+                if equity_quote > peak_equity:
+                    peak_equity = equity_quote
+
+                if config.kill_switch.manual_trigger_event_seq is not None and event.seq == int(
+                    config.kill_switch.manual_trigger_event_seq
+                ):
+                    _activate_kill(event, "manual_trigger", "manual kill-switch event configured")
 
                 state_pre = _state_view(
                     event=event, position=position, cash_quote=cash_quote, config=config
                 )
-                action = _coerce_action(strategy(event, state_pre, rng))
+                if kill_switch_active:
+                    action = "HOLD"
+                else:
+                    action = _coerce_action(strategy(event, state_pre, rng))
                 decision_records.append(
                     {
                         "event_seq": event.seq,
@@ -279,10 +396,14 @@ def run_s2_core_loop(
                         "decision": action,
                         "decision_time": "bar_close",
                         "seed": int(config.seed),
+                        "kill_switch_active": bool(kill_switch_active),
                     }
                 )
 
-                allowed, risk_reason = risk_eval(event, state_pre, action, rng)
+                if kill_switch_active:
+                    allowed, risk_reason = False, "kill_switch_active"
+                else:
+                    allowed, risk_reason = risk_eval(event, state_pre, action, rng)
                 risk_checks.append(
                     {
                         "event_seq": event.seq,
@@ -306,55 +427,72 @@ def run_s2_core_loop(
 
                 desired_qty = _target_qty(action, current_qty=position.qty, config=config)
                 qty_delta = desired_qty - position.qty
-                if abs(qty_delta) > 1e-12:
-                    side = "BUY" if qty_delta > 0 else "SELL"
-                    order_seq += 1
-                    order_id = f"ord-{event.seq:06d}-{order_seq:04d}"
-                    notional_ref = abs(qty_delta * mark_price)
-                    fill_price = config.slippage_model.apply(
-                        mark_price, side=side, notional_quote=notional_ref
-                    )
-                    notional_fill = abs(qty_delta * fill_price)
-                    fee_quote = config.fee_model.fee_for_notional(notional_fill, liquidity="taker")
-                    slippage_quote = abs(qty_delta) * abs(fill_price - mark_price)
+                will_trade = abs(qty_delta) > 1e-12
 
-                    simulated_orders.append(
+                if not kill_switch_active:
+                    _prune_order_window(event.seq)
+                    target_notional = abs(desired_qty * mark_price)
+                    effective_equity = max(abs(equity_quote), 1e-9)
+                    target_leverage = (
+                        target_notional / effective_equity if target_notional > 0 else 0.0
+                    )
+                    daily_loss = max(0.0, float(config.initial_cash_quote) - equity_quote)
+                    drawdown = (
+                        max(0.0, (peak_equity - equity_quote) / peak_equity)
+                        if peak_equity > 0
+                        else 0.0
+                    )
+                    if target_leverage > float(config.risk_caps.max_leverage):
+                        _activate_kill(
+                            event, "max_leverage_breach", f"target_leverage={target_leverage:.8f}"
+                        )
+                    elif target_notional > float(config.risk_caps.max_position_notional_quote):
+                        _activate_kill(
+                            event,
+                            "max_position_notional_breach",
+                            f"target_notional={target_notional:.8f}",
+                        )
+                    elif daily_loss > float(config.risk_caps.max_daily_loss_quote):
+                        _activate_kill(
+                            event, "max_daily_loss_breach", f"daily_loss={daily_loss:.8f}"
+                        )
+                    elif drawdown > float(config.risk_caps.max_drawdown_ratio):
+                        _activate_kill(event, "max_drawdown_breach", f"drawdown={drawdown:.8f}")
+                    elif will_trade and len(orders_window) >= int(
+                        config.risk_caps.max_orders_per_window
+                    ):
+                        _activate_kill(
+                            event,
+                            "max_orders_per_window_breach",
+                            f"orders_in_window={len(orders_window)}",
+                        )
+                    if kill_switch_active:
+                        desired_qty = position.qty
+                        qty_delta = 0.0
+
+                if (
+                    kill_switch_active
+                    and config.kill_switch.mode == "FLATTEN"
+                    and abs(position.qty) > 1e-12
+                ):
+                    _execute_order(
+                        event,
+                        -position.qty,
+                        decision="FLAT",
+                        order_type="KILL_SWITCH_FLATTEN",
+                        extra_fill_fields={"is_kill_switch_flatten": True},
+                    )
+                    risk_events.append(
                         {
-                            "order_id": order_id,
                             "event_seq": event.seq,
                             "ts_utc": event.bar.ts_utc,
-                            "symbol": config.symbol,
-                            "side": side,
-                            "qty": float(qty_delta),
-                            "decision": action,
-                            "order_type": "MARKET_SIM",
+                            "reason_code": "kill_switch_flatten",
+                            "detail": kill_switch_reason_code or "kill_switch_active",
                         }
                     )
 
-                    fill_seq += 1
-                    fill_id = f"fill-{event.seq:06d}-{fill_seq:04d}"
-                    realized_delta = position.apply_fill(qty_delta, fill_price)
-                    cash_quote += realized_delta
-                    cash_quote -= fee_quote
-                    position.cumulative_fees += fee_quote
-                    position.cumulative_slippage += slippage_quote
-
-                    simulated_fills.append(
-                        {
-                            "fill_id": fill_id,
-                            "order_id": order_id,
-                            "event_seq": event.seq,
-                            "ts_utc": event.bar.ts_utc,
-                            "symbol": config.symbol,
-                            "side": side,
-                            "qty": float(qty_delta),
-                            "reference_price": mark_price,
-                            "fill_price": fill_price,
-                            "fee_quote": fee_quote,
-                            "slippage_quote": slippage_quote,
-                            "realized_pnl_delta_quote": realized_delta,
-                        }
-                    )
+                if not kill_switch_active and abs(qty_delta) > 1e-12:
+                    _execute_order(event, qty_delta, decision=action, order_type="MARKET_SIM")
 
                 funding_rate = config.funding_model.funding_rate(
                     event.bar.ts_utc, has_open_position=position.qty != 0.0
@@ -382,57 +520,19 @@ def run_s2_core_loop(
                     notional_quote=notional_quote,
                 ):
                     if abs(position.qty) > 1e-12:
-                        liquidation_qty = -position.qty
-                        side = "BUY" if liquidation_qty > 0 else "SELL"
-                        order_seq += 1
-                        order_id = f"ord-{event.seq:06d}-{order_seq:04d}"
-                        ref_notional = abs(liquidation_qty * mark_price)
-                        liq_fill_price = config.slippage_model.apply(
-                            mark_price, side=side, notional_quote=ref_notional
+                        _activate_kill(
+                            event,
+                            "risk_breach_liquidation",
+                            "conservative liquidation threshold breached",
                         )
-                        liq_fill_notional = abs(liquidation_qty * liq_fill_price)
-                        liq_fee = config.fee_model.fee_for_notional(
-                            liq_fill_notional, liquidity="taker"
+                        _execute_order(
+                            event,
+                            -position.qty,
+                            decision="FLAT",
+                            order_type="LIQUIDATION",
+                            extra_fill_fields={"is_liquidation": True},
                         )
-                        liq_slippage = abs(liquidation_qty) * abs(liq_fill_price - mark_price)
-
-                        simulated_orders.append(
-                            {
-                                "order_id": order_id,
-                                "event_seq": event.seq,
-                                "ts_utc": event.bar.ts_utc,
-                                "symbol": config.symbol,
-                                "side": side,
-                                "qty": float(liquidation_qty),
-                                "decision": "FLAT",
-                                "order_type": "LIQUIDATION",
-                            }
-                        )
-                        fill_seq += 1
-                        fill_id = f"fill-{event.seq:06d}-{fill_seq:04d}"
-                        realized_delta = position.apply_fill(liquidation_qty, liq_fill_price)
-                        cash_quote += realized_delta
-                        cash_quote -= liq_fee
-                        position.cumulative_fees += liq_fee
-                        position.cumulative_slippage += liq_slippage
                         position.liquidation_count += 1
-                        simulated_fills.append(
-                            {
-                                "fill_id": fill_id,
-                                "order_id": order_id,
-                                "event_seq": event.seq,
-                                "ts_utc": event.bar.ts_utc,
-                                "symbol": config.symbol,
-                                "side": side,
-                                "qty": float(liquidation_qty),
-                                "reference_price": mark_price,
-                                "fill_price": liq_fill_price,
-                                "fee_quote": liq_fee,
-                                "slippage_quote": liq_slippage,
-                                "realized_pnl_delta_quote": realized_delta,
-                                "is_liquidation": True,
-                            }
-                        )
                         risk_events.append(
                             {
                                 "event_seq": event.seq,
@@ -449,6 +549,7 @@ def run_s2_core_loop(
                     position.assert_invariants()
                 except PositionInvariantError:
                     invariants_ok = False
+                    _activate_kill(event, "data_integrity_failure", "position invariant failure")
                     raise
                 position_timeline.append(
                     {
@@ -462,6 +563,8 @@ def run_s2_core_loop(
                         "cash_balance_quote": float(cash_quote),
                         "equity_quote": float(equity_quote),
                         "invariants_ok": invariants_ok,
+                        "kill_switch_active": bool(kill_switch_active),
+                        "kill_switch_reason_code": kill_switch_reason_code,
                     }
                 )
     except (S2ModelError, FundingDataMissingError, PositionInvariantError) as exc:
@@ -485,6 +588,9 @@ def run_s2_core_loop(
         "unrealized_pnl_quote": float(position.unrealized_pnl),
         "equity_quote": float(cash_quote + position.unrealized_pnl),
         "liquidation_count": float(position.liquidation_count),
+        "kill_switch_active": bool(kill_switch_active),
+        "kill_switch_reason_code": kill_switch_reason_code,
+        "kill_switch_mode": str(config.kill_switch.mode),
     }
 
     return S2CoreResult(
