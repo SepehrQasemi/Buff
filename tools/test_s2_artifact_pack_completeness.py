@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 import tempfile
@@ -59,4 +60,31 @@ def test_s2_artifact_pack_completeness() -> None:
         "risk_events.jsonl",
         "funding_transfers.jsonl",
         "cost_breakdown.json",
+        "artifact_pack_manifest.json",
     }
+    assert len(validated["artifact_pack_root_hash"]) == 64
+
+    pack_manifest = json.loads(
+        (run_dir / "artifact_pack_manifest.json").read_text(encoding="utf-8")
+    )
+    run_digests = json.loads((run_dir / "run_digests.json").read_text(encoding="utf-8"))
+    assert pack_manifest["root_hash"] == validated["artifact_pack_root_hash"]
+    assert run_digests["artifact_pack_root_hash"] == validated["artifact_pack_root_hash"]
+    assert pack_manifest["schema_version"] == "s2/artifact_pack_manifest/v1"
+    assert run_digests["schema_version"] == "s2/run_digests/v1"
+    manifest_payload = json.loads((run_dir / "paper_run_manifest.json").read_text(encoding="utf-8"))
+    assert manifest_payload["schema_version"] == "s2/paper_run_manifest/v1"
+    assert "\\" not in manifest_payload["inputs"]["data_path"]
+    assert ":\\" not in manifest_payload["inputs"]["data_path"]
+    assert not manifest_payload["inputs"]["data_path"].startswith("/")
+    assert (
+        json.loads((run_dir / "cost_breakdown.json").read_text(encoding="utf-8"))["schema_version"]
+        == "s2/cost_breakdown/v1"
+    )
+
+    for path in run_dir.iterdir():
+        if not path.is_file():
+            continue
+        data = path.read_bytes()
+        assert not data.startswith(b"\xef\xbb\xbf")
+        assert b"\r" not in data

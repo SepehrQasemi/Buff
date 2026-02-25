@@ -5,13 +5,16 @@ from pathlib import Path
 
 import pytest
 
+import s2.artifacts as artifacts_module
 from s2.artifacts import (
+    REQUIRED_ARTIFACTS,
     S2ArtifactError,
     S2ArtifactRequest,
     run_s2_artifact_pack,
     validate_s2_artifact_pack,
 )
-from s2.core import S2CoreConfig
+from s2.canonical import canonical_json_text
+from s2.core import S2CoreConfig, S2CoreResult
 from s2.models import FeeModel, FundingModel, LiquidationModel, SlippageBucket, SlippageModel
 
 
@@ -55,7 +58,7 @@ def _request(data_path: Path) -> S2ArtifactRequest:
     )
 
 
-def test_double_run_identical_inputs_identical_digests(tmp_path: Path) -> None:
+def test_double_run_identical_inputs_identical_artifact_bytes_and_digests(tmp_path: Path) -> None:
     data_path = tmp_path / "bars.csv"
     _write_sample_csv(data_path)
 
@@ -63,16 +66,18 @@ def test_double_run_identical_inputs_identical_digests(tmp_path: Path) -> None:
     run_a = run_s2_artifact_pack(request, tmp_path / "out_a")
     run_b = run_s2_artifact_pack(request, tmp_path / "out_b")
 
-    digests_a = (run_a / "run_digests.json").read_bytes()
-    digests_b = (run_b / "run_digests.json").read_bytes()
-    assert digests_a == digests_b
+    files_a = sorted(path.name for path in run_a.iterdir() if path.is_file())
+    files_b = sorted(path.name for path in run_b.iterdir() if path.is_file())
+    assert files_a == files_b
+    assert set(files_a) == set(REQUIRED_ARTIFACTS)
 
-    manifest_a = (run_a / "paper_run_manifest.json").read_bytes()
-    manifest_b = (run_b / "paper_run_manifest.json").read_bytes()
-    assert manifest_a == manifest_b
+    for artifact_name in REQUIRED_ARTIFACTS:
+        assert (run_a / artifact_name).read_bytes() == (run_b / artifact_name).read_bytes()
 
     validated_a = validate_s2_artifact_pack(run_a)
     validated_b = validate_s2_artifact_pack(run_b)
+    assert validated_a["artifact_pack_root_hash"] == validated_b["artifact_pack_root_hash"]
+    assert validated_a["artifact_pack_file_sha256"] == validated_b["artifact_pack_file_sha256"]
     assert validated_a["artifact_sha256"] == validated_b["artifact_sha256"]
     assert (
         validated_a["replay_identity_digest_sha256"] == validated_b["replay_identity_digest_sha256"]
@@ -132,3 +137,95 @@ def test_digest_validation_fail_closed(tmp_path: Path) -> None:
 
     with pytest.raises(S2ArtifactError, match="DIGEST_MISMATCH"):
         validate_s2_artifact_pack(run_dir)
+
+
+def test_missing_schema_version_row_fails_closed(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    run_dir = run_s2_artifact_pack(_request(data_path), tmp_path / "out")
+
+    path = run_dir / "decision_records.jsonl"
+    rows = [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+    rows[0].pop("schema_version", None)
+    path.write_bytes(
+        ("\n".join(json.dumps(row, separators=(",", ":")) for row in rows) + "\n").encode("utf-8")
+    )
+
+    with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID"):
+        validate_s2_artifact_pack(run_dir)
+
+
+def test_wrong_schema_version_row_fails_closed(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    run_dir = run_s2_artifact_pack(_request(data_path), tmp_path / "out")
+
+    path = run_dir / "simulated_fills.jsonl"
+    rows = [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+    rows[0]["schema_version"] = "s2/simulated_fills/v0"
+    path.write_bytes(
+        ("\n".join(json.dumps(row, separators=(",", ":")) for row in rows) + "\n").encode("utf-8")
+    )
+
+    with pytest.raises(S2ArtifactError, match="SCHEMA_INVALID"):
+        validate_s2_artifact_pack(run_dir)
+
+
+def test_lf_utf8_and_path_determinism(tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    run_dir = run_s2_artifact_pack(_request(data_path), tmp_path / "out")
+
+    for artifact_name in REQUIRED_ARTIFACTS:
+        data = (run_dir / artifact_name).read_bytes()
+        assert not data.startswith(b"\xef\xbb\xbf")
+        assert b"\r" not in data
+        data.decode("utf-8")
+
+    manifest = json.loads((run_dir / "paper_run_manifest.json").read_text(encoding="utf-8"))
+    data_ref = manifest["inputs"]["data_path"]
+    assert isinstance(data_ref, str)
+    assert "\\" not in data_ref
+    assert ":\\" not in data_ref
+    assert not data_ref.startswith("/")
+
+
+def test_float_canonicalization_is_stable() -> None:
+    payload = {"a": 0.1 + 0.2, "b": [1.005, 1.00499999999999]}
+    first = canonical_json_text(payload)
+    second = canonical_json_text(payload)
+    assert first == second
+    assert first == '{"a":"0.30000000","b":["1.00500000","1.00500000"]}'
+
+
+def test_jsonl_ordering_is_canonicalized(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    data_path = tmp_path / "bars.csv"
+    _write_sample_csv(data_path)
+    request = _request(data_path)
+    baseline = run_s2_artifact_pack(request, tmp_path / "out_a")
+    original_core_loop = artifacts_module.run_s2_core_loop
+
+    def _reordered_core_loop(*args, **kwargs):  # type: ignore[no-untyped-def]
+        result = original_core_loop(*args, **kwargs)
+        return S2CoreResult(
+            seed=result.seed,
+            decision_records=list(reversed(result.decision_records)),
+            risk_checks=list(reversed(result.risk_checks)),
+            simulated_orders=list(reversed(result.simulated_orders)),
+            simulated_fills=list(reversed(result.simulated_fills)),
+            position_timeline=list(reversed(result.position_timeline)),
+            risk_events=list(reversed(result.risk_events)),
+            funding_transfers=list(reversed(result.funding_transfers)),
+            cost_breakdown=dict(result.cost_breakdown),
+            final_state=dict(result.final_state),
+        )
+
+    monkeypatch.setattr(artifacts_module, "run_s2_core_loop", _reordered_core_loop)
+    reordered = run_s2_artifact_pack(request, tmp_path / "out_b")
+
+    for artifact_name in REQUIRED_ARTIFACTS:
+        assert (baseline / artifact_name).read_bytes() == (reordered / artifact_name).read_bytes()
