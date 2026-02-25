@@ -1,8 +1,8 @@
 CURRENT_STAGE=S0_REFOUNDATION
 NEXT_STAGE_CANDIDATE=S1_ONLINE_DATA_PLANE
-OPEN_PRS_TO_DECIDE=1
+OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
-STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_TO_PROD_LOOP|S4_EXECUTION_SHADOW_MODE|S5_EXECUTION_CONNECTOR_FUTURE
+STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 SNAPSHOT_SEMANTICS=Machine-readable stage snapshot fields track current authoritative direction and transition readiness.
 End-to-end development order and forbidden moves are defined in [docs/MASTER_DEVELOPMENT_PATH.md](./MASTER_DEVELOPMENT_PATH.md).
@@ -26,9 +26,9 @@ No other document determines current stage.
 
 CURRENT_STAGE=S0_REFOUNDATION
 NEXT_STAGE_CANDIDATE=S1_ONLINE_DATA_PLANE
-OPEN_PRS_TO_DECIDE=1
+OPEN_PRS_TO_DECIDE=0
 LAST_RESET_DATE_UTC=2026-02-24
-STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_TO_PROD_LOOP|S4_EXECUTION_SHADOW_MODE|S5_EXECUTION_CONNECTOR_FUTURE
+STAGE_LADDER=S0_REFOUNDATION|S1_ONLINE_DATA_PLANE|S2_PAPER_LIVE_FUTURES|S3_RESEARCH_ENGINE_HARDENING|S4_RISK_ENGINE_MATURITY|S5_EXECUTION_CONNECTOR_FUTURE
 OPS_COMMAND_SOURCE=docs/05_RUNBOOK_DEV_WORKFLOW.md
 
 ---
@@ -97,36 +97,41 @@ Active Constraints:
 Transition Gate:
 - Paper-live replay parity passes with stable metrics/trade artifacts under identical inputs.
 
-### S3_RESEARCH_TO_PROD_LOOP
+### S3_RESEARCH_ENGINE_HARDENING
 Objective:
-- Operationalize a disciplined research loop from backtest to walk-forward to paper-live promotion.
+- Stabilize the research engine for deterministic experiment execution and reproducible ranking outputs.
 
 Definition of Done (explicit, testable):
-- Backtest, walk-forward, and paper-live results are linked through canonical experiment lineage.
-- Regime split and cost sensitivity checks are mandatory pre-promotion requirements.
-- Promotion/rollback/stop conditions are artifact-tracked and enforceable.
+- Experiment manifests are produced for all research runs.
+- `run_id` is a deterministic hash of inputs and config artifacts.
+- Parameter sweep and result comparison workflows are reproducible.
+- Re-running the same experiment inputs produces the same ranking outputs.
 
 Active Constraints:
-- Promotion decisions remain research-governed and fail-closed on missing evidence.
-- No live connector enablement in this stage.
+- No strategy mutation is allowed mid-run.
+- No hidden randomness is allowed in experiment execution.
+- Every experiment must be reproducible from recorded artifacts.
 
 Transition Gate:
-- Promotion rules execute automatically on artifacts and block candidates that violate stop conditions.
+- Identical experiment inputs yield identical rankings and run-identity hashes.
 
-### S4_EXECUTION_SHADOW_MODE
+### S4_RISK_ENGINE_MATURITY
 Objective:
-- Define and validate deterministic decision generation against non-deterministic external execution observations in shadow mode.
+- Mature the risk engine with hard caps, veto controls, and deterministic freeze behavior.
 
 Definition of Done (explicit, testable):
-- Shadow mode contract records deterministic Decision and observed ExecutionResult separately.
-- Reconciliation engine detects drift/mismatch and emits freeze signals.
-- Freeze-on-mismatch policy blocks connector progression when reconciliation breaks.
+- Hard limits are enforced for position size, notional, and drawdown.
+- Funding shock and volatility expansion guards are enforced.
+- Risk veto checks run before simulated order placement.
+- Risk blocks and kill-switch activations are emitted as artifacts.
+- Kill-switch deterministically freezes runtime under breach conditions.
 
 Active Constraints:
-- Shadow mode is analysis and reconciliation only; no production order routing.
+- Risk controls fail-closed on missing data, contract violations, or invariant breaches.
+- No production execution connector behavior is enabled in this stage.
 
 Transition Gate:
-- Reconciliation/freeze behavior is proven under induced mismatch scenarios.
+- Risk breach simulation suite and kill-switch integration tests pass.
 
 ### S5_EXECUTION_CONNECTOR_FUTURE
 Objective:
