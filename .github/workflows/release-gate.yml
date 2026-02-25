@@ -2,6 +2,9 @@ name: release-gate
 permissions:
   contents: read
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
